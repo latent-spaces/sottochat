@@ -1,0 +1,31 @@
+# deps
+node_modules/
+bun.lockb
+
+# build
+dist/
+build/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor
+.idea/
+.vscode/
+*.swp
+
+# vendor / reference clones (not committed)
+vendor/
+
+# local overrides
+.claude/settings.local.json
+
+# logs
+*.log

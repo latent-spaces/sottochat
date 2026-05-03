@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>meta</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --fg: #1a1a1a;
+      --fg-soft: #6b6b6b;
+      --bg: #fafaf7;
+      --accent: #4a6a4a;
+      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fg: #ececec;
+        --fg-soft: #8a8a8a;
+        --bg: #141414;
+        --accent: #a8c8a8;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      font-size: 15px;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 64px 24px 96px;
+    }
+    .header {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--fg-soft);
+      margin-bottom: 40px;
+      letter-spacing: 0.02em;
+    }
+    .summary { margin-bottom: 32px; }
+    .threads {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 48px;
+    }
+    .thread {
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--fg);
+      text-decoration: none;
+      padding: 6px 0;
+    }
+    .thread:hover { color: var(--accent); }
+    .arrow { color: var(--fg-soft); margin-right: 8px; }
+    .empty {
+      color: var(--fg-soft);
+      font-style: italic;
+      font-size: 13px;
+    }
+    code, .mono { font-family: var(--mono); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="header">meta · <span id="project">—</span> · <span id="elapsed">—</span></div>
+
+    <div class="summary" id="summary">
+      <span class="empty">waiting for the first turn…</span>
+    </div>
+
+    <div class="threads" id="threads"></div>
+
+    <div class="empty" id="closing">nothing pressing? cool, close the tab.</div>
+  </main>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.addEventListener("message", (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.kind === "hello") {
+        // initial state — render later
+        console.debug("hello", msg);
+      } else if (msg.kind === "event") {
+        console.debug("event", msg.event);
+      }
+    });
+  </script>
+</body>
+</html>
