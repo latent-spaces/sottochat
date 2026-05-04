@@ -10,6 +10,8 @@
       --fg-soft: #6b6b6b;
       --bg: #fafaf7;
       --accent: #4a6a4a;
+      --user: #5e7e9e;
+      --tool-result: #8a6a5e;
       --mono: ui-monospace, "SF Mono", Menlo, monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
     }
@@ -19,6 +21,8 @@
         --fg-soft: #8a8a8a;
         --bg: #141414;
         --accent: #a8c8a8;
+        --user: #8eaad0;
+        --tool-result: #c2a08e;
       }
     }
     * { box-sizing: border-box; }
@@ -32,7 +36,7 @@
       -webkit-font-smoothing: antialiased;
     }
     main {
-      max-width: 600px;
+      max-width: 720px;
       margin: 0 auto;
       padding: 64px 24px 96px;
     }
@@ -65,6 +69,40 @@
       font-size: 13px;
     }
     code, .mono { font-family: var(--mono); font-size: 13px; }
+
+    /* phase 1 debug feed */
+    .feed {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 48px;
+      padding-top: 16px;
+      border-top: 1px dashed var(--fg-soft);
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--fg);
+    }
+    .feed .label-row {
+      color: var(--fg-soft);
+      font-style: italic;
+      margin-bottom: 8px;
+    }
+    .feed .ev { padding: 2px 0; line-height: 1.5; word-break: break-word; }
+    .feed .ev .label {
+      display: inline-block;
+      min-width: 78px;
+      color: var(--fg-soft);
+    }
+    .feed .ev.user_message .label { color: var(--user); }
+    .feed .ev.assistant_text .label { color: var(--fg); }
+    .feed .ev.tool_use .label { color: var(--accent); }
+    .feed .ev.tool_result .label { color: var(--tool-result); }
+    .feed .ev.stop {
+      color: var(--fg-soft);
+      text-align: center;
+      padding: 8px 0;
+      letter-spacing: 8px;
+    }
   </style>
 </head>
 <body>
@@ -78,19 +116,122 @@
     <div class="threads" id="threads"></div>
 
     <div class="empty" id="closing">nothing pressing? cool, close the tab.</div>
+
+    <div class="feed" id="feed">
+      <div class="label-row">debug feed (phase 1)</div>
+    </div>
   </main>
 
   <script>
-    const ws = new WebSocket(`ws://${location.host}/ws`);
-    ws.addEventListener("message", (e) => {
-      const msg = JSON.parse(e.data);
-      if (msg.kind === "hello") {
-        // initial state — render later
-        console.debug("hello", msg);
-      } else if (msg.kind === "event") {
-        console.debug("event", msg.event);
+    const projectEl = document.getElementById("project");
+    const elapsedEl = document.getElementById("elapsed");
+    const summaryEl = document.getElementById("summary");
+    const closingEl = document.getElementById("closing");
+    const feedEl = document.getElementById("feed");
+
+    let sessionStartTs = null;
+
+    function fmtElapsed(ms) {
+      if (ms == null) return "—";
+      const s = Math.floor(ms / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      if (h) return h + "h " + m + "m";
+      if (m) return m + "m";
+      return s + "s";
+    }
+
+    function tickElapsed() {
+      if (sessionStartTs == null) return;
+      elapsedEl.textContent = fmtElapsed(Date.now() - sessionStartTs);
+    }
+    setInterval(tickElapsed, 30000);
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+
+    function clip(s, n) {
+      s = String(s);
+      return s.length > n ? s.slice(0, n) + "…" : s;
+    }
+
+    function setSession(info) {
+      if (!info) return;
+      const slug = info.slug || "";
+      const pretty = slug.replace(/^-+/, "").replace(/-/g, "/");
+      projectEl.textContent = pretty || "—";
+      if (sessionStartTs == null) sessionStartTs = Date.now();
+      tickElapsed();
+      closingEl.style.display = "none";
+    }
+
+    function renderEvent(ev) {
+      const div = document.createElement("div");
+      div.className = "ev " + ev.kind;
+
+      if (ev.kind === "stop") {
+        div.textContent = "· · ·";
+        feedEl.appendChild(div);
+        return;
       }
-    });
+
+      let label = ev.kind;
+      let body = "";
+      switch (ev.kind) {
+        case "user_message":
+          label = "you";
+          body = clip(ev.text, 240);
+          break;
+        case "assistant_text":
+          label = "claude";
+          body = clip(ev.text, 240);
+          if (ev.tokens != null) body += "  ·  " + ev.tokens + " tok";
+          break;
+        case "tool_use":
+          label = "→ " + ev.tool;
+          body = ev.summary || "";
+          break;
+        case "tool_result":
+          label = "← result";
+          body = (ev.isError ? "[err] " : "") + (ev.summary || "");
+          break;
+      }
+      div.innerHTML =
+        '<span class="label">' + escapeHtml(label) + "</span>" +
+        '<span>' + escapeHtml(body) + "</span>";
+      feedEl.appendChild(div);
+    }
+
+    function clearFeed() {
+      feedEl.innerHTML = '<div class="label-row">debug feed (phase 1)</div>';
+    }
+
+    function connect() {
+      const ws = new WebSocket("ws://" + location.host + "/ws");
+      ws.addEventListener("message", (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        if (msg.kind === "hello") {
+          if (msg.session) setSession(msg.session);
+          if (Array.isArray(msg.events)) {
+            clearFeed();
+            for (const ev of msg.events) renderEvent(ev);
+          }
+        } else if (msg.kind === "session") {
+          setSession(msg.session);
+        } else if (msg.kind === "event") {
+          renderEvent(msg.event);
+        }
+      });
+      ws.addEventListener("close", () => {
+        setTimeout(connect, 1000);
+      });
+    }
+
+    connect();
   </script>
 </body>
 </html>

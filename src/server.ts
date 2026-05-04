@@ -1,12 +1,13 @@
-const PORT = Number(Bun.env.PORT ?? 3737);
+import { startTailer, type SessionInfo } from "./tailer";
+import type { MetaEvent } from "./jsonl";
 
-type MetaEvent = {
-  type: "post_tool_use" | "stop" | "user_prompt_submit";
-  ts: number;
-  payload: unknown;
-};
+const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
+const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
+const PROJECT_SLUG = Bun.env.META_PROJECT_SLUG;
+const MAX_EVENTS = 5000;
 
 const events: MetaEvent[] = [];
+let session: SessionInfo | null = null;
 const sockets = new Set<Bun.ServerWebSocket<unknown>>();
 
 function broadcast(msg: unknown) {
@@ -28,16 +29,8 @@ const server = Bun.serve({
       return new Response(Bun.file("public/index.html"));
     }
 
-    if (url.pathname === "/event" && req.method === "POST") {
-      const payload = await req.json();
-      const ev: MetaEvent = { type: payload.type, ts: Date.now(), payload };
-      events.push(ev);
-      broadcast({ kind: "event", event: ev });
-      return Response.json({ ok: true });
-    }
-
     if (url.pathname === "/state" && req.method === "GET") {
-      return Response.json({ events });
+      return Response.json({ session, events });
     }
 
     return new Response("not found", { status: 404 });
@@ -45,7 +38,7 @@ const server = Bun.serve({
   websocket: {
     open(ws) {
       sockets.add(ws);
-      ws.send(JSON.stringify({ kind: "hello", events }));
+      ws.send(JSON.stringify({ kind: "hello", session, events }));
     },
     message() {
       // no client → server messages yet
@@ -57,3 +50,18 @@ const server = Bun.serve({
 });
 
 console.log(`meta · listening on http://localhost:${server.port}`);
+
+startTailer({
+  ...(PROJECT_SLUG ? { projectSlug: PROJECT_SLUG } : {}),
+  pollMs: POLL_MS,
+  onSession(info) {
+    session = info;
+    broadcast({ kind: "session", session: info });
+    console.log(`[tailer] tailing ${info.path}`);
+  },
+  onEvent(ev) {
+    events.push(ev);
+    if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
+    broadcast({ kind: "event", event: ev });
+  },
+});
