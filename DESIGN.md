@@ -183,7 +183,7 @@ The palette is a tinted-neutral light page with two semantic accents and a singl
 
 **The One Voice Rule.** Indigo is the agent's voice. It appears on the active output bar, the selected session card, the primary CTA, and the send button. Nothing else. Never use indigo as a divider, a hover tint on an unrelated surface, a heading underline, or decoration.
 
-**The Latest-Only Coral Rule.** Coral marks the most recent turn in the complexity chart and nothing else. The moment a newer turn arrives, the coral bar reverts to indigo. Coral does not appear in chrome, alerts, badges, or copy. Its scarcity is what makes it readable from across the desk.
+**The Latest-Only Coral Rule.** Coral marks the most recent turn of the currently-viewed session in the detail-pane complexity chart, and nowhere else. The moment a newer turn arrives, the prior coral bar reverts to indigo. Coral does not appear in chrome, alerts, badges, copy, or anywhere outside that single chart. Its scarcity is the entire point: at any moment, coral paints in at most one place on the page. Sidebar cards do not carry charts. If sidebar cards ever do carry charts, this rule becomes "the freshest session across the inbox" (one card globally) plus "always on the latest of the detail pane" (the focused chart) — but until that happens, the architecture already enforces scarcity for free.
 
 **The Data-Color Quarantine Rule.** Diff Green and Diff Red live inside the code-changes chart only. They are not in the design system; they are in the chart. Do not extend them into status pills, success/error toasts, or any other UI surface.
 

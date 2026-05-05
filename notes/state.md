@@ -233,18 +233,17 @@ normative source of truth is **`DESIGN.md`** at the repo root (visual system) an
 
 8. **abort propagation depth.** `observer.stop()` calls `abortController.abort()` and waits 500ms before `process.exit(0)`. unverified the sdk subprocess actually dies in that window — could orphan on slow shutdown.
 
-9. **coral paints per-chart, not globally.** the latest output bar in every visible session's chart paints coral, so with N sessions, N coral bars compete. DESIGN.md's Latest-Only Coral Rule says the *one* most recent thing should pop. fix is in commit 2: server marks one session per inbox as `isFreshest`; chart render takes a `context: 'card' | 'detail'` arg; only the freshest sidebar card paints coral, the detail pane always paints coral on its latest. not yet implemented.
+9. ~~**coral paints per-chart, not globally.**~~ withdrawn after verification: sidebar cards do not carry charts (`renderChartHtml` is only called once, in `renderDetail`), so coral can only paint in one place on the page at any time. the latest-only rule is enforced by the architecture for free. DESIGN.md tightened to make that explicit. if mini-charts are ever added to cards, the freshest-only split has to land too.
 
-**recently fixed (in commit `<polish>`):** observer-insight side-stripe (now tint-only, no border, per DESIGN.md Don'ts).
+**recently fixed:** observer-insight side-stripe (now tint-only, no border, per DESIGN.md Don'ts) in `1d0d1a9`.
 
 ---
 
 ## what's next (priority order, my read)
 
-ui design queue (locked via `/impeccable critique` walkthrough; commit 1 done):
+ui design queue (locked via `/impeccable critique` walkthrough; commit 1 done; commit 2 absorbed into a doc tightening):
 
-1. **commit 2: coral split** — server marks one session per inbox as `isFreshest`; chart render takes a `context: 'card' | 'detail'` arg; sidebar mini-charts paint coral only when freshest, detail pane always paints coral on its latest. update DESIGN.md's Latest-Only Coral Rule to capture the split. small surgical change in `src/server.ts` + `public/index.html` + `DESIGN.md`.
-2. **commit 3: observer rolling sessionSummary** — extend observer system prompt to also produce a top-level `sessionSummary` per session per batch (1 sentence, present-tense, lowercase, ≤25 words, covers the last 3 closed turns, null if <2 turns). server stores latest per session. ui renders in the now-real `#d-summary` panel above chat slots, fades to muted ink-soft after 5min staleness. brings back the "what happened so far" panel, this time load-bearing.
+1. **commit 3: observer rolling sessionSummary** — extend observer system prompt to also produce a top-level `sessionSummary` per session per batch (1 sentence, present-tense, lowercase, ≤25 words, covers the last 3 closed turns, null if <2 turns). server stores latest per session. ui renders in the now-real `#d-summary` panel above chat slots, fades to muted ink-soft after 5min staleness. brings back the "what happened so far" panel, this time load-bearing.
 
 then the deferred design items (per the walkthrough):
 
