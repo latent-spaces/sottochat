@@ -2,27 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>chunk-to-chat</title>
+  <title>cut-the-cake</title>
+  <link rel="icon" type="image/webp" href="/assets/logo-cake-slice.webp" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
-      --bg: #fafafb;
+      /* paper / surface */
+      --bg: #fdf9fa;
       --surface: #ffffff;
       --fg: #1a1a1f;
       --fg-soft: #6e6e7a;
       --fg-muted: #9090a0;
-      --border: #e7e7ec;
-      --border-strong: #d4d4dd;
-      --accent: #6366f1;
-      --accent-hover: #4f52e0;
-      --accent-soft: #eef0fe;
-      --coral: #ef5e5e;
-      --coral-soft: #fdecec;
+      --border: #efe8eb;
+      --border-strong: #dcd2d6;
+      --chip-tint: #f5eef1;
+      /* operative voice */
+      --accent: #ec4899;          /* strawberry */
+      --accent-hover: #db2777;
+      --accent-soft: #fce7f3;
+      /* chart-only second voice */
+      --plum: #a855f7;
+      /* glass — top nav only */
+      --glass-paper: rgba(253, 249, 250, 0.72);
+      /* data colors — quarantined to code-changes chart */
       --diff-green: #10b981;
       --diff-red: #ef4444;
+      /* type stacks */
       --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
-      --radius: 12px;
+      /* radii */
+      --r-input: 8px;
+      --r-card: 10px;
+      --r-panel: 14px;
+      --r-pill: 999px;
+      /* motion */
       --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     }
     * { box-sizing: border-box; }
@@ -34,29 +47,122 @@
       line-height: 1.6;
       font-size: 15px;
       -webkit-font-smoothing: antialiased;
+      position: relative;
+      min-height: 100vh;
     }
 
-    .app-header {
-      max-width: 880px;
-      margin: 0 auto;
-      padding: 56px 24px 16px;
+    /* soft ambient layers — three large blurred blobs sit behind the page,
+       a sprinkle layer drifts above them but below cards. neither catches
+       pointer events; both respect prefers-reduced-motion. */
+    .bg-blobs {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      overflow: hidden;
     }
-    .app-header h1 {
-      font-size: 26px;
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+    }
+    .blob-1 { width: 520px; height: 520px; background: oklch(94% 0.05 0); top: -120px; left: -160px; opacity: 0.55; }
+    .blob-2 { width: 420px; height: 420px; background: oklch(94% 0.06 305); top: 40px; right: -120px; opacity: 0.5; }
+    .blob-3 { width: 600px; height: 600px; background: oklch(94% 0.04 280); top: 60vh; left: 28%; opacity: 0.35; }
+
+    .sprinkles {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .sprinkle {
+      position: absolute;
+      width: 5px;
+      height: 14px;
+      border-radius: 999px;
+      will-change: transform;
+    }
+    .sprinkle.round { width: 6px; height: 6px; }
+
+    /* keep main content above the sprinkle layer */
+    main.layout { position: relative; z-index: 1; }
+
+    /* sticky frosted top nav — the only glass surface in the system. */
+    .top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      height: 56px;
+      padding: 0 24px;
+      background: var(--glass-paper);
+      backdrop-filter: blur(12px) saturate(140%);
+      -webkit-backdrop-filter: blur(12px) saturate(140%);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .nav-logo {
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      object-fit: contain;
+    }
+    .nav-wordmark {
+      font-size: 20px;
       font-weight: 600;
-      margin: 0 0 4px;
+      color: var(--accent);
       letter-spacing: -0.02em;
+      text-decoration: none;
+      white-space: nowrap;
     }
-    .app-header .tag {
-      font-size: 13px;
+    .nav-tag {
+      font-size: 12px;
       color: var(--fg-soft);
-      margin: 0;
+      white-space: nowrap;
+      margin-left: 6px;
     }
+    @media (max-width: 720px) { .nav-tag { display: none; } }
+    .nav-right { display: flex; align-items: center; gap: 12px; }
+    .reconnect-indicator {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+    }
+    .gh-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-pill);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fg);
+      text-decoration: none;
+      transition: border-color 200ms var(--ease-out);
+    }
+    .gh-pill:hover { border-color: var(--accent); }
+    .gh-pill .gh-glyph {
+      font-family: var(--mono);
+      font-size: 13px;
+    }
+    .gh-pill .gh-star { color: #f4b942; }
 
     main.layout {
       max-width: 1280px;
       margin: 0 auto;
-      padding: 16px 24px 96px;
+      padding: 24px 24px 96px;
       display: flex;
       gap: 24px;
       align-items: flex-start;
@@ -64,35 +170,46 @@
     .sidebar {
       flex: 0 0 320px;
       position: sticky;
-      top: 16px;
+      top: 80px;
     }
     .detail-pane {
       flex: 1;
       min-width: 0;
-    }
-    .detail-empty {
-      padding: 80px 24px;
-      text-align: center;
-      color: var(--fg-soft);
-      font-style: italic;
-      font-size: 14px;
-      border: 1px dashed var(--border-strong);
-      border-radius: var(--radius);
     }
     @media (max-width: 880px) {
       main.layout { flex-direction: column; }
       .sidebar { flex: 1 1 auto; position: static; width: 100%; }
     }
     .section-label {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
       color: var(--fg-muted);
+      font-family: var(--mono);
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin: 0 0 12px;
     }
 
-    /* inbox */
+    /* detail empty — cake duo, replaces the dashed outline */
+    .detail-empty {
+      padding: 64px 24px;
+      text-align: center;
+    }
+    .detail-empty img {
+      width: 100%;
+      max-width: 360px;
+      height: auto;
+      margin: 0 auto 16px;
+      display: block;
+    }
+    .detail-empty p {
+      color: var(--fg-soft);
+      font-style: italic;
+      font-size: 14px;
+      margin: 0;
+    }
+
+    /* sidebar inbox */
     .cards { display: grid; gap: 8px; }
     .empty-inbox {
       text-align: center;
@@ -101,28 +218,47 @@
       font-style: italic;
       font-size: 13px;
       border: 1px dashed var(--border-strong);
-      border-radius: var(--radius);
+      border-radius: var(--r-card);
     }
 
     .card {
+      position: relative;
       display: block;
       text-decoration: none;
       color: var(--fg);
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: var(--r-card);
       padding: 10px 12px;
+      overflow: hidden;
       transition: border-color 400ms var(--ease-out),
                   background 200ms var(--ease-out),
                   opacity 400ms var(--ease-out);
     }
     .card:hover { border-color: var(--accent); opacity: 1; }
     .card.live { border-color: var(--accent); }
-    .card.idle { opacity: 0.55; }
+    .card.idle { opacity: 0.6; }
+    /* update flash — fires when a card's data changes mid-session */
+    .card.is-updated { animation: card-update 1.6s var(--ease-out); }
+    @keyframes card-update {
+      0%   { box-shadow: 0 0 0 0 var(--accent-soft); transform: scale(1); }
+      18%  { box-shadow: 0 0 0 6px var(--accent-soft); transform: scale(1.015); }
+      100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); }
+    }
     .card.selected {
       border-color: var(--accent);
       background: var(--accent-soft);
       opacity: 1;
+      padding-right: 64px;             /* room for the mascot peek */
+    }
+    .card-mascot {
+      position: absolute;
+      right: -4px;
+      bottom: -8px;
+      width: 76px;
+      height: 76px;
+      pointer-events: none;
+      object-fit: contain;
     }
     .card-head {
       display: flex;
@@ -144,39 +280,13 @@
       font-family: var(--mono);
       font-size: 9px;
       color: var(--fg-soft);
-      background: #f3f3f7;
+      background: var(--chip-tint);
       padding: 2px 6px;
       border-radius: 3px;
       flex-shrink: 0;
+      text-transform: lowercase;
+      letter-spacing: 0.04em;
     }
-    /* observer insight: detail-pane callout. cards inline the prose directly. */
-    .observer-insight {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      padding: 10px 12px;
-      background: var(--accent-soft);
-      border-radius: 6px;
-      font-size: 13px;
-      color: var(--fg);
-      line-height: 1.5;
-    }
-    .observer-insight .obs-label {
-      font-family: var(--mono);
-      font-size: 9px;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      flex-shrink: 0;
-      padding-top: 3px;
-    }
-    .observer-insight .obs-tags {
-      margin-top: 3px;
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--fg-muted);
-    }
-    /* card-inline insight: no callout chrome, just promoted prose */
     .card-insight {
       font-size: 13px;
       color: var(--fg);
@@ -201,48 +311,89 @@
       white-space: nowrap;
       text-overflow: ellipsis;
     }
-    .card-foot .live-word { color: var(--accent); }
+    .card-foot .live-word { color: var(--accent); font-weight: 600; }
     .card-foot .sep { opacity: 0.55; }
 
-    /* turn complexity chart — paired bars with horizontal grid */
-    .cx { margin: 0; }
-    .cx-head {
+    /* chart cards — turn complexity + code changes, panel-style with header pills */
+    .chart-card {
+      background: linear-gradient(180deg, oklch(98% 0.014 350) 0%, var(--surface) 100%);
+      border: 1px solid var(--accent-soft);
+      border-radius: var(--r-panel);
+      padding: 14px 16px 12px;
+      min-width: 0;
+    }
+    .chart-card.code {
+      background: linear-gradient(180deg, oklch(98% 0.012 155) 0%, var(--surface) 100%);
+      border-color: oklch(92% 0.06 155);
+    }
+    .chart-head {
       display: flex;
-      justify-content: space-between;
-      align-items: baseline;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      min-width: 0;
+    }
+    .chart-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .chart-card.code .chart-icon { background: oklch(94% 0.07 155); color: oklch(60% 0.16 155); }
+    .chart-icon svg { width: 16px; height: 16px; }
+    .chart-title {
+      font-family: var(--mono);
       font-size: 11px;
-      color: var(--fg-muted);
+      font-weight: 500;
+      color: var(--accent);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      margin-bottom: 10px;
+      flex: 1 1 auto;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .cx-legend {
+    .chart-card.code .chart-title { color: oklch(50% 0.14 155); }
+    .chart-legend {
       display: flex;
-      gap: 14px;
-      text-transform: none;
-      letter-spacing: 0;
-      font-size: 11px;
-      color: var(--fg-soft);
+      gap: 6px;
+      flex-shrink: 0;
     }
-    .cx-legend .dot {
-      display: inline-block;
+    .legend-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 9px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--fg-soft);
+      line-height: 1;
+    }
+    .legend-pill .dot {
       width: 8px;
       height: 8px;
       border-radius: 2px;
-      margin-right: 5px;
-      vertical-align: middle;
     }
-    .cx-legend .dot-input { background: var(--fg-muted); opacity: 0.55; }
-    .cx-legend .dot-output { background: var(--accent); }
-    .cx-chart {
+    .legend-pill .dot-input { background: var(--accent); opacity: 0.55; }
+    .legend-pill .dot-output { background: var(--plum); }
+    .legend-pill .dot-added { background: var(--diff-green); }
+    .legend-pill .dot-removed { background: var(--diff-red); }
+
+    .chart-body {
       display: flex;
-      height: 96px;
-      gap: 6px;
+      gap: 8px;
+      min-width: 0;
     }
-    .cx-yaxis {
-      flex: 0 0 30px;
-      position: relative;
-    }
+    .cx-yaxis { flex: 0 0 36px; position: relative; height: 130px; }
     .cx-yaxis .tick {
       position: absolute;
       right: 4px;
@@ -257,10 +408,10 @@
     .cx-yaxis .tick.mid { top: 50%; }
     .cx-yaxis .tick.bot { top: 100%; }
     .cx-plot {
-      flex: 0 0 auto;
+      flex: 1 1 auto;
       position: relative;
-      border-left: 1px solid var(--border);
-      border-bottom: 1px solid var(--border);
+      height: 130px;
+      min-width: 0;
     }
     .cx-grid {
       position: absolute;
@@ -271,64 +422,61 @@
     }
     .cx-grid.top { top: 0; }
     .cx-grid.mid { top: 50%; }
+    .cx-grid.bot { top: 100%; border-top-style: solid; }
     .cx-bars {
-      padding: 0 10px;
+      position: absolute;
+      inset: 0 0 0 0;
       display: flex;
       align-items: flex-end;
-      gap: 14px;
-      height: 100%;
+      gap: 4px;
     }
-    .cx-scroll {
-      max-width: 100%;
-      overflow-x: auto;
-      padding-bottom: 4px;
-    }
+    /* flex distribution — bars share the available width without scrolling */
     .cx-pair {
-      flex: 0 0 auto;
+      flex: 1 1 0;
+      min-width: 4px;
+      max-width: 56px;
       display: flex;
       align-items: flex-end;
+      justify-content: center;
       gap: 2px;
       height: 100%;
+      position: relative;
     }
     .cx-bar {
-      width: 14px;
+      flex: 1 1 0;
       min-height: 1px;
-      border-radius: 2px 2px 0 0;
+      border-radius: 3px 3px 0 0;
+      max-width: 22px;
     }
-    .bar-input { background: var(--fg-muted); opacity: 0.55; }
-    .bar-output { background: var(--accent); opacity: 0.9; }
-    .cx-pair.latest .bar-output { background: var(--coral); opacity: 1; }
+    .bar-input { background: var(--accent); opacity: 0.55; }
+    .bar-output { background: var(--plum); opacity: 0.9; }
+    .cx-pair.latest .bar-output { background: var(--plum); opacity: 1; }
     .bar-added { background: var(--diff-green); opacity: 0.9; }
     .bar-removed { background: var(--diff-red); opacity: 0.9; }
-    .cx-legend .dot-added { background: var(--diff-green); }
-    .cx-legend .dot-removed { background: var(--diff-red); }
-    .cx-xaxis {
+
+    .chart-foot {
       display: flex;
-      justify-content: space-between;
-      padding: 6px 8px 0 36px;
-      font-size: 10px;
+      justify-content: flex-end;
+      margin-top: 6px;
+      padding-right: 4px;
       font-family: var(--mono);
+      font-size: 10px;
       color: var(--fg-muted);
     }
-    /* detail page */
-    .back {
-      display: inline-block;
-      font-size: 13px;
-      color: var(--fg-soft);
-      text-decoration: none;
-      margin-bottom: 24px;
-      font-family: var(--mono);
-    }
-    .back:hover { color: var(--accent); }
 
+    /* detail page */
     .session-head {
-      margin-bottom: 32px;
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin: 4px 0 24px;
     }
     .session-head h2 {
       font-size: 26px;
       font-weight: 600;
-      margin: 0 0 4px;
+      margin: 0;
       letter-spacing: -0.02em;
+      color: var(--accent);
     }
     .session-head .source {
       font-size: 13px;
@@ -336,33 +484,93 @@
       margin: 0;
       font-family: var(--mono);
     }
+    .session-head .source .src-glyph { color: var(--accent); margin-right: 4px; }
 
-    .panel {
+    /* summary panel — "what happened so far", with the cake-clouds banner backdrop */
+    .summary-panel {
+      position: relative;
       background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 22px 24px;
-      margin-bottom: 20px;
+      border: 1px solid var(--accent-soft);
+      border-radius: var(--r-panel);
+      padding: 18px 22px;
+      margin: 0 0 20px;
+      overflow: hidden;
+      min-height: 88px;
     }
-    .panel .label {
+    .summary-panel .panel-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
       font-size: 11px;
       font-weight: 500;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0 0 8px;
+    }
+    .summary-panel .panel-label::before {
+      content: "✦";
+      font-family: var(--sans);
+      color: var(--accent);
+    }
+    .summary-panel .summary-text {
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--fg);
+      margin: 0;
+      max-width: 60ch;
+      position: relative;
+      z-index: 1;
+    }
+    .summary-panel .summary-text.stale { color: var(--fg-soft); font-style: italic; }
+    .summary-panel .stale-tag {
+      font-family: var(--mono);
+      font-size: 10px;
       color: var(--fg-muted);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      margin: 0 0 10px;
+      margin-right: 6px;
     }
-    .prose {
-      font-size: 15px;
-      color: var(--fg);
-      margin: 0;
+    .summary-panel .banner-bg {
+      position: absolute;
+      right: -40px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 360px;
+      max-width: 60%;
+      height: auto;
+      pointer-events: none;
+      object-fit: contain;
+      opacity: 1;
     }
-    .prose.muted {
-      color: var(--fg-soft);
-      font-style: italic;
+    @media (max-width: 720px) {
+      .summary-panel .banner-bg { display: none; }
+    }
+    .summary-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 0;
+      position: relative;
+      z-index: 1;
     }
 
-    /* untouched-for line — sits above chat slots */
+    /* tag chip — strawberry tint + strawberry-deep label */
+    .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      background: var(--accent-soft);
+      color: var(--accent-hover);
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: lowercase;
+    }
+
     .untouched-line {
       font-family: var(--mono);
       font-size: 11px;
@@ -371,49 +579,28 @@
       padding-left: 2px;
     }
 
-    /* rolling session summary from the observer (sits above chat slots).
-       fades to ink-soft + (stale) tag when the underlying session has gone
-       quiet for >5 minutes since the summary's timestamp. */
-    .session-summary {
-      font-size: 15px;
-      line-height: 1.5;
-      color: var(--fg);
-      margin: 0 0 16px;
-      padding-left: 2px;
-    }
-    .session-summary.stale {
-      color: var(--fg-soft);
-      font-style: italic;
-    }
-    .session-summary .stale-tag {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--fg-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-right: 6px;
-    }
-
-    /* instrument band — paired charts in one frame */
+    /* instrument band — sits between the summary panel and the conversation strip.
+       two columns always; if one chart has nothing to render, its slot stays
+       empty rather than the other chart stretching to full width. */
     .charts-band {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 24px;
-      margin-top: 32px;
+      gap: 16px;
+      margin: 0 0 20px;
     }
-    .charts-band > * { min-width: 0; }      /* allow tracks to shrink past content */
-    .charts-band > div:empty { display: none; }
-    .charts-band:has(> div:only-child),
-    .charts-band:has(> div:empty) { grid-template-columns: 1fr; }
-    @media (max-width: 880px) { .charts-band { grid-template-columns: 1fr; } }
+    .charts-band > * { min-width: 0; }
+    #d-chart { grid-column: 1; }
+    #d-code-chart { grid-column: 2; }
+    @media (max-width: 880px) {
+      .charts-band { grid-template-columns: 1fr; }
+      #d-chart, #d-code-chart { grid-column: 1; }
+    }
 
-    /* conversation tail — chat-style view of the last N turns */
+    /* conversation strip — three messages: prev-agent → you → agent */
     .conversation {
       display: flex;
       flex-direction: column;
       gap: 18px;
-      max-height: 480px;
-      overflow-y: auto;
       padding: 4px 2px 16px;
       margin: 8px 0 16px;
       border-bottom: 1px solid var(--border);
@@ -426,6 +613,7 @@
       text-transform: uppercase;
       letter-spacing: 0.06em;
     }
+    .conv-role.you { color: var(--accent); }
     .conv-text {
       font-size: 14px;
       line-height: 1.55;
@@ -441,7 +629,91 @@
       padding: 24px 0;
     }
 
-    /* ambient quiet — collapses sidebar when all sessions idle */
+    /* markdown body for agent messages — claude-session-style formatting */
+    .conv-md { font-size: 14px; line-height: 1.6; color: var(--fg); max-width: 78ch; }
+    .conv-md > *:first-child { margin-top: 0; }
+    .conv-md > *:last-child { margin-bottom: 0; }
+    .conv-md p { margin: 0 0 10px; }
+    .conv-md h1, .conv-md h2, .conv-md h3, .conv-md h4 {
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin: 14px 0 6px;
+    }
+    .conv-md h1 { font-size: 17px; }
+    .conv-md h2 { font-size: 16px; }
+    .conv-md h3 { font-size: 15px; }
+    .conv-md h4 { font-size: 14px; }
+    .conv-md ul, .conv-md ol { padding-left: 22px; margin: 6px 0 10px; }
+    .conv-md li { margin: 2px 0; }
+    .conv-md li > p { margin: 0; }
+    .conv-md code {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--chip-tint);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .conv-md pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      background: oklch(96% 0.012 340);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+    .conv-md pre code { background: none; padding: 0; border-radius: 0; font-size: 12.5px; }
+    .conv-md a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+    .conv-md a:hover { color: var(--accent-hover); }
+    .conv-md strong { font-weight: 600; }
+    .conv-md em { font-style: italic; }
+    .conv-md blockquote {
+      margin: 8px 0;
+      padding: 4px 0 4px 14px;
+      border-left: 2px solid var(--border-strong);
+      color: var(--fg-soft);
+      font-style: italic;
+    }
+    .conv-md hr { border: 0; border-top: 1px dashed var(--border-strong); margin: 14px 0; }
+
+    /* height-based tail: cap collapsed agent blocks, fade + toggle when truncated */
+    .conv-body {
+      position: relative;
+      max-height: 240px;
+      overflow: hidden;
+      transition: max-height 280ms var(--ease-out);
+    }
+    .conv-body.is-truncated::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 70px;
+      background: linear-gradient(to bottom, transparent, var(--bg) 90%);
+      pointer-events: none;
+    }
+    .conv-body.is-expanded { max-height: none; }
+    .conv-body.is-expanded::after { display: none; }
+    .conv-toggle {
+      align-self: flex-start;
+      margin-top: 4px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+    .conv-toggle:hover { color: var(--accent-hover); }
+    .conv-toggle.hidden { display: none; }
+
     .ambient-quiet {
       font-family: var(--mono);
       font-size: 12px;
@@ -450,38 +722,40 @@
       margin: 0;
     }
 
-    /* reconnecting indicator */
-    .reconnect-indicator {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--fg-muted);
-      margin-left: 12px;
-      vertical-align: middle;
-    }
-
     /* chat input — single row below the conversation tail */
     .chat-input {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 12px 14px;
+      border-radius: var(--r-panel);
+      padding: 14px 16px;
     }
     .chat-input .chat-context {
-      font-size: 12px;
-      color: var(--fg-soft);
-      margin: 0 0 8px;
+      font-size: 13px;
+      color: var(--fg);
+      margin: 0 0 10px;
       line-height: 1.5;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 6px;
     }
     .chat-input .chat-context.muted { font-style: italic; color: var(--fg-muted); }
-    .chat-input .chat-context .chat-tags {
+    .chat-input .chat-context .chat-context-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       font-family: var(--mono);
-      font-size: 10px;
-      color: var(--fg-muted);
-      margin-left: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 6px;
     }
+    .chat-input .chat-context .chat-context-label::before { content: "⚡"; }
     .chat-input-row {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       align-items: stretch;
     }
     .chat-input-row textarea {
@@ -489,13 +763,14 @@
       font-family: inherit;
       font-size: 14px;
       line-height: 1.5;
-      padding: 8px 10px;
+      padding: 10px 12px;
       border: 1px solid var(--border-strong);
-      border-radius: 6px;
+      border-radius: var(--r-input);
       resize: vertical;
-      min-height: 40px;
+      min-height: 44px;
       background: var(--bg);
       color: var(--fg);
+      transition: border-color 160ms var(--ease-out), background 160ms var(--ease-out);
     }
     .chat-input-row textarea:focus {
       outline: none;
@@ -504,22 +779,48 @@
     }
     .chat-input-row .send-btn {
       flex: 0 0 auto;
-      width: 40px;
+      width: 44px;
+      height: 44px;
+      align-self: flex-end;
       background: var(--accent);
-      color: #fff;
       border: none;
-      border-radius: 6px;
-      font-size: 18px;
-      font-weight: 600;
+      border-radius: var(--r-input);
       cursor: pointer;
-      transition: background 0.12s;
+      box-shadow: 0 6px 20px -10px rgba(236, 72, 153, 0.55);
+      transition: background 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
     }
-    .chat-input-row .send-btn:hover { background: var(--accent-hover); }
+    .chat-input-row .send-btn img {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+      pointer-events: none;
+    }
+    .chat-input-row .send-btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px -12px rgba(236, 72, 153, 0.65);
+    }
     .chat-input-row .send-btn:disabled {
       background: var(--border-strong);
-      color: var(--fg-soft);
       cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
     }
+    .chat-input-row .send-btn:disabled img { opacity: 0.5; }
+    .chat-tip {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+    }
+    .chat-tip .tip-key { color: var(--accent); }
     .chat-sent {
       margin-top: 8px;
       font-size: 12px;
@@ -538,9 +839,26 @@
   </style>
 </head>
 <body>
-  <header class="app-header">
-    <h1>chunk-to-chat<span class="reconnect-indicator" id="reconnect-indicator" hidden>reconnecting…</span></h1>
-    <p class="tag">turn long agent runs into a quick iterative chat</p>
+  <div class="bg-blobs" aria-hidden="true">
+    <span class="blob blob-1"></span>
+    <span class="blob blob-2"></span>
+    <span class="blob blob-3"></span>
+  </div>
+  <div class="sprinkles" aria-hidden="true" data-sprinkles></div>
+
+  <header class="top-nav">
+    <div class="nav-left">
+      <img class="nav-logo" src="/assets/logo-cake-slice.webp" alt="" />
+      <a class="nav-wordmark" href="#">cut-the-cake</a>
+      <span class="nav-tag">turn long agent runs into a quick iterative chat</span>
+    </div>
+    <div class="nav-right">
+      <span class="reconnect-indicator" id="reconnect-indicator" hidden>reconnecting…</span>
+      <a class="gh-pill" href="https://github.com/oronanschel/cut-the-cake" target="_blank" rel="noreferrer noopener" aria-label="GitHub repo">
+        <span class="gh-glyph">★</span>
+        <span class="gh-star" id="gh-star">—</span>
+      </a>
+    </div>
   </header>
 
   <main class="layout">
@@ -553,27 +871,38 @@
     </aside>
 
     <section class="detail-pane" id="detail-pane">
-      <div class="detail-empty" id="detail-empty">select a session</div>
+      <div class="detail-empty" id="detail-empty">
+        <img src="/assets/empty-state-cake-duo.webp" alt="" />
+        <p>select a session</p>
+      </div>
       <article class="detail-content" id="detail-content" hidden>
         <div class="session-head">
           <h2 id="d-name">—</h2>
-          <p class="source"><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
+          <p class="source"><span class="src-glyph">◆</span><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
         </div>
 
-        <p class="session-summary" id="d-summary" hidden></p>
-        <p class="untouched-line" id="d-untouched" hidden>untouched for <span id="d-untouched-mins">—</span></p>
+        <section class="summary-panel" id="d-summary-panel" hidden>
+          <p class="panel-label">what happened so far</p>
+          <p class="summary-text" id="d-summary"></p>
+          <div class="summary-tags" id="d-summary-tags" hidden></div>
+          <img class="banner-bg" src="/assets/header-banner-cake-clouds.webp" alt="" />
+        </section>
 
-        <div class="conversation" id="d-conversation"></div>
-        <div class="chat-input" id="d-chat-input"></div>
+        <p class="untouched-line" id="d-untouched" hidden>untouched for <span id="d-untouched-mins">—</span></p>
 
         <div class="charts-band">
           <div id="d-chart"></div>
           <div id="d-code-chart"></div>
         </div>
+
+        <div class="conversation" id="d-conversation"></div>
+        <div class="chat-input" id="d-chat-input"></div>
       </article>
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
   <script>
     // dom
     const cardsEl = document.getElementById("cards");
@@ -584,7 +913,9 @@
     const detailContent = document.getElementById("detail-content");
     const dName = document.getElementById("d-name");
     const dElapsed = document.getElementById("d-elapsed");
+    const dSummaryPanel = document.getElementById("d-summary-panel");
     const dSummary = document.getElementById("d-summary");
+    const dSummaryTags = document.getElementById("d-summary-tags");
     const dUntouched = document.getElementById("d-untouched");
     const dUntouchedMins = document.getElementById("d-untouched-mins");
     const dChart = document.getElementById("d-chart");
@@ -596,6 +927,44 @@
     const LIVE_MS = 30 * 1000;          // <30s = live
     const IDLE_MS = 5 * 60 * 1000;      // >5m = idle
     const AMBIENT_MS = 5 * 60 * 1000;   // all sessions idle this long → quiet collapse
+
+    // assets
+    const MASCOT_ACTIVE = "/assets/mascot-cupcake-wand.webp";
+    const MASCOT_IDLE = "/assets/mascot-cupcake-fork.webp";
+
+    // motion helpers — magicui-style ports.
+    // blurFadeIn = the BlurFade pattern: opacity 0 + blur(8px) + small y offset → reveal.
+    // blurFadeStagger = run blurFadeIn on a list of nodes with a small staggered delay.
+    function reduceMotionOn() {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    }
+    function blurFadeIn(el, opts) {
+      if (!el || typeof gsap === "undefined" || reduceMotionOn()) return;
+      const o = opts || {};
+      // ported from magicui blur-fade.tsx defaults: y: -offset (direction "down"),
+      // blur 6px, ease easeOut, base delay 0.04. duration bumped above the 0.4s
+      // source default to land closer to the slower feel we settled on.
+      gsap.fromTo(el,
+        { opacity: 0, filter: "blur(6px)", y: -6 },
+        {
+          opacity: 1,
+          filter: "blur(0px)",
+          y: 0,
+          duration: o.duration || 0.7,
+          delay: 0.04 + (o.delay || 0),
+          ease: "power2.out",
+          clearProps: "filter,y,opacity",
+        }
+      );
+    }
+    function blurFadeStagger(parent, selector, opts) {
+      if (!parent) return;
+      const o = opts || {};
+      const step = o.step || 0.08;
+      const start = o.start || 0;
+      const els = parent.querySelectorAll(selector);
+      els.forEach((el, i) => blurFadeIn(el, { delay: start + step * i, duration: o.duration }));
+    }
 
     // state — one entry per discovered session, keyed by server-side key
     // ("<source>:<path>"). Each carries its own events/threads/lastEventTs.
@@ -612,17 +981,11 @@
       return s.length > n ? s.slice(0, n) + "…" : s;
     }
     function projectName(info) {
-      // -Users-oronans-workspace-reelmaker → reelmaker
-      // -Users-oronans-workspace → workspace
       if (!info || !info.slug) return "";
       const parts = info.slug.replace(/^-+/, "").split("-");
       return parts[parts.length - 1] || info.slug;
     }
     function sessionName(infoOrSess) {
-      // accepts either a SessionState (with .sessionName) or just info (slug only).
-      // when the observer has named the session, prefix it with the project folder
-      // in brackets so [reelmaker] auth migration tells you both what + where.
-      // bare info or no observer name → just the project folder name.
       if (!infoOrSess) return "—";
       const sess = infoOrSess.info ? infoOrSess : null;
       const info = sess ? sess.info : infoOrSess;
@@ -655,24 +1018,6 @@
       return null;
     }
 
-    // detail-pane callout (full tinted box, with label + tags)
-    function renderObserverHtml(decisions) {
-      const latest = latestOpenInsight(decisions);
-      if (!latest) return "";
-      const tagsHtml = latest.tags && latest.tags.length
-        ? '<div class="obs-tags">' + escapeHtml(latest.tags.join(" · ")) + '</div>'
-        : "";
-      return (
-        '<div class="observer-insight">' +
-          '<div class="obs-label">open</div>' +
-          '<div>' +
-            escapeHtml(latest.insight) +
-            tagsHtml +
-          '</div>' +
-        '</div>'
-      );
-    }
-
     function sessionState(sess) {
       const ts = sess?.lastEventTs || 0;
       const age = Date.now() - ts;
@@ -691,7 +1036,6 @@
     }
     function shortModel(m) {
       if (!m) return "";
-      // claude-opus-4-7 → opus 4.7 ; claude-sonnet-4-6-20250929 → sonnet 4.6
       const stripped = String(m).replace(/^claude-/, "").replace(/-\d{8}$/, "");
       return stripped.replace(/-(\d+)-(\d+)$/, " $1.$2");
     }
@@ -743,7 +1087,6 @@
       if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
       return String(n);
     }
-
     function niceMax(v) {
       if (v <= 0) return 100;
       if (v <= 50) return 50;
@@ -754,6 +1097,12 @@
       if (v <= 2000) return 2000;
       return Math.ceil(v / 500) * 500;
     }
+
+    // chart icons — small inline svgs sitting in a tinted bubble in the card head
+    const ICON_COMPLEXITY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12 L5 8 L8 10 L11 5 L14 8"/></svg>';
+    const ICON_CODE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4 L2 8 L5 12 M11 4 L14 8 L11 12 M9.5 3.5 L6.5 12.5"/></svg>';
+    // charts cap at the last N turns — keeps bars wide and the panel uncluttered.
+    const CHART_TURNS = 5;
 
     function complexityChart(turns, count) {
       const last = count ? turns.slice(-count) : turns.slice();
@@ -766,6 +1115,7 @@
           output: outputW + t.toolUses * 30,
           outputWords: outputW,
           tools: t.toolUses,
+          ts: t.endTs,
         };
       });
       const peak = Math.max(20, ...data.map(d => Math.max(d.input, d.output)));
@@ -776,44 +1126,48 @@
       const cx = complexityChart(turns, count);
       if (!cx) return "";
       const yMax = cx.yMax;
+      const lastTs = cx.data[cx.data.length - 1].ts;
+      const lastAgeMs = Date.now() - lastTs;
+      const lastAgeLabel = lastAgeMs < 5000 ? "now" : fmtAge(lastAgeMs) + " ago";
       const pairs = cx.data.map((d, i) => {
-        const last = i === cx.data.length - 1;
+        const isLast = i === cx.data.length - 1;
         const inputH = Math.max(0.5, (d.input / yMax) * 100);
         const outputH = Math.max(0.5, (d.output / yMax) * 100);
         const tip =
-          "output: " + d.outputWords + "w" +
+          "agent: " + d.outputWords + "w" +
           (d.tools ? " · " + d.tools + "t" : "") +
-          " · input: " + d.input + "w";
+          " · you: " + d.input + "w";
         return (
-          '<div class="cx-pair' + (last ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
+          '<div class="cx-pair' + (isLast ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
             '<div class="cx-bar bar-input" style="height: ' + inputH + '%"></div>' +
             '<div class="cx-bar bar-output" style="height: ' + outputH + '%"></div>' +
           '</div>'
         );
       }).join("");
       return (
-        '<div class="cx">' +
-          '<div class="cx-head">' +
-            '<span>turn complexity (words)</span>' +
-            '<span class="cx-legend">' +
-              '<span><span class="dot dot-input"></span>input</span>' +
-              '<span><span class="dot dot-output"></span>output</span>' +
+        '<div class="chart-card">' +
+          '<div class="chart-head">' +
+            '<span class="chart-icon">' + ICON_COMPLEXITY + '</span>' +
+            '<span class="chart-title">turn complexity (words)</span>' +
+            '<span class="chart-legend">' +
+              '<span class="legend-pill"><span class="dot dot-input"></span>you</span>' +
+              '<span class="legend-pill"><span class="dot dot-output"></span>agent</span>' +
             '</span>' +
           '</div>' +
-          '<div class="cx-scroll">' +
-            '<div class="cx-chart">' +
-              '<div class="cx-yaxis">' +
-                '<span class="tick top">' + fmtCount(yMax) + '</span>' +
-                '<span class="tick mid">' + fmtCount(Math.round(yMax / 2)) + '</span>' +
-                '<span class="tick bot">0</span>' +
-              '</div>' +
-              '<div class="cx-plot">' +
-                '<div class="cx-grid top"></div>' +
-                '<div class="cx-grid mid"></div>' +
-                '<div class="cx-bars">' + pairs + '</div>' +
-              '</div>' +
+          '<div class="chart-body">' +
+            '<div class="cx-yaxis">' +
+              '<span class="tick top">' + fmtCount(yMax) + '</span>' +
+              '<span class="tick mid">' + fmtCount(Math.round(yMax / 2)) + '</span>' +
+              '<span class="tick bot">0</span>' +
+            '</div>' +
+            '<div class="cx-plot">' +
+              '<div class="cx-grid top"></div>' +
+              '<div class="cx-grid mid"></div>' +
+              '<div class="cx-grid bot"></div>' +
+              '<div class="cx-bars">' + pairs + '</div>' +
             '</div>' +
           '</div>' +
+          '<div class="chart-foot">' + escapeHtml(lastAgeLabel) + '</div>' +
         '</div>'
       );
     }
@@ -821,45 +1175,49 @@
     function renderCodeChartHtml(turns, count) {
       const last = count ? turns.slice(-count) : turns.slice();
       if (last.length === 0) return "";
-      const data = last.map(t => ({ added: t.linesAdded || 0, removed: t.linesRemoved || 0 }));
+      const data = last.map(t => ({ added: t.linesAdded || 0, removed: t.linesRemoved || 0, ts: t.endTs }));
       if (data.every(d => d.added === 0 && d.removed === 0)) return "";
       const peak = Math.max(20, ...data.map(d => Math.max(d.added, d.removed)));
       const yMax = niceMax(peak);
+      const lastTs = data[data.length - 1].ts;
+      const lastAgeMs = Date.now() - lastTs;
+      const lastAgeLabel = lastAgeMs < 5000 ? "now" : fmtAge(lastAgeMs) + " ago";
       const pairs = data.map((d, i) => {
-        const last = i === data.length - 1;
+        const isLast = i === data.length - 1;
         const addedH = Math.max(0.5, (d.added / yMax) * 100);
         const removedH = Math.max(0.5, (d.removed / yMax) * 100);
         const tip = "+" + d.added + " / -" + d.removed + " lines";
         return (
-          '<div class="cx-pair' + (last ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
+          '<div class="cx-pair' + (isLast ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
             '<div class="cx-bar bar-added" style="height: ' + addedH + '%"></div>' +
             '<div class="cx-bar bar-removed" style="height: ' + removedH + '%"></div>' +
           '</div>'
         );
       }).join("");
       return (
-        '<div class="cx">' +
-          '<div class="cx-head">' +
-            '<span>code changes (lines)</span>' +
-            '<span class="cx-legend">' +
-              '<span><span class="dot dot-added"></span>added</span>' +
-              '<span><span class="dot dot-removed"></span>removed</span>' +
+        '<div class="chart-card code">' +
+          '<div class="chart-head">' +
+            '<span class="chart-icon">' + ICON_CODE + '</span>' +
+            '<span class="chart-title">code changes (lines)</span>' +
+            '<span class="chart-legend">' +
+              '<span class="legend-pill"><span class="dot dot-added"></span>added</span>' +
+              '<span class="legend-pill"><span class="dot dot-removed"></span>removed</span>' +
             '</span>' +
           '</div>' +
-          '<div class="cx-scroll">' +
-            '<div class="cx-chart">' +
-              '<div class="cx-yaxis">' +
-                '<span class="tick top">' + fmtCount(yMax) + '</span>' +
-                '<span class="tick mid">' + fmtCount(Math.round(yMax / 2)) + '</span>' +
-                '<span class="tick bot">0</span>' +
-              '</div>' +
-              '<div class="cx-plot">' +
-                '<div class="cx-grid top"></div>' +
-                '<div class="cx-grid mid"></div>' +
-                '<div class="cx-bars">' + pairs + '</div>' +
-              '</div>' +
+          '<div class="chart-body">' +
+            '<div class="cx-yaxis">' +
+              '<span class="tick top">' + fmtCount(yMax) + '</span>' +
+              '<span class="tick mid">' + fmtCount(Math.round(yMax / 2)) + '</span>' +
+              '<span class="tick bot">0</span>' +
+            '</div>' +
+            '<div class="cx-plot">' +
+              '<div class="cx-grid top"></div>' +
+              '<div class="cx-grid mid"></div>' +
+              '<div class="cx-grid bot"></div>' +
+              '<div class="cx-bars">' + pairs + '</div>' +
             '</div>' +
           '</div>' +
+          '<div class="chart-foot">' + escapeHtml(lastAgeLabel) + '</div>' +
         '</div>'
       );
     }
@@ -877,23 +1235,12 @@
       return null;
     }
 
-    function buildCard(sess, opts) {
-      opts = opts || {};
-      const card = document.createElement("a");
-      card.className = "card";
-      const sessionId = sess.info.sessionId;
-      card.href = "#session/" + encodeURIComponent(sessionId);
-      card.dataset.sessionId = sessionId;
+    function buildCardInnerHtml(sess, opts) {
       const modelLabel = shortModel(sess.model);
-
-      // promote latest open insight to card body (no tinted callout, no label).
-      // placement is the role: if a sentence sits here, observer flagged it.
       const latest = latestOpenInsight(sess.observerDecisions);
       const insightHtml = latest
         ? '<p class="card-insight">' + escapeHtml(latest.insight) + '</p>'
         : '';
-
-      // single mono foot line: source (only when multi-source) · tags · live/elapsed.
       const state = sessionState(sess);
       const ts = sess?.lastEventTs || 0;
       const age = Date.now() - ts;
@@ -909,7 +1256,7 @@
       const footParts = [sourceStr, tagsStr, elapsedHtml].filter(Boolean);
       const footHtml = footParts.join(' <span class="sep">·</span> ');
 
-      card.innerHTML =
+      let html =
         '<div class="card-head">' +
           '<h3>' + escapeHtml(sessionName(sess)) + '</h3>' +
           '<div class="card-meta">' +
@@ -919,18 +1266,64 @@
         insightHtml +
         '<p class="card-foot">' + footHtml + '</p>';
 
-      if (state === "live") card.classList.add("live");
-      if (state === "idle") card.classList.add("idle");
+      if (opts.selected) {
+        const mascotSrc = state === "idle" ? MASCOT_IDLE : MASCOT_ACTIVE;
+        html += '<img class="card-mascot" src="' + mascotSrc + '" alt="" />';
+      }
+      return html;
+    }
+
+    function applyCardClasses(card, sess, opts) {
+      const state = sessionState(sess);
+      card.classList.toggle("live", state === "live");
+      card.classList.toggle("idle", state === "idle");
+      card.classList.toggle("selected", !!opts.selected);
+    }
+
+    function cardSig(sess) {
+      // signature of "did the meaningful content change?" — avoids flashing
+      // on every minute-tick or selection change. covers new events, new
+      // observer insights, and rolling summary updates.
+      const ins = latestOpenInsight(sess.observerDecisions);
+      return [
+        sess.lastEventTs || 0,
+        ins?.insight || "",
+        sess.sessionSummary?.text || "",
+        sess.sessionName || "",
+      ].join("");
+    }
+
+    function buildCard(sess, opts) {
+      opts = opts || {};
+      const card = document.createElement("a");
+      card.className = "card";
+      card.href = "#session/" + encodeURIComponent(sess.info.sessionId);
+      card.dataset.sessionId = sess.info.sessionId;
+      card.dataset.sig = cardSig(sess);
+      card.innerHTML = buildCardInnerHtml(sess, opts);
+      applyCardClasses(card, sess, opts);
       return card;
+    }
+
+    function updateCard(card, sess, opts) {
+      const newSig = cardSig(sess);
+      const changed = card.dataset.sig !== newSig;
+      card.dataset.sig = newSig;
+      card.innerHTML = buildCardInnerHtml(sess, opts);
+      applyCardClasses(card, sess, opts);
+      if (changed && !reduceMotion()) {
+        // re-trigger the keyframe by removing + reflowing + re-adding the class
+        card.classList.remove("is-updated");
+        void card.offsetWidth;
+        card.classList.add("is-updated");
+      }
     }
 
     function selectedSessionId() {
       return decodeURIComponent((location.hash.match(/^#session\/(.+)$/) || [])[1] || "");
     }
 
-    // ambient quiet: when every session is idle 5m+ AND nothing's selected,
-    // collapse the sidebar to a single mono "quiet — N agents, last activity Xm ago" line.
-    // mouse hover anywhere on the page wakes the inbox back up temporarily.
+    // ambient quiet
     let ambientWoken = false;
     function shouldQuiet(list, sel) {
       if (sel) return false;
@@ -943,7 +1336,6 @@
       if (!ambientWoken) {
         ambientWoken = true;
         renderInbox();
-        // re-arm after 30s of stillness — cheap timer reset on each move.
         clearTimeout(window.__ambientReArm);
         window.__ambientReArm = setTimeout(() => {
           ambientWoken = false;
@@ -958,21 +1350,34 @@
       }
     }, { passive: true });
 
+    // persistent map of sessionId → card element. lets renderInbox diff against
+    // the live dom so existing cards stay put across 5s ticks (no re-mount, no
+    // animation flicker). only newly-added or removed cards animate.
+    const cardEls = new Map();
+    const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function clearAllCards() {
+      cardEls.clear();
+      cardsEl.innerHTML = "";
+    }
+
     function renderInbox() {
       const list = sortedSessions();
       const sel = selectedSessionId();
-      cardsEl.innerHTML = "";
 
       if (list.length === 0) {
+        clearAllCards();
         cardsEl.appendChild(inboxEmpty);
         inboxEmpty.hidden = false;
         ambientQuiet.hidden = true;
         return;
       }
+      if (inboxEmpty.parentNode === cardsEl) inboxEmpty.remove();
       inboxEmpty.hidden = true;
 
       if (shouldQuiet(list, sel)) {
-        const newest = list[0]; // sortedSessions returns most-recent first
+        clearAllCards();
+        const newest = list[0];
         const age = Date.now() - (newest.lastEventTs || 0);
         const n = list.length;
         ambientQuiet.textContent =
@@ -983,19 +1388,73 @@
       }
       ambientQuiet.hidden = true;
 
-      // show source on cards only if multiple sources are present in the inbox
       const sources = new Set(list.map(s => s?.info?.source || 'claude-code'));
       const showSource = sources.size > 1;
 
+      // remove cards that are no longer in the list — fade + slide out
+      const desiredIds = new Set(list.map(s => s.info.sessionId));
+      for (const [id, el] of [...cardEls]) {
+        if (!desiredIds.has(id)) {
+          cardEls.delete(id);
+          if (typeof gsap !== "undefined" && !reduceMotion()) {
+            el.style.pointerEvents = "none";
+            gsap.to(el, {
+              opacity: 0,
+              x: -24,
+              height: 0,
+              paddingTop: 0,
+              paddingBottom: 0,
+              marginTop: 0,
+              marginBottom: 0,
+              duration: 1.2,
+              ease: "power2.in",
+              onComplete: () => el.remove(),
+            });
+          } else {
+            el.remove();
+          }
+        }
+      }
+
+      // upsert + reorder
+      let anchor = null;        // last placed card; new cards insert after it
+      let staggerIdx = 0;       // stagger this tick's new cards (e.g. on first hello)
       for (const sess of list) {
-        const card = buildCard(sess, { showSource });
-        if (sess.info.sessionId === sel) card.classList.add("selected");
-        cardsEl.appendChild(card);
+        const id = sess.info.sessionId;
+        const opts = { showSource, selected: id === sel };
+        let card = cardEls.get(id);
+        let isNew = false;
+        if (!card) {
+          card = buildCard(sess, opts);
+          cardEls.set(id, card);
+          isNew = true;
+        } else {
+          updateCard(card, sess, opts);
+        }
+        // place this card right after the previous one (or at the start)
+        const target = anchor ? anchor.nextSibling : cardsEl.firstChild;
+        if (card !== target) cardsEl.insertBefore(card, target);
+        anchor = card;
+
+        if (isNew && typeof gsap !== "undefined" && !reduceMotion()) {
+          // spring-y enter, magicui AnimatedList flavour: scale up from 0.55,
+          // small y-drop, opacity 0 → 1, with back.out for the soft overshoot.
+          gsap.from(card, {
+            opacity: 0,
+            y: -22,
+            scale: 0.55,
+            filter: "blur(6px)",
+            duration: 1.4,
+            ease: "back.out(1.3)",
+            delay: staggerIdx * 0.07,
+            clearProps: "transform,opacity,filter",
+          });
+          staggerIdx++;
+        }
       }
     }
 
-    // per-session "last viewed by user" timestamp. updated when the user navigates
-    // into a session detail; persisted to localStorage so it survives reload.
+    // last-viewed tracking
     function lastViewedKey(sessionId) { return "viewed:" + sessionId; }
     function markViewed(sessionId) {
       try { localStorage.setItem(lastViewedKey(sessionId), String(Date.now())); } catch {}
@@ -1007,19 +1466,27 @@
       } catch { return 0; }
     }
 
+    let lastDetailSessionId = null;     // remembers what's currently open so we
+                                        // only blur-fade when the open session changes
     function renderDetail() {
       const sessionId = selectedSessionId();
       if (!sessionId) {
+        const wasOpen = lastDetailSessionId !== null;
         detailEmpty.hidden = false;
         detailContent.hidden = true;
+        if (wasOpen) blurFadeIn(detailEmpty, { duration: 0.9 });
+        lastDetailSessionId = null;
         return;
       }
       const sess = findSessionBySessionId(sessionId);
       if (!sess) {
         detailEmpty.hidden = false;
         detailContent.hidden = true;
+        lastDetailSessionId = null;
         return;
       }
+      const opening = sessionId !== lastDetailSessionId;
+      lastDetailSessionId = sessionId;
       detailEmpty.hidden = true;
       detailContent.hidden = false;
       const events = sess.events || [];
@@ -1029,26 +1496,34 @@
       dElapsed.textContent = fmtElapsed(sess);
       const turns = deriveTurns(events);
 
-      // rolling observer summary — fade to ink-soft + (stale) tag when the
-      // *session* (not the summary) has been quiet for >5 minutes.
+      // summary panel — rolling observer summary inside a banner-backed card
       const summary = sess.sessionSummary;
+      const latestFlag = latestOpenInsight(sess.observerDecisions);
       if (summary && summary.text) {
         const sessionAge = Date.now() - (sess.lastEventTs || summary.ts || 0);
         const isStale = sessionAge >= 5 * 60 * 1000;
-        dSummary.hidden = false;
+        dSummaryPanel.hidden = false;
         dSummary.classList.toggle("stale", isStale);
         dSummary.innerHTML = (isStale ? '<span class="stale-tag">(stale)</span>' : '')
           + escapeHtml(summary.text);
+        // observer tags promoted to chips below the summary text
+        if (latestFlag && latestFlag.tags && latestFlag.tags.length) {
+          dSummaryTags.hidden = false;
+          dSummaryTags.innerHTML = latestFlag.tags
+            .map(t => '<span class="tag-chip">' + escapeHtml(t) + '</span>')
+            .join('');
+        } else {
+          dSummaryTags.hidden = true;
+          dSummaryTags.innerHTML = '';
+        }
       } else {
-        dSummary.hidden = true;
+        dSummaryPanel.hidden = true;
+        dSummaryTags.hidden = true;
       }
 
-      // suppress complexity chart on <2 turns (a single bar reads as broken).
-      // code-changes chart already self-suppresses on zero changes.
-      dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, null) : "";
-      dCodeChart.innerHTML = renderCodeChartHtml(turns, null);
+      dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, CHART_TURNS) : "";
+      dCodeChart.innerHTML = renderCodeChartHtml(turns, CHART_TURNS);
 
-      // untouched-for line: minutes since the user last opened this session.
       const lastViewed = getLastViewed(sessionId);
       const untouchedMs = lastViewed ? (Date.now() - lastViewed) : 0;
       if (lastViewed && untouchedMs >= 5 * 60 * 1000) {
@@ -1059,83 +1534,200 @@
       }
 
       renderConversation(sess, turns);
-      renderChatInput(sess);
+      renderChatInput(sess, latestFlag);
+
+      // when the open session changes (or first opens), blur-fade each detail
+      // section in with a small stagger — magicui BlurFade flavour, ported.
+      // crucial: pre-hide children synchronously inside this same frame so
+      // detailContent unhiding doesn't flash a fully-visible state for one tick
+      // before the stagger starts.
+      if (opening && typeof gsap !== "undefined" && !reduceMotionOn()) {
+        const children = Array.from(detailContent.querySelectorAll(
+          ".session-head, .summary-panel:not([hidden]), .charts-band, .conversation, .chat-input"
+        ));
+        if (children.length) {
+          gsap.set(children, { opacity: 0, filter: "blur(6px)", y: -6 });
+          children.forEach((el, i) => {
+            gsap.to(el, {
+              opacity: 1,
+              filter: "blur(0px)",
+              y: 0,
+              duration: 0.5,
+              delay: 0.05 * i,
+              ease: "power2.out",
+              clearProps: "filter,y,opacity",
+            });
+          });
+        }
+      }
     }
 
-    // shown when the observer hasn't (yet) flagged any turn for the active
-    // session — keeps a usable chat surface available from the first click.
-    const DEFAULT_PREFILL = "Walk me through what you've done, one piece at a time. Pause for my take after each.";
-
-    // tail length for the conversation view — last N turns, user+agent interleaved.
-    const TAIL_TURNS = 5;
-
-    // per-session draft + sent state. keeps user typing across 5s render ticks
-    // and ws updates. keyed by sessionKey (one input per session now).
+    const DEFAULT_PREFILL = "walk me through what you've done, one piece at a time. pause for my take after each.";
     const chatDrafts = new Map();
     const chatSent = new Set();
-
-    // remember last (sessionId, turnCount) so we only auto-scroll the
-    // conversation when the session changes or a new turn arrives — not on
-    // every 5s refresh tick (would yank the user mid-read).
     let convoLastSession = null;
     let convoLastTurnCount = 0;
+    // remember which conv-bodies the user has expanded so 5s refresh doesn't snap them shut.
+    // keyed (sessionId, role, turnId).
+    const expandedBodies = new Set();
+
+    function renderAgentBody(text) {
+      // markdown for agent text — feels like inside a claude session.
+      // marked is loaded via cdn; if it didn't load, fall back to plain pre-wrap.
+      if (typeof marked !== "undefined") {
+        const html = marked.parse(String(text || ""), { breaks: true, gfm: true });
+        return '<div class="conv-md">' + html + '</div>';
+      }
+      return '<div class="conv-text">' + escapeHtml(text) + '</div>';
+    }
 
     function renderConversation(sess, turns) {
       const sessionId = sess.info?.sessionId || "";
-      const tail = turns.slice(-TAIL_TURNS);
-      if (tail.length === 0) {
+      if (turns.length === 0) {
         dConversation.innerHTML = '<p class="conv-empty">no turns yet</p>';
         convoLastSession = sessionId;
         convoLastTurnCount = 0;
         return;
       }
-      const html = tail.map(t => {
-        const userBlock = t.userText
-          ? '<div class="conv-turn">' +
-              '<div class="conv-role">you</div>' +
-              '<div class="conv-text">' + escapeHtml(t.userText) + '</div>' +
+      // strict three-message strip: prev-agent → you → agent.
+      // older turns are intentionally not shown — the chat input below is the
+      // surface for the current ask. agent blocks render as markdown and
+      // height-truncate at 240px with a fade + show-full toggle.
+      const last = turns[turns.length - 1];
+      const prev = turns.length >= 2 ? turns[turns.length - 2] : null;
+      const entries = [];
+      if (prev && prev.agentText) entries.push({ role: "agent", text: prev.agentText, turnId: prev.id, latest: false });
+      if (last.userText) entries.push({ role: "you", text: last.userText, turnId: last.id, latest: false });
+      if (last.agentText) entries.push({ role: "agent", text: last.agentText, turnId: last.id, latest: true });
+
+      const html = entries.map((e, i) => {
+        const turnCls = "conv-turn" + (e.latest ? " latest" : "");
+        const roleCls = "conv-role" + (e.role === "you" ? " you" : "");
+        if (e.role === "agent") {
+          const expandKey = sessionId + "::" + e.turnId + "::" + (e.latest ? "L" : "P");
+          const expanded = expandedBodies.has(expandKey);
+          const bodyCls = "conv-body" + (expanded ? " is-expanded" : "");
+          return (
+            '<div class="' + turnCls + '">' +
+              '<div class="' + roleCls + '">' + e.role + '</div>' +
+              '<div class="' + bodyCls + '" data-expand-key="' + escapeHtml(expandKey) + '" data-conv-idx="' + i + '">' +
+                renderAgentBody(e.text) +
+              '</div>' +
+              '<button class="conv-toggle hidden" data-conv-idx="' + i + '">show full</button>' +
             '</div>'
-          : "";
-        const agentBlock = t.agentText
-          ? '<div class="conv-turn">' +
-              '<div class="conv-role">agent</div>' +
-              '<div class="conv-text">' + escapeHtml(t.agentText) + '</div>' +
-            '</div>'
-          : "";
-        return userBlock + agentBlock;
+          );
+        }
+        return (
+          '<div class="' + turnCls + '">' +
+            '<div class="' + roleCls + '">' + e.role + '</div>' +
+            '<div class="conv-text">' + escapeHtml(e.text) + '</div>' +
+          '</div>'
+        );
       }).join("");
+
       dConversation.innerHTML = html;
-      const sessionChanged = convoLastSession !== sessionId;
-      const newTurns = turns.length > convoLastTurnCount;
-      if (sessionChanged || newTurns) {
-        dConversation.scrollTop = dConversation.scrollHeight;
-      }
+
+      // measure each conv-body — if the rendered content overflows the cap,
+      // mark it as truncated (turns on the fade) and reveal the toggle.
+      // if the user previously expanded this body, keep it expanded and skip the toggle.
+      dConversation.querySelectorAll('.conv-body').forEach((body) => {
+        const idx = body.dataset.convIdx;
+        const toggle = dConversation.querySelector('.conv-toggle[data-conv-idx="' + idx + '"]');
+        const expandKey = body.dataset.expandKey;
+        const alreadyExpanded = body.classList.contains('is-expanded');
+        if (alreadyExpanded) {
+          if (toggle) {
+            toggle.classList.remove('hidden');
+            toggle.textContent = 'show less';
+            toggle.addEventListener('click', () => {
+              body.classList.remove('is-expanded');
+              body.classList.add('is-truncated');
+              expandedBodies.delete(expandKey);
+              toggle.textContent = 'show full';
+            });
+          }
+          return;
+        }
+        const overflow = body.scrollHeight > body.clientHeight + 4;
+        if (overflow) {
+          body.classList.add('is-truncated');
+          if (toggle) {
+            toggle.classList.remove('hidden');
+            toggle.textContent = 'show full';
+            toggle.addEventListener('click', () => {
+              body.classList.add('is-expanded');
+              body.classList.remove('is-truncated');
+              expandedBodies.add(expandKey);
+              toggle.textContent = 'show less';
+            });
+          }
+        }
+      });
+
       convoLastSession = sessionId;
       convoLastTurnCount = turns.length;
     }
 
-    function renderChatInput(sess) {
+    /* ambient sprinkle layer — small dots/dashes drifting via gsap yoyo.
+       respects prefers-reduced-motion. spawned once on first paint. */
+    function spawnSprinkles() {
+      const layer = document.querySelector("[data-sprinkles]");
+      if (!layer) return;
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const COLORS = [
+        "#ec4899", "#f9a8d4", "#a855f7", "#fbbf24", "#fde68a",
+      ];
+      const count = window.innerWidth < 720 ? 14 : 30;
+      for (let i = 0; i < count; i++) {
+        const s = document.createElement("span");
+        s.className = Math.random() < 0.3 ? "sprinkle round" : "sprinkle";
+        s.style.background = COLORS[i % COLORS.length];
+        s.style.left = (Math.random() * 100) + "%";
+        s.style.top = (Math.random() * 200) + "%";
+        s.style.transform = "rotate(" + (Math.random() * 360) + "deg)";
+        s.style.opacity = (0.5 + Math.random() * 0.35).toFixed(2);
+        layer.appendChild(s);
+        if (!reduce && typeof gsap !== "undefined") {
+          gsap.to(s, {
+            y: "+=" + (20 + Math.random() * 30),
+            x: "+=" + (-10 + Math.random() * 20),
+            rotation: "+=" + (30 + Math.random() * 60),
+            duration: 4 + Math.random() * 4,
+            repeat: -1,
+            yoyo: true,
+            ease: "sine.inOut",
+            delay: Math.random() * 3,
+          });
+        }
+      }
+    }
+    spawnSprinkles();
+
+    function renderChatInput(sess, latestFlag) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
-      const latestOpen = (sess.observerDecisions || [])
-        .filter(d => d.open && d.prefill)
-        .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+      const ctxHtml = latestFlag && latestFlag.insight
+        ? '<p class="chat-context">' +
+            '<span class="chat-context-label">break it down</span>' +
+            escapeHtml(latestFlag.insight) +
+          '</p>'
+        : '<p class="chat-context muted">' +
+            '<span class="chat-context-label">break it down</span>' +
+            'no observer flag yet — pick this up and edit it.' +
+          '</p>';
 
-      const tagsHtml = latestOpen && latestOpen.tags && latestOpen.tags.length
-        ? '<span class="chat-tags">' + escapeHtml(latestOpen.tags.join(" · ")) + '</span>'
-        : "";
-      const ctxHtml = latestOpen && latestOpen.insight
-        ? '<p class="chat-context">' + escapeHtml(latestOpen.insight) + tagsHtml + '</p>'
-        : '<p class="chat-context muted">no observer flag yet — pick this up and edit it.</p>';
-
-      const prefill = (latestOpen && latestOpen.prefill) || DEFAULT_PREFILL;
+      const prefill = (latestFlag && latestFlag.prefill) || DEFAULT_PREFILL;
       const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : prefill;
       const sent = chatSent.has(sessionKey);
 
       dChatInput.innerHTML =
         ctxHtml +
         '<div class="chat-input-row">' +
-          '<textarea rows="2">' + escapeHtml(initial) + '</textarea>' +
-          '<button class="send-btn" title="send">›</button>' +
+          '<textarea rows="2" placeholder="walk me through it…">' + escapeHtml(initial) + '</textarea>' +
+          '<button class="send-btn" title="send"><img src="/assets/send-button-rocket.webp" alt="send" /></button>' +
+        '</div>' +
+        '<div class="chat-tip">' +
+          '<span>tip: ask for smaller steps, rationale, or alternatives</span>' +
+          '<span><span class="tip-key">⌘ ↵</span> to send</span>' +
         '</div>' +
         (sent ? '<div class="chat-sent">queued (agent not wired yet)</div>' : '');
 
@@ -1145,15 +1737,20 @@
         ta.addEventListener('input', e => {
           chatDrafts.set(sessionKey, e.target.value);
         });
+        ta.addEventListener('keydown', e => {
+          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+            e.preventDefault();
+            btn?.click();
+          }
+        });
       }
       if (btn) {
         btn.addEventListener('click', () => {
           const text = (ta && ta.value || "").trim();
           if (!text) return;
           chatSent.add(sessionKey);
-          // M-stub: log; real spawn lands when we wire the new agent
           console.log("[chat] send", { sessionKey, text });
-          renderChatInput(sess);
+          renderChatInput(sess, latestFlag);
         });
       }
     }
@@ -1167,7 +1764,6 @@
       if (sid) markViewed(sid);
       refresh();
     });
-    // initial mark on load if a session is already selected via #hash
     (() => { const sid = selectedSessionId(); if (sid) markViewed(sid); })();
 
     setInterval(refresh, 5000);
@@ -1198,7 +1794,6 @@
       if (typeof ev.ts === "number" && ev.ts > (s.lastEventTs || 0)) s.lastEventTs = ev.ts;
       if (ev.kind === "assistant_text") {
         if (ev.model) s.model = ev.model;
-        // overwrite, not sum — input_tokens reports current context size, not delta.
         if (typeof ev.inputTokens === "number") s.contextTokens = ev.inputTokens;
         if (typeof ev.tokens === "number") s.totalOutputTokens = (s.totalOutputTokens || 0) + ev.tokens;
       }
@@ -1214,9 +1809,7 @@
 
     function connect() {
       const ws = new WebSocket("ws://" + location.host + "/ws");
-      ws.addEventListener("open", () => {
-        reconnectIndicator.hidden = true;
-      });
+      ws.addEventListener("open", () => { reconnectIndicator.hidden = true; });
       ws.addEventListener("message", e => {
         let msg; try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.kind === "hello") {

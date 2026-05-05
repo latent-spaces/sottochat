@@ -1,23 +1,24 @@
 ---
-name: chunk-to-chat
-description: a quiet console for long autonomous agent runs
+name: cut-the-cake
+description: a strawberry-trimmed console for long autonomous agent runs
 colors:
   ink: "#1a1a1f"
   ink-soft: "#6e6e7a"
   pewter: "#9090a0"
-  paper: "#fafafb"
+  paper: "#fdf9fa"
   surface: "#ffffff"
-  hairline: "#e7e7ec"
-  hairline-strong: "#d4d4dd"
-  chip-tint: "#f3f3f7"
-  signal-indigo: "#6366f1"
-  signal-indigo-deep: "#4f52e0"
-  signal-indigo-tint: "#eef0fe"
-  live-coral: "#ef5e5e"
-  live-coral-tint: "#fdecec"
+  hairline: "#efe8eb"
+  hairline-strong: "#dcd2d6"
+  chip-tint: "#f5eef1"
+  strawberry: "#ec4899"
+  strawberry-deep: "#db2777"
+  strawberry-tint: "#fce7f3"
+  plum: "#a855f7"
+  plum-tint: "#f3e8ff"
+  glass-paper: "rgba(253, 249, 250, 0.72)"
   console-ground: "#15151c"
   console-ink: "#e5e5ee"
-  console-prompt: "#a8aafd"
+  console-prompt: "#f9a8d4"
   console-soft: "#65657a"
   diff-green: "#10b981"
   diff-red: "#ef4444"
@@ -60,10 +61,11 @@ typography:
     letterSpacing: "normal"
 rounded:
   hairfine: "3px"
-  input: "6px"
-  card: "8px"
+  input: "8px"
+  card: "10px"
   console: "10px"
-  panel: "12px"
+  panel: "14px"
+  pill: "999px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -72,30 +74,43 @@ spacing:
   xl: "24px"
   xxl: "56px"
 components:
+  top-nav:
+    backgroundColor: "{colors.glass-paper}"
+    backdropFilter: "blur(12px) saturate(140%)"
+    borderBottom: "1px solid {colors.hairline}"
+    height: "56px"
+    padding: "0 24px"
+    sticky: true
+  github-pill:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    borderColor: "{colors.hairline-strong}"
+    rounded: "{rounded.pill}"
+    padding: "6px 12px"
+    typography: "title"
   button-primary:
-    backgroundColor: "{colors.signal-indigo}"
+    backgroundColor: "{colors.strawberry}"
     textColor: "{colors.surface}"
     rounded: "{rounded.panel}"
-    padding: "22px 24px"
+    padding: "12px 18px"
     typography: "body"
   button-primary-hover:
-    backgroundColor: "{colors.signal-indigo-deep}"
-    textColor: "{colors.surface}"
-    rounded: "{rounded.panel}"
-    padding: "22px 24px"
+    backgroundColor: "{colors.strawberry-deep}"
   button-send:
-    backgroundColor: "{colors.signal-indigo}"
+    backgroundColor: "{colors.strawberry}"
     textColor: "{colors.surface}"
     rounded: "{rounded.input}"
-    width: "40px"
-    height: "40px"
+    width: "44px"
+    height: "44px"
+    glyph: "rocket"
   card-session:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.card}"
     padding: "10px 12px"
   card-session-selected:
-    backgroundColor: "{colors.signal-indigo-tint}"
+    backgroundColor: "{colors.strawberry-tint}"
+    borderColor: "{colors.strawberry}"
     textColor: "{colors.ink}"
     rounded: "{rounded.card}"
     padding: "10px 12px"
@@ -104,22 +119,39 @@ components:
     textColor: "{colors.ink}"
     rounded: "{rounded.panel}"
     padding: "22px 24px"
+  banner-backdrop:
+    image: "/assets/header-banner-cake-clouds.webp"
+    placement: "session-summary panel, right edge, tapered into negative space"
+    opacity: 1
+  mascot-avatar-active:
+    image: "/assets/mascot-cupcake-wand.webp"
+    size: "64px"
+  mascot-avatar-idle:
+    image: "/assets/mascot-cupcake-fork.webp"
+    size: "64px"
+  empty-state-illustration:
+    image: "/assets/empty-state-cake-duo.webp"
+    size: "320px"
+  send-rocket:
+    image: "/assets/send-button-rocket.webp"
+    size: "28px"
   terminal:
     backgroundColor: "{colors.console-ground}"
     textColor: "{colors.console-ink}"
     rounded: "{rounded.console}"
     padding: "18px 22px"
     typography: "console"
-  chat-slot:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.panel}"
-    padding: "12px 14px"
   chat-textarea:
     backgroundColor: "{colors.paper}"
     textColor: "{colors.ink}"
     rounded: "{rounded.input}"
-    padding: "8px 10px"
+    padding: "10px 12px"
+  tag-chip:
+    backgroundColor: "{colors.strawberry-tint}"
+    textColor: "{colors.strawberry-deep}"
+    rounded: "{rounded.pill}"
+    padding: "4px 10px"
+    typography: "label"
   model-tag:
     backgroundColor: "{colors.chip-tint}"
     textColor: "{colors.ink-soft}"
@@ -128,64 +160,78 @@ components:
     typography: "micro"
 ---
 
-# Design System: chunk-to-chat
+# Design System: cut-the-cake
 
 ## 1. Overview
 
-**Creative North Star: "The Quiet Console"**
+**Creative North Star: "The Patisserie Press."**
 
-A console that watches several agents at once on a side monitor and almost never asks for attention. When something genuinely matters, it's unmistakable; the rest of the time, it sits like a status light on the desk: present, undemanding, glanceable from across the room.
+A precision instrument that wears strawberry. The page is a near-white cream surface with hairline structure; saturation arrives in two roles: **strawberry** as the operative voice (active, latest, send) and **plum** as the agent's voice in the charts. Five — and only five — places carry illustration: the logo, the live-session avatar, the welcome banner, the empty state, and the send rocket. Everything else stays close to the quiet greys it inherited from the prior system.
 
-The system inherits its texture from the terminal next to it. Mono type for anything the agent emits or that operates as a label; system sans only for the prose layer wrapped around it. The page is light, thin-bordered, mostly hairlines and quiet greys; saturation appears in two places only — the indigo signal that names the active agent, and the coral that flags the *latest* turn worth looking at. Dark surfaces appear exactly once, in the terminal block, where the text is literally being echoed from a process.
+The terminal block remains the single dark surface in the page, untouched. It is the seriousness anchor the rest of the design leans against.
 
-This explicitly rejects: dashboard density (Datadog / Grafana grids of identical panels), hero-metric SaaS templates, AI-app aesthetics (gradient blobs, glassmorphism, ✨ sparkle), corporate landing-page chrome (cream + black, hero + CTA stacks), and notification-bait (pulses, red dots, attention-stealing motion when nothing has actually changed).
+The system explicitly rejects: the kawaii-AI dashboard cliché (mascots and sparkles slathered over every surface), pastel "calm" AI palettes, gradient blobs and ambient glow, glassmorphism as a default texture, and notification-bait motion. Strawberry is *committed*, not *calm*; whimsy is *concentrated*, not *atmospheric*.
 
 **Key Characteristics:**
-- Light surface, hairline borders, almost no shadow
-- Saturated color used ≤10% of any view, in two roles only (indigo = signal; coral = latest)
-- Type hierarchy carried by mono for instruments, sans for prose
-- Density rhythm: tight inside cards, generous between sections
-- Flat by default; the only colored shadow in the system is on the primary CTA
+- Cream-tinted surface, hairline borders, almost no shadow except on the primary CTA.
+- Strawberry covers ≤10% of any view; plum appears only inside the complexity chart.
+- Type hierarchy carried by mono for instruments, sans for prose. No display family.
+- Density rhythm: tight inside cards, generous between sections.
+- One frosted glass surface in the system: the sticky top nav. Not two.
+- One dark surface in the system: the terminal block. Not two.
 
 ## 2. Colors
 
-The palette is a tinted-neutral light page with two semantic accents and a single dark surface for terminal output. **Restrained color strategy**: the accents collectively cover well under 10% of any view; their rarity is what makes them legible.
+OKLCH-aware palette. Strawberry strategy: **committed** for the brand voice, *restrained* in deployment. The two accents collectively cover well under 10% of any view; their rarity makes them legible.
 
 ### Primary
-- **Signal Indigo** (`#6366f1`): the one color that names "the agent's voice" across the system. Used for the active turn's output bars, the selected session card, the primary CTA, the textarea focus ring, the `›` send button. If something is indigo, the agent did it.
-- **Signal Indigo Deep** (`#4f52e0`): hover/pressed state for indigo surfaces.
-- **Signal Indigo Tint** (`#eef0fe`): background tint for the selected session card and observer-insight callout.
+
+- **Strawberry** (`#ec4899`): the operative voice. Wordmark, live border, selected card border, focus rings, primary CTA, send-button surface, *latest* output bar in the complexity chart, tag-chip text. If something is strawberry, it is acting (running, just-happened, do-this-now).
+- **Strawberry Deep** (`#db2777`): hover/pressed state for strawberry surfaces.
+- **Strawberry Tint** (`#fce7f3`): selected-card background, tag-chip background, observer-insight callout background.
 
 ### Secondary
-- **Live Coral** (`#ef5e5e`): reserved exclusively for the *latest* turn's output bar in the complexity chart. Coral is "this just happened" and nothing else. Never decoration; never a CTA; never a divider.
-- **Live Coral Tint** (`#fdecec`): paired tint, currently used by the legacy `.heavy` badge and held in reserve for future "needs immediate attention" surfaces.
 
-### Tertiary
-- **Diff Green** (`#10b981`) and **Diff Red** (`#ef4444`): used only on the lines-added / lines-removed bars in the code-changes chart. These are *data colors*, not UI colors. They never appear in chrome, copy, badges, or borders.
+- **Plum** (`#a855f7`): the agent's voice inside data. Used exclusively as the agent (output) bar in the turn-complexity chart, paired with strawberry input bars and the brighter strawberry "latest" bar. Plum does not appear in chrome, copy, or buttons — it is a chart-only accent the way Diff Green and Diff Red are.
+- **Plum Tint** (`#f3e8ff`): held in reserve for a future "background plum" use; not currently shipping.
+
+### Tertiary (data colors only)
+
+- **Diff Green** (`#10b981`) and **Diff Red** (`#ef4444`): used only on the lines-added / lines-removed bars in the code-changes chart. Quarantined.
 
 ### Neutral
-- **Ink** (`#1a1a1f`): primary text on the light page.
+
+- **Ink** (`#1a1a1f`): primary text on the cream page.
 - **Ink Soft** (`#6e6e7a`): secondary text — source/elapsed lines, "what happened so far" muted prose, back link.
-- **Pewter** (`#9090a0`): tertiary text — section labels, kv keys, axis ticks, badge muted, chart axis numbers. Anything labeling rather than reading.
-- **Paper** (`#fafafb`): page background. Slightly cooler than the surface so panels lift without needing shadow.
+- **Pewter** (`#9090a0`): tertiary text — section labels, kv keys, axis ticks. Anything labeling rather than reading.
+- **Paper** (`#fdf9fa`): page background. A whisper of pink keeps the cream warm and gives strawberry a native context.
 - **Surface** (`#ffffff`): card and panel background.
-- **Hairline** (`#e7e7ec`): default 1px border on every card, panel, chart axis.
-- **Hairline Strong** (`#d4d4dd`): used on dashed empty-state outlines and the chat textarea border.
-- **Chip Tint** (`#f3f3f7`): the model-tag pill background; the only neutral fill that isn't paper or surface.
+- **Hairline** (`#efe8eb`): default 1px border. Tinted toward the page hue, not pure grey.
+- **Hairline Strong** (`#dcd2d6`): dashed empty-state outlines, chat textarea border at rest.
+- **Chip Tint** (`#f5eef1`): model-tag pill background; the only neutral fill that isn't paper or surface.
+
+### Glass
+
+- **Glass Paper** (`rgba(253, 249, 250, 0.72)`): semi-translucent paper used by the sticky top nav exactly. The only translucent fill in the system.
 
 ### Console
-- **Console Ground** (`#15151c`): the terminal block's dark surface. Appears exactly once per session detail, framing the latest model output.
+
+- **Console Ground** (`#15151c`): the terminal block. Appears exactly once per session detail.
 - **Console Ink** (`#e5e5ee`): terminal body text.
-- **Console Prompt** (`#a8aafd`): the `$ ` prompt character — a desaturated indigo cousin so the terminal feels related to the rest of the system without being noisy.
-- **Console Soft** (`#65657a`): muted in-terminal text (e.g. "no output yet").
+- **Console Prompt** (`#f9a8d4`): the `$ ` prompt — desaturated strawberry so the terminal feels related to the rest of the system without competing.
+- **Console Soft** (`#65657a`): muted in-terminal text.
 
 ### Named Rules
 
-**The One Voice Rule.** Indigo is the agent's voice. It appears on the active output bar, the selected session card, the primary CTA, and the send button. Nothing else. Never use indigo as a divider, a hover tint on an unrelated surface, a heading underline, or decoration.
+**The One Voice Rule.** Strawberry is the operative voice. It appears on the wordmark, the active session card border, the latest output bar, the primary CTA, the send button, focus rings, and tag-chip text. Nothing else. Do not use strawberry as a divider, a hover tint on an unrelated surface, a heading underline, or decoration.
 
-**The Latest-Only Coral Rule.** Coral marks the most recent turn of the currently-viewed session in the detail-pane complexity chart, and nowhere else. The moment a newer turn arrives, the prior coral bar reverts to indigo. Coral does not appear in chrome, alerts, badges, copy, or anywhere outside that single chart. Its scarcity is the entire point: at any moment, coral paints in at most one place on the page. Sidebar cards do not carry charts. If sidebar cards ever do carry charts, this rule becomes "the freshest session across the inbox" (one card globally) plus "always on the latest of the detail pane" (the focused chart) — but until that happens, the architecture already enforces scarcity for free.
+**The Latest-Only Rule.** Two roles for "now": (1) strawberry on the *latest* output bar in the detail-pane complexity chart, replacing the prior coral scoping; (2) strawberry border on the *currently-selected* sidebar card. Anywhere else, "latest" is signalled by mono Pewter elapsed text ("now", "Xs ago"), not by color.
 
-**The Data-Color Quarantine Rule.** Diff Green and Diff Red live inside the code-changes chart only. They are not in the design system; they are in the chart. Do not extend them into status pills, success/error toasts, or any other UI surface.
+**The Plum Quarantine Rule.** Plum lives inside the turn-complexity chart only. It is the chart's "agent voice" against the chart's "user voice" (strawberry input). Plum does not extend into chrome, status pills, or anywhere outside that one chart.
+
+**The Data-Color Quarantine Rule.** Diff Green and Diff Red live inside the code-changes chart only.
+
+**The Single Glass Surface Rule.** The sticky top nav is the only element in the system that uses `backdrop-filter: blur`. Any second blur is a violation; do not blur cards, modals, popovers, or dropdowns. The reason blur is allowed at all is that page content scrolls under the nav, which is exactly the textbook purposeful case.
 
 ## 3. Typography
 
@@ -193,125 +239,157 @@ The palette is a tinted-neutral light page with two semantic accents and a singl
 **Body Font:** same system sans.
 **Label / Mono Font:** system mono stack (`ui-monospace, SF Mono, Menlo, Consolas`).
 
-**Character:** a single sans for the prose layer paired with a single mono for everything that reads as instrumentation. There is no display family; the largest text on the page is 26px sans at weight 600. The personality lives in the contrast between the two stacks, not in any one font's flourish.
+A single sans for the prose layer paired with a single mono for everything that reads as instrumentation. There is no display family. The wordmark in the top nav is the same sans at weight 600 in strawberry; the personality lives in the color, not in a script face.
 
 ### Hierarchy
-- **Display** (600, 26px, line-height 1.2, letter-spacing −0.02em): the page H1 (`chunk-to-chat`) and the per-session H2. The only sizes large enough to be read from a meter away.
-- **Title** (600, 13px, line-height 1.4, letter-spacing −0.01em): card session names. Truncated with ellipsis; never wraps.
-- **Body** (400, 15px, line-height 1.6): all running prose, `prose` blocks, observer insight text, chat slot context. Capped naturally at the 1280px layout width; single-column reading lengths inside panels stay under 75ch.
-- **Label** (mono, 500, 11–12px, letter-spacing 0.06em, uppercase): section labels, panel labels, "review load" lead-in, kv keys. Mono signals "this is chrome, not content."
-- **Micro** (mono, 500, 9px, letter-spacing 0.08em, uppercase): badges, model tags, observer's `obs` label, observer tag list, chart axis numbers. Anything that has to fit inside an 8px-tall pill.
+
+- **Display** (600, 26px, line-height 1.2, letter-spacing −0.02em): the page wordmark and the per-session H2.
+- **Title** (600, 13px, line-height 1.4, letter-spacing −0.01em): card session names and the GitHub-pill label. Truncated with ellipsis; never wraps.
+- **Body** (400, 15px, line-height 1.6): all running prose, observer insight text, chat slot context. Capped at 75ch inside panels.
+- **Label** (mono, 500, 11–12px, letter-spacing 0.06em, uppercase): section labels, panel labels, kv keys.
+- **Micro** (mono, 500, 9px, letter-spacing 0.08em, uppercase): badges, model tags, chart axis numbers.
 - **Console** (mono, 400, 13px, line-height 1.65): terminal block body. The only place mono runs at body sizes; the only place text is white-on-dark.
 
 ### Named Rules
 
-**The Two-Stack Rule.** Sans for prose, mono for instruments. The contrast between them is the entire type system; do not add a third family, an italic display, or a script. Hierarchy comes from scale and weight inside each stack.
+**The Two-Stack Rule.** Sans for prose, mono for instruments. No third family, no italic display, no script. Hierarchy comes from scale and weight inside each stack.
 
-**The Mono-Means-Chrome Rule.** When something is in mono on the light surface, it is operating as instrumentation: a label, a tag, an axis, a key, an elapsed time. Body prose is sans even when it describes mono concepts. The terminal block is the one exception: there, mono is the content because the underlying source is.
+**The Mono-Means-Chrome Rule.** Mono on the cream surface = instrumentation. Body prose is sans even when it describes mono concepts. The terminal block is the one exception.
 
-**The All-Caps Stays Tiny Rule.** Uppercase tracking is reserved for ≤12px labels. Headings are mixed case at sentence weight. There is no uppercase H1, H2, or button label anywhere in the system.
+**The All-Caps Stays Tiny Rule.** Uppercase tracking reserved for ≤12px labels. Headings and the wordmark are mixed case at sentence weight.
 
 ## 4. Elevation
 
-The system is essentially flat. Depth comes from the page-vs-surface contrast (`Paper` behind `Surface`) and from a single hairline border on every card and panel. Cards do not lift on hover; selection is signaled by a tint and a colored border, not by a shadow.
+The system is essentially flat. Depth comes from page-vs-surface contrast (Paper behind Surface) and from a single hairline border on every card and panel. The two exceptions:
 
-The one exception is the primary CTA, which carries a soft indigo-tinted ambient shadow at rest and a slightly larger shadow on hover with a 1px translateY. The CTA is the only element in the system that is allowed to rise off the page, and it does so because its job is to be unmistakable from any viewing angle.
+- **The primary CTA** carries a soft strawberry-tinted ambient shadow at rest and a slightly larger shadow on hover with a 1px translateY. Tinted toward strawberry because the surface is strawberry.
+- **The sticky top nav** sits visually above the page via `backdrop-filter` + a 1px hairline along its bottom edge. No drop shadow.
 
-The terminal block does not lift; it sits flush, distinguished by surface color (`Console Ground`) and corner radius rather than elevation.
+The terminal block does not lift. Cards do not lift on hover.
 
 ### Shadow Vocabulary
-- **CTA Ambient** (`box-shadow: 0 6px 20px -10px rgba(99, 102, 241, 0.5)`): default state of `.cta` and equivalents. The only colored shadow in the system; tints toward indigo because the surface it lifts is indigo.
-- **CTA Lifted** (`box-shadow: 0 10px 28px -12px rgba(99, 102, 241, 0.6)`): hover state for the same.
+
+- **CTA Ambient** (`box-shadow: 0 6px 20px -10px rgba(236, 72, 153, 0.55)`).
+- **CTA Lifted** (`box-shadow: 0 10px 28px -12px rgba(236, 72, 153, 0.65)`).
 
 ### Named Rules
 
-**The Flat-By-Default Rule.** No surface lifts unless it is the primary call to action. Cards, panels, chat slots, the terminal, observer insights — all sit flush. If you find yourself reaching for a shadow to "make something pop," step back: the answer is contrast (Paper vs Surface), border weight, or — usually — removing whatever is competing with it.
+**The Flat-By-Default Rule.** Cards, panels, the terminal, observer insights all sit flush. If a shadow is needed to "make something pop," the answer is contrast or removal.
 
-**The Tinted-Shadow Rule.** When a shadow does appear, it carries the surface's hue, not pure black. The CTA shadow is rgba indigo, not rgba neutral. Pure-black shadows on a tinted-neutral page read as cheap.
+**The Tinted-Shadow Rule.** Shadows carry the surface's hue, not pure black. The CTA shadow is rgba strawberry.
 
 ## 5. Components
 
+### Top Nav
+
+- **Surface:** Glass Paper with `backdrop-filter: blur(12px) saturate(140%)`.
+- **Sticky:** `position: sticky; top: 0; z-index: 10`.
+- **Height:** 56px; padding 0 / 24px.
+- **Bottom edge:** 1px Hairline. No drop shadow.
+- **Left:** the cake-slice logo (24px) + "cut-the-cake" wordmark in Strawberry at Display 20px / 600 weight (smaller than the in-page H1 so the nav doesn't dominate).
+- **Right:** GitHub pill — Surface background, Hairline Strong border, pill radius, 6px / 12px padding, `★ <count>` in Title type. Real `href` to the project repo. No hover lift; border darkens to Strawberry on hover.
+- **No middle nav links** until the app gains real routes. When they arrive: active link gets a 2px Strawberry underline, others stay Ink.
+
+### Logo
+
+- **Source:** `logo-cake-slice.webp` at 96×96 source; rendered at 24–32px in the nav and at 32px in the favicon.
+- **Background:** none — the asset has alpha; let it sit on the glass nav directly.
+
+### Mascot Avatar
+
+- **Active variant** (`mascot-cupcake-wand.webp`): appears in the *selected* sidebar card and tucked into the detail-pane header, at 64–80px.
+- **Idle variant** (`mascot-cupcake-fork.webp`): replaces the active variant when the selected session has been idle ≥5 minutes.
+- **Other sidebar cards:** no mascot. The mascot is a *selection signal*, not a per-card decoration. This is what keeps the asset use scarce.
+
+### Banner Backdrop
+
+- **Source:** `header-banner-cake-clouds.webp`.
+- **Placement:** absolutely positioned at the right edge of the session-summary panel, tapering into negative space on the left so the summary text reads cleanly. `pointer-events: none`.
+- **Opacity:** 1 — the asset's own taper does the fade; do not stack a CSS gradient mask.
+- **Appearance gate:** only on the detail pane's first panel ("what happened so far"). Not behind charts, not behind chat input.
+
+### Empty State
+
+- **Source:** `empty-state-cake-duo.webp` rendered at 320–400px wide.
+- **Placement:** centered in the detail pane when no session is selected; paired with the existing italic "select a session" copy.
+- **Replaces:** the current dashed-outline panel.
+
 ### Buttons
-- **Shape:** primary CTA at panel radius (12px); send button at input radius (6px). Never pill-shaped, never square-cornered.
-- **Primary CTA:** Signal Indigo background, white text, 22px / 24px padding, body-sized type at weight 500. Carries the only ambient shadow in the system. Hover deepens to Signal Indigo Deep, lifts 1px, and grows the shadow.
-- **Send Button (`›`):** 40×40px square at input radius, Signal Indigo, white glyph at 18px / 600. Sits in the same row as a chat textarea, both stretching to the same height. Disabled state collapses to Hairline Strong background with Ink Soft text.
-- No secondary, ghost, or tertiary button exists. Every actionable surface is either the CTA or the send button. If a third button type appears, the design has drifted; redesign instead of adding.
+
+- **Primary CTA:** Strawberry surface, white text, panel radius, 12px / 18px padding, body type at weight 500, CTA Ambient shadow.
+- **Send Button (rocket):** 44×44px square, input radius, Strawberry surface, the `send-button-rocket.webp` asset rendered at 28px centered. Disabled state: surface flips to Hairline Strong, asset desaturates to 0.5 opacity.
+- **GitHub Pill:** see Top Nav.
+- No secondary, ghost, or tertiary button. CTA + send + nav pill is the entire button vocabulary.
 
 ### Cards (Session Cards in the Sidebar)
-- **Corner Style:** 8px (smaller than panel; cards live inside the system, panels frame it).
-- **Background:** Surface at rest; Signal Indigo Tint when selected.
-- **Border:** 1px Hairline; transitions to Signal Indigo on hover and on selected.
-- **Padding:** 10px / 12px — deliberately tight; this is a sidebar inbox, not a feature card grid.
-- **Internal layout:** title row (name + model tag), source line in mono, optional observer insight callout, kv rows for items / tokens.
-- **No shadow, no scale, no animation on hover beyond the border-color change.** Selection is the only state worth a tint.
+
+- **Corner Style:** card radius (10px).
+- **Background:** Surface at rest; Strawberry Tint when selected.
+- **Border:** 1px Hairline; Strawberry on hover and selected.
+- **Padding:** 10px / 12px.
+- **Internal layout:** title row (`[project] observer-name` + model tag), source line in mono, optional observer insight prose, foot line in mono Pewter (live / Xs ago / idle Xm).
+- **Selected card:** the active mascot avatar tucks into the bottom-right corner at 64px, slightly clipped by the card's rounded corner so it reads as a peek, not a sticker.
 
 ### Panels (Detail Pane)
-- **Corner Style:** 12px.
+
+- **Corner Style:** panel radius (14px).
 - **Background:** Surface.
 - **Border:** 1px Hairline.
-- **Padding:** 22px / 24px — generous compared to cards; panels are read, cards are scanned.
-- **Internal labels:** uppercase mono at 11px, Pewter, 10px bottom margin.
-- **Subdivisions** within a panel use a dashed 1px Hairline border, not a solid border — to read as "same panel, separate idea" rather than "next thing."
+- **Padding:** 22px / 24px.
+- **Internal labels:** uppercase mono at 11px, Pewter, 10px bottom margin. Optionally paired with a 16px outlined glyph in Strawberry (e.g. ⚡ for "break it down — one at a time").
 
 ### Terminal Block
-- **Surface:** Console Ground (`#15151c`); Console Ink (`#e5e5ee`) text; Console Prompt (`#a8aafd`) for the `$ ` prefix; Console Soft for the empty placeholder.
-- **Type:** Console role (mono, 13px, 1.65 line-height).
-- **Padding:** 18px / 22px.
-- **Radius:** 10px — slightly less than panels, slightly more than cards. Sits between the two visually; not a panel, not a card, a literal terminal pane.
-- **Scrolls vertically up to 360px max-height.** Never auto-scrolls to bottom on update by reflex; that's a future decision.
-- **Wrapping:** `white-space: pre-wrap; word-break: break-word`. Lines wrap; long unbroken tokens (paths, hashes) break.
 
-### Chat Slot
-- **Container:** Surface, Hairline border, 12px radius, 12px / 14px padding. One per flagged turn.
+Unchanged from the prior system. Console Ground surface, Console Ink text, Console Prompt for `$ `, Console Soft for placeholders. 18px / 22px padding, console radius (10px), max-height 360px, vertical scroll, pre-wrap.
+
+### Chat Input (single per session)
+
+- **Container:** Surface, Hairline border, panel radius, 12px / 14px padding.
 - **Context line:** 12px Ink Soft prose with optional 10px mono Pewter tags appended.
-- **Textarea:** Paper background (so it sits *into* the slot, not on top), Hairline Strong border, 6px radius, 8px / 10px padding, 14px / 1.5 type, min-height 40px, vertically resizable. On focus, border becomes Signal Indigo and background flips to Surface.
-- **Send button:** 40×40px Signal Indigo square (see Buttons), `›` glyph, sits flush right at the same height as the textarea's min-height.
-- **Sent indicator:** small 12px italic Ink Soft text below the row. No checkmark, no green pill.
+- **Textarea:** Paper background (so it sits *into* the container), Hairline Strong border, input radius, 10px / 12px padding, 14px / 1.5 type, min-height 44px. On focus, border becomes Strawberry and background flips to Surface.
+- **Send button:** 44×44px Strawberry square with the rocket asset (see Buttons).
+- **Tip line:** 11px Pewter mono, below the input. e.g. "tip: ask for smaller steps, rationale, or alternatives" on the left; "⌘ ↵ to send" right-aligned.
 
-### Observer Insight (Callout)
-- **Container:** Signal Indigo Tint background, hairfine (3px) radius, ~6px / 8px padding, 11px Ink prose.
-- **Label:** 9px mono uppercase Signal Indigo, prefixing the insight text.
-- **Tag list:** 9px mono Pewter, on a second line.
-- **Legacy:** the current implementation includes a 2px Signal Indigo `border-left` stripe. **This violates The No-Side-Stripe Rule** (see Don'ts) and is scheduled for removal at the next critique pass. Going forward: full border, background tint, and the leading mono label carry the role.
+### Tag Chip
 
-### Model Tag (Pill)
-- **Style:** Chip Tint background, Ink Soft text, 9px mono uppercase 0.08em tracking, 2px / 6px padding, hairfine 3px radius.
-- **Role:** identifies the underlying model on a session card. Truncates if too wide; never wraps.
+- **Container:** Strawberry Tint background, Strawberry Deep text, pill radius, 4px / 10px padding.
+- **Type:** Label (mono, 11px, uppercase 0.06em).
+- **Use:** observer-emitted tags appended to the insight callout. *Not* used for status, severity, or anything else.
 
 ### Charts (Turn Complexity, Code Changes)
-- **Frame:** no panel container; sits directly on Paper. Y-axis at left in mono Pewter ticks; X-axis baseline + left axis at 1px Hairline; one dashed Hairline mid-line for the 50% gridline.
-- **Bars:** input bar in Pewter at 0.55 opacity (so it reads as background), output bar in Signal Indigo at 0.9 opacity, *latest* output bar in Live Coral at 1.0 opacity. The system has zero other uses for opacity-as-meaning.
-- **Code-changes bars:** Diff Green for added, Diff Red for removed, both at 0.9 opacity. The chart is suppressed entirely if all turns have zero changes; do not render an empty chart.
-- **Width-stable bars:** every bar is 14px wide. Do not vary bar width to encode meaning; the bar's height is the only axis.
 
-### Empty States
-- **Style:** italic 13px Ink Soft text on a 1px dashed Hairline Strong outline at panel radius, 24–32px padding, centered.
-- **Voice:** lowercase, dry, never apologetic. "select a session" not "Please select a session to begin." "no active session detected — start claude code in a project" not "Looks like nothing's running yet!"
+- **Frame:** no panel container; sits on Paper. Y-axis at left in mono Pewter ticks; X-axis baseline at 1px Hairline; one dashed Hairline mid-line.
+- **Complexity bars:** input bar in Strawberry at 0.4 opacity, output bar in Plum at 0.85, *latest* output bar in Strawberry at 1.0 with a small "(latest count)w" callout pill above it.
+- **Code-changes bars:** Diff Green for added, Diff Red for removed, both at 0.9 opacity. Suppressed entirely on zero changes.
+- **Bar width:** 14px, fixed. The bar's height is the only encoding axis.
+
+### Empty States (chrome-level)
+
+- **Style:** italic 13px Ink Soft text on a 1px dashed Hairline Strong outline at panel radius, 24–32px padding, centered. Used for "no active session detected" in the sidebar.
+- **Voice:** lowercase, dry, never apologetic.
+- **Note:** the *detail-pane* empty state is the cake-duo illustration (see above), not a dashed outline.
 
 ## 6. Do's and Don'ts
 
-### Do:
+### Do
 
-- **Do** carry indigo as the agent's one voice. If you're tempted to add an indigo divider, indigo heading, or indigo decoration somewhere outside the active turn / selected card / CTA / send button, reach for Pewter or Hairline instead.
-- **Do** keep coral reserved for "this just happened" — exclusively the latest turn's output bar in the complexity chart.
-- **Do** use mono for every label, axis, tag, key, elapsed time, and badge; sans for prose. Mono signals "instrumentation."
-- **Do** use 1px hairline borders to separate cards, panels, charts. The borders are the structure.
-- **Do** keep dashed borders for empty states and intra-panel subdivisions only.
-- **Do** stay flat. If you reach for a shadow, ask whether contrast or whitespace would do the work instead. The CTA's tinted shadow is the only shadow in the system, and it earned its place.
-- **Do** render the code-changes chart only when there's something to render. An empty chart is worse than no chart.
-- **Do** keep the terminal block as the one dark surface in any view. If a second dark surface appears, the design has drifted.
-- **Do** write all UI copy in lowercase, in the dry-with-a-wink voice of `notes/state.md` and the in-code conventions. Capitalized headings are not the personality.
+- **Do** carry strawberry as the one operative voice. Treat any urge to add a strawberry divider, heading underline, or hover tint outside its allowed surfaces as a system drift — reach for Pewter or Hairline instead.
+- **Do** keep plum inside the complexity chart only.
+- **Do** keep the five mascot/illustration spots a hard count: logo, live-session avatar, welcome banner, empty state, send rocket. If a sixth lands, cut one of the five.
+- **Do** let the terminal block stay unchanged. It is the seriousness anchor.
+- **Do** keep mono for every label, axis, tag, key, elapsed time; sans for prose.
+- **Do** stay flat. The CTA shadow and the nav blur are the only depth in the system.
+- **Do** render the code-changes chart only when there's something to render.
+- **Do** write all UI copy in lowercase, in the dry-with-a-wink voice.
 
-### Don't:
+### Don't
 
-- **Don't** use `border-left` or `border-right` greater than 1px as a colored accent on cards, panels, callouts, alerts, or list items. The current `.observer-insight` does this and is in violation; do not propagate the pattern, and rewrite that one element with a full border + background tint instead.
-- **Don't** introduce gradient text (`background-clip: text`), glassmorphism (backdrop-filter blur on cards), or pure `#000` / `#fff` neutrals. Use the named neutrals; they are tinted toward the page hue on purpose.
-- **Don't** ship the **hero-metric template** (big number, small label, supporting stats, gradient accent). PRODUCT.md names this as an anti-reference; the visual system enforces it by giving you no display-large numeric type.
-- **Don't** ship **Datadog / Grafana density** (rows of identical panels, gauges-because-gauges). The two charts that exist are load-bearing; do not multiply them.
-- **Don't** ship **AI-app aesthetic** (gradient blobs, pastel "calm" tones, ✨ sparkle copy, "your AI assistant" tone). The accent vocabulary is two solid colors, full-stop.
-- **Don't** bring back severity badges, side-stripe alert cards, or sidebars-of-sidebars. They were ripped out for a reason; the legacy `.badge.light/.medium/.heavy` CSS is scheduled for deletion.
-- **Don't** ship **notification-bait**: pulsing dots, growing counters, color-changing favicon, attention animations when nothing has actually changed. The contrast between idle and active is the loudest thing in the UI; do not erode it.
-- **Don't** add a third button type. Primary CTA and send button cover every action. If a flow needs a "secondary" or "ghost" button, redesign the flow instead.
+- **Don't** use `border-left` or `border-right` greater than 1px as a colored accent. Full borders, background tints, leading icons — never side stripes.
+- **Don't** introduce gradient text, gradient buttons, gradient borders, glassmorphism beyond the one nav surface, or pure `#000` / `#fff` neutrals.
+- **Don't** ship the **hero-metric template**, **Datadog / Grafana density**, **AI-app aesthetic** (gradient blobs, ambient glow, "your AI assistant" tone), or **generic kawaii UI** (rounded geometric script faces, lavender + mint pastels, sticker-pack illustrations everywhere).
+- **Don't** scatter mascots. They live in five named places. A mascot in a sixth place is an automatic fail.
+- **Don't** add a third button type. CTA + send + GitHub pill covers everything.
 - **Don't** capitalize headings, badge text, or button labels. Lowercase is the voice.
-- **Don't** animate layout properties (width, height, top, padding). State changes use opacity and transform only; transitions cap at 200ms with an ease-out curve.
-- **Don't** extend Diff Green or Diff Red beyond the code-changes chart. They are data colors, not status colors. There are no green success pills or red error pills in this system.
+- **Don't** animate layout properties. State changes use opacity and transform, ≤200ms, ease-out.
+- **Don't** extend Diff Green / Diff Red beyond the code-changes chart, and don't extend Plum beyond the complexity chart.
+- **Don't** add notification-bait: pulsing dots, growing counters, tab-title flickers, attention animations when nothing has actually changed.

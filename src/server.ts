@@ -157,6 +157,17 @@ const server = Bun.serve({
       return new Response(Bun.file("public/index.html"));
     }
 
+    // static assets — anything under /assets/ serves from public/assets/.
+    // basic path-traversal guard: refuse `..` segments before resolving.
+    if (url.pathname.startsWith("/assets/") && req.method === "GET") {
+      if (url.pathname.includes("..")) {
+        return new Response("not found", { status: 404 });
+      }
+      const file = Bun.file(`public${url.pathname}`);
+      if (await file.exists()) return new Response(file);
+      return new Response("not found", { status: 404 });
+    }
+
     if (url.pathname === "/state" && req.method === "GET") {
       return Response.json({ sessions: recentSessions() });
     }
