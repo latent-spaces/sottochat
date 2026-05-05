@@ -242,7 +242,7 @@
     .card.is-updated { animation: card-update 1.6s var(--ease-out); }
     @keyframes card-update {
       0%   { box-shadow: 0 0 0 0 var(--accent-soft); transform: scale(1); }
-      18%  { box-shadow: 0 0 0 6px var(--accent-soft); transform: scale(1.015); }
+      18%  { box-shadow: 0 0 0 8px var(--accent-soft); transform: scale(1.022); }
       100% { box-shadow: 0 0 0 0 transparent; transform: scale(1); }
     }
     .card.selected {
@@ -486,91 +486,6 @@
     }
     .session-head .source .src-glyph { color: var(--accent); margin-right: 4px; }
 
-    /* summary panel — "what happened so far", with the cake-clouds banner backdrop */
-    .summary-panel {
-      position: relative;
-      background: var(--surface);
-      border: 1px solid var(--accent-soft);
-      border-radius: var(--r-panel);
-      padding: 18px 22px;
-      margin: 0 0 20px;
-      overflow: hidden;
-      min-height: 88px;
-    }
-    .summary-panel .panel-label {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-family: var(--mono);
-      font-size: 11px;
-      font-weight: 500;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin: 0 0 8px;
-    }
-    .summary-panel .panel-label::before {
-      content: "✦";
-      font-family: var(--sans);
-      color: var(--accent);
-    }
-    .summary-panel .summary-text {
-      font-size: 15px;
-      line-height: 1.55;
-      color: var(--fg);
-      margin: 0;
-      max-width: 60ch;
-      position: relative;
-      z-index: 1;
-    }
-    .summary-panel .summary-text.stale { color: var(--fg-soft); font-style: italic; }
-    .summary-panel .stale-tag {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--fg-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-right: 6px;
-    }
-    .summary-panel .banner-bg {
-      position: absolute;
-      right: -40px;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 360px;
-      max-width: 60%;
-      height: auto;
-      pointer-events: none;
-      object-fit: contain;
-      opacity: 1;
-    }
-    @media (max-width: 720px) {
-      .summary-panel .banner-bg { display: none; }
-    }
-    .summary-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin: 10px 0 0;
-      position: relative;
-      z-index: 1;
-    }
-
-    /* tag chip — strawberry tint + strawberry-deep label */
-    .tag-chip {
-      display: inline-flex;
-      align-items: center;
-      padding: 4px 10px;
-      background: var(--accent-soft);
-      color: var(--accent-hover);
-      border-radius: var(--r-pill);
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 500;
-      letter-spacing: 0.04em;
-      text-transform: lowercase;
-    }
-
     .untouched-line {
       font-family: var(--mono);
       font-size: 11px;
@@ -793,10 +708,10 @@
       justify-content: center;
       padding: 0;
     }
-    .chat-input-row .send-btn img {
-      width: 28px;
-      height: 28px;
-      object-fit: contain;
+    .chat-input-row .send-btn svg {
+      width: 20px;
+      height: 20px;
+      color: #fff;
       pointer-events: none;
     }
     .chat-input-row .send-btn:hover {
@@ -810,7 +725,7 @@
       box-shadow: none;
       transform: none;
     }
-    .chat-input-row .send-btn:disabled img { opacity: 0.5; }
+    .chat-input-row .send-btn:disabled svg { opacity: 0.5; }
     .chat-tip {
       display: flex;
       justify-content: space-between;
@@ -881,13 +796,6 @@
           <p class="source"><span class="src-glyph">◆</span><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
         </div>
 
-        <section class="summary-panel" id="d-summary-panel" hidden>
-          <p class="panel-label">what happened so far</p>
-          <p class="summary-text" id="d-summary"></p>
-          <div class="summary-tags" id="d-summary-tags" hidden></div>
-          <img class="banner-bg" src="/assets/header-banner-cake-clouds.webp" alt="" />
-        </section>
-
         <p class="untouched-line" id="d-untouched" hidden>untouched for <span id="d-untouched-mins">—</span></p>
 
         <div class="charts-band">
@@ -913,9 +821,6 @@
     const detailContent = document.getElementById("detail-content");
     const dName = document.getElementById("d-name");
     const dElapsed = document.getElementById("d-elapsed");
-    const dSummaryPanel = document.getElementById("d-summary-panel");
-    const dSummary = document.getElementById("d-summary");
-    const dSummaryTags = document.getElementById("d-summary-tags");
     const dUntouched = document.getElementById("d-untouched");
     const dUntouchedMins = document.getElementById("d-untouched-mins");
     const dChart = document.getElementById("d-chart");
@@ -1288,7 +1193,6 @@
       return [
         sess.lastEventTs || 0,
         ins?.insight || "",
-        sess.sessionSummary?.text || "",
         sess.sessionName || "",
       ].join("");
     }
@@ -1416,6 +1320,18 @@
         }
       }
 
+      // FLIP snapshot: capture top of every persisting card BEFORE we mutate
+      // the DOM, so we can animate them from their previous slot to the new
+      // one when an insert/remove pushes them around. mirrors motion's `layout`
+      // prop on AnimatedListItem (vendor/magicui/animated-list.tsx).
+      const flipBefore = new Map();
+      const canFlip = typeof gsap !== "undefined" && !reduceMotion();
+      if (canFlip) {
+        for (const [id, el] of cardEls) {
+          flipBefore.set(id, el.getBoundingClientRect().top);
+        }
+      }
+
       // upsert + reorder
       let anchor = null;        // last placed card; new cards insert after it
       let staggerIdx = 0;       // stagger this tick's new cards (e.g. on first hello)
@@ -1439,17 +1355,41 @@
         if (isNew && typeof gsap !== "undefined" && !reduceMotion()) {
           // spring-y enter, magicui AnimatedList flavour: scale up from 0.55,
           // small y-drop, opacity 0 → 1, with back.out for the soft overshoot.
+          // transformOrigin pinned to top so the card grows down into its slot
+          // (mirrors motion's `originY: 0` in vendor/magicui/animated-list.tsx)
+          // instead of expanding from its center.
           gsap.from(card, {
             opacity: 0,
             y: -22,
             scale: 0.55,
             filter: "blur(6px)",
+            transformOrigin: "50% 0%",
             duration: 1.4,
             ease: "back.out(1.3)",
             delay: staggerIdx * 0.07,
             clearProps: "transform,opacity,filter",
           });
           staggerIdx++;
+        }
+      }
+
+      // FLIP playback: any card that was already in the DOM and has shifted
+      // gets animated from its old top to the new one. new cards are skipped
+      // (they have no `before` entry — their enter animation handles them).
+      if (canFlip && flipBefore.size) {
+        for (const [id, el] of cardEls) {
+          const before = flipBefore.get(id);
+          if (before == null) continue;
+          const after = el.getBoundingClientRect().top;
+          const delta = before - after;
+          if (Math.abs(delta) > 0.5) {
+            gsap.from(el, {
+              y: delta,
+              duration: 0.55,
+              ease: "power3.out",
+              overwrite: "auto",
+            });
+          }
         }
       }
     }
@@ -1496,30 +1436,7 @@
       dElapsed.textContent = fmtElapsed(sess);
       const turns = deriveTurns(events);
 
-      // summary panel — rolling observer summary inside a banner-backed card
-      const summary = sess.sessionSummary;
       const latestFlag = latestOpenInsight(sess.observerDecisions);
-      if (summary && summary.text) {
-        const sessionAge = Date.now() - (sess.lastEventTs || summary.ts || 0);
-        const isStale = sessionAge >= 5 * 60 * 1000;
-        dSummaryPanel.hidden = false;
-        dSummary.classList.toggle("stale", isStale);
-        dSummary.innerHTML = (isStale ? '<span class="stale-tag">(stale)</span>' : '')
-          + escapeHtml(summary.text);
-        // observer tags promoted to chips below the summary text
-        if (latestFlag && latestFlag.tags && latestFlag.tags.length) {
-          dSummaryTags.hidden = false;
-          dSummaryTags.innerHTML = latestFlag.tags
-            .map(t => '<span class="tag-chip">' + escapeHtml(t) + '</span>')
-            .join('');
-        } else {
-          dSummaryTags.hidden = true;
-          dSummaryTags.innerHTML = '';
-        }
-      } else {
-        dSummaryPanel.hidden = true;
-        dSummaryTags.hidden = true;
-      }
 
       dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, CHART_TURNS) : "";
       dCodeChart.innerHTML = renderCodeChartHtml(turns, CHART_TURNS);
@@ -1536,28 +1453,41 @@
       renderConversation(sess, turns);
       renderChatInput(sess, latestFlag);
 
-      // when the open session changes (or first opens), blur-fade each detail
-      // section in with a small stagger — magicui BlurFade flavour, ported.
-      // crucial: pre-hide children synchronously inside this same frame so
-      // detailContent unhiding doesn't flash a fully-visible state for one tick
-      // before the stagger starts.
+      // when the open session changes (or first opens), blur-fade the detail
+      // pane in with a two-tier cascade — the region step is the spine, the
+      // leaf step gives every component its own beat. magicui BlurFade flavour,
+      // ported. crucial: pre-hide leaves synchronously inside this same frame
+      // so detailContent unhiding doesn't flash a fully-visible state for one
+      // tick before the stagger starts.
       if (opening && typeof gsap !== "undefined" && !reduceMotionOn()) {
-        const children = Array.from(detailContent.querySelectorAll(
-          ".session-head, .summary-panel:not([hidden]), .charts-band, .conversation, .chat-input"
-        ));
-        if (children.length) {
-          gsap.set(children, { opacity: 0, filter: "blur(6px)", y: -6 });
-          children.forEach((el, i) => {
+        const REGION_STEP = 0.12;
+        const LEAF_STEP = 0.04;
+        const plan = [
+          { sel: ".session-head",  pick: r => r.querySelectorAll("#d-name, .source") },
+          { sel: ".charts-band",   pick: r => r.querySelectorAll("#d-chart, #d-code-chart") },
+          { sel: ".conversation",  pick: r => r.children },
+          { sel: ".chat-input",    pick: r => r.children },
+        ];
+        let regionIdx = 0;
+        for (const { sel, pick } of plan) {
+          const region = detailContent.querySelector(sel);
+          if (!region || region.hidden) continue;
+          const leaves = Array.from(pick(region));
+          if (!leaves.length) continue;
+          const base = REGION_STEP * regionIdx;
+          gsap.set(leaves, { opacity: 0, filter: "blur(6px)", y: -6 });
+          leaves.forEach((el, i) => {
             gsap.to(el, {
               opacity: 1,
               filter: "blur(0px)",
               y: 0,
-              duration: 0.5,
-              delay: 0.05 * i,
+              duration: 0.75,
+              delay: base + LEAF_STEP * i,
               ease: "power2.out",
               clearProps: "filter,y,opacity",
             });
           });
+          regionIdx++;
         }
       }
     }
@@ -1723,7 +1653,11 @@
         ctxHtml +
         '<div class="chat-input-row">' +
           '<textarea rows="2" placeholder="walk me through it…">' + escapeHtml(initial) + '</textarea>' +
-          '<button class="send-btn" title="send"><img src="/assets/send-button-rocket.webp" alt="send" /></button>' +
+          '<button class="send-btn" title="send" aria-label="send">' +
+            '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+              '<path d="M21.45 11.05L3.49 3.07a1 1 0 00-1.4 1.13l1.94 6.32a1 1 0 00.83.7l8.7 1.13a.18.18 0 010 .36l-8.7 1.13a1 1 0 00-.83.7l-1.94 6.32a1 1 0 001.4 1.13l17.96-7.98a1 1 0 000-1.96z"/>' +
+            '</svg>' +
+          '</button>' +
         '</div>' +
         '<div class="chat-tip">' +
           '<span>tip: ask for smaller steps, rationale, or alternatives</span>' +
@@ -1781,7 +1715,6 @@
         contextTokens: snap.contextTokens || 0,
         totalOutputTokens: snap.totalOutputTokens || 0,
         observerDecisions: Array.isArray(snap.observerDecisions) ? snap.observerDecisions.slice() : [],
-        sessionSummary: snap.sessionSummary || null,
         sessionName: snap.sessionName || null,
       });
     }
@@ -1833,10 +1766,9 @@
             else s.observerDecisions.push(msg.decision);
             refresh();
           }
-        } else if (msg.kind === "observer:summary") {
+        } else if (msg.kind === "observer:name") {
           const s = sessionsByKey.get(msg.sessionKey);
           if (s) {
-            s.sessionSummary = msg.summary;
             if (msg.name) s.sessionName = msg.name;
             refresh();
           }

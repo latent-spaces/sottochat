@@ -42,17 +42,16 @@ export type GateDecision = {
   prefill?: string;
 };
 
-export type SessionSummaryUpdate = {
+export type SessionNameUpdate = {
   sessionKey: string;
-  summary: string;
-  name?: string;
+  name: string;
 };
 
 export type ObserverOptions = {
   model?: string;
   batchMs?: number;
   onDecision?: (d: GateDecision) => void;
-  onSummary?: (s: SessionSummaryUpdate) => void;
+  onName?: (s: SessionNameUpdate) => void;
 };
 
 const DISALLOWED_TOOLS = [
@@ -97,13 +96,7 @@ For every turn you flag open=true, also draft a "prefill": a one-sentence messag
 - no greeting, no fluff
 For open=false turns, prefill must be null.
 
-Additionally, for each distinct session that appears in the batch, produce a "sessionSummary" AND a "sessionName".
-
-sessionSummary constraints:
-- one sentence, lowercase, present-tense (e.g. "wrestling with the auth migration after a failed test", "drafting the renderer plan after codex review")
-- ≤25 words
-- written as a glance line for someone returning to the session, not as a recap
-- no greeting, no preface, no "the agent is..." stem
+Additionally, for each distinct session that appears in the batch, produce a "sessionName".
 
 sessionName constraints:
 - 2-3 words, lowercase, no punctuation (e.g. "auth migration", "renderer redesign", "polish queue", "scrape parser")
@@ -111,12 +104,12 @@ sessionName constraints:
 - update as the focus shifts — if the agent pivots from auth to logging mid-session, name with the current focus
 - ≤20 characters total
 
-You see prior batches in your context; use that memory. If you've only seen one turn for a session this run, omit it from summaries.
+You see prior batches in your context; use that memory. If you've only seen one turn for a session this run, omit it from names.
 
 Reply with ONLY a JSON object with two arrays. No prose, no markdown fences. Schema:
-{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...], "summaries": [{"sessionKey": "<from input>", "sessionName": "...", "sessionSummary": "..."}, ...]}
+{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...], "names": [{"sessionKey": "<from input>", "sessionName": "..."}, ...]}
 
-The decisions array is in the same order as the input batch (one entry per turn). The summaries array contains one entry per distinct session you can speak to.
+The decisions array is in the same order as the input batch (one entry per turn). The names array contains one entry per distinct session you can speak to.
 
 Tags are short kebab-case labels you invent; we will use them later to learn your patterns. Examples: "loop-suspected", "scope-creep", "test-failures", "style-rewrite".`;
 
@@ -177,14 +170,14 @@ function formatBatch(batch: TurnFeed[]): string {
   }
   lines.push("");
   lines.push(
-    `Reply with a JSON object: {"decisions": [...one per turn in input order...], "summaries": [...one per distinct session you can speak to...]}. No other text.`
+    `Reply with a JSON object: {"decisions": [...one per turn in input order...], "names": [...one per distinct session you can speak to...]}. No other text.`
   );
   return lines.join("\n");
 }
 
 type ParsedResponse = {
   decisions: Array<Omit<GateDecision, "sessionKey">>;
-  summaries: SessionSummaryUpdate[];
+  names: SessionNameUpdate[];
 };
 
 function tryParseResponse(text: string): ParsedResponse | null {
@@ -197,15 +190,15 @@ function tryParseResponse(text: string): ParsedResponse | null {
     return null;
   }
 
-  // accept either {decisions: [...], summaries: [...]} or the legacy bare array.
+  // accept either {decisions: [...], names: [...]} or the legacy bare array.
   let decisionsRaw: unknown[];
-  let summariesRaw: unknown[] = [];
+  let namesRaw: unknown[] = [];
   if (Array.isArray(parsed)) {
     decisionsRaw = parsed;
   } else if (parsed && typeof parsed === "object") {
     const o = parsed as Record<string, unknown>;
     decisionsRaw = Array.isArray(o.decisions) ? o.decisions : [];
-    summariesRaw = Array.isArray(o.summaries) ? o.summaries : [];
+    namesRaw = Array.isArray(o.names) ? o.names : [];
   } else {
     return null;
   }
@@ -233,24 +226,20 @@ function tryParseResponse(text: string): ParsedResponse | null {
     });
   }
 
-  const summaries: SessionSummaryUpdate[] = [];
-  for (const item of summariesRaw) {
+  const names: SessionNameUpdate[] = [];
+  for (const item of namesRaw) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
-    const summary =
-      typeof o.sessionSummary === "string" && o.sessionSummary.trim().length > 0
-        ? o.sessionSummary.trim()
-        : null;
-    if (!sessionKey || !summary) continue;
     const name =
       typeof o.sessionName === "string" && o.sessionName.trim().length > 0
         ? o.sessionName.trim().slice(0, 24)
-        : undefined;
-    summaries.push({ sessionKey, summary, ...(name ? { name } : {}) });
+        : null;
+    if (!sessionKey || !name) continue;
+    names.push({ sessionKey, name });
   }
 
-  return { decisions, summaries };
+  return { decisions, names };
 }
 
 export function startObserver(opts: ObserverOptions): {
@@ -375,10 +364,9 @@ export function startObserver(opts: ObserverOptions): {
           const tags = decision.tags?.length ? ` [${decision.tags.join(",")}]` : "";
           console.log(`[observer] ${tag} ${decision.turnId.slice(0, 8)}${ins}${tags}`);
         }
-        for (const s of parsed.summaries) {
-          opts.onSummary?.(s);
-          const tag = s.name ? `[${s.name}] ` : "";
-          console.log(`[observer] summary ${s.sessionKey.slice(0, 24)} ${tag}— ${clip(s.summary, 120)}`);
+        for (const n of parsed.names) {
+          opts.onName?.(n);
+          console.log(`[observer] name ${n.sessionKey.slice(0, 24)} — [${n.name}]`);
         }
       }
     } finally {

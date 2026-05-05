@@ -37,11 +37,6 @@ type ObserverInsight = {
   ts: number;
 };
 
-type SessionSummary = {
-  text: string;
-  ts: number;
-};
-
 type SessionState = {
   info: SessionInfo;
   events: MetaEvent[];
@@ -54,7 +49,6 @@ type SessionState = {
   totalOutputTokens: number;   // cumulative output across all assistant messages
   observerDecisions: ObserverInsight[];
   observerByTurn: Map<string, number>;
-  sessionSummary?: SessionSummary;  // rolling 1-sentence summary from the observer
   sessionName?: string;             // observer-given 2-3 word display name
 };
 
@@ -99,7 +93,6 @@ function snapshot(s: SessionState) {
     contextTokens: s.contextTokens,
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
-    ...(s.sessionSummary ? { sessionSummary: s.sessionSummary } : {}),
     ...(s.sessionName ? { sessionName: s.sessionName } : {}),
   };
 }
@@ -231,17 +224,16 @@ const observer = OBSERVER_ENABLED
           });
         }
       },
-      onSummary(u) {
+      onName(u) {
         const s = sessions.get(u.sessionKey);
         if (!s) return;
-        s.sessionSummary = { text: u.summary, ts: Date.now() };
-        if (u.name) s.sessionName = u.name;
+        if (!u.name) return;
+        s.sessionName = u.name;
         if (isInWindow(s)) {
           broadcast({
-            kind: "observer:summary",
+            kind: "observer:name",
             sessionKey: u.sessionKey,
-            summary: s.sessionSummary,
-            ...(u.name ? { name: u.name } : {}),
+            name: u.name,
           });
         }
       },
