@@ -250,9 +250,11 @@ startTailer({
     console.log(`[tailer] new session ${info.source}/${info.sessionId.slice(0, 8)} (${info.slug})`);
   },
   onEvent(info, ev) {
-    // skip the observer's own subprocess session — it lives at
-    // ~/.chunk-to-chat/observer/ which CC encodes as this slug.
-    if (info.slug.includes("chunk-to-chat-observer")) return;
+    // the observer is itself a cc subprocess (cwd ~/.chunk-to-chat/observer/),
+    // so its own jsonl gets tailed too. surface it as a session card so the
+    // user can see it's alive and what model it's running, but never feed its
+    // own turns back to it (would be infinite mirror).
+    const isObserverSelf = info.slug.includes("chunk-to-chat-observer");
     const s = getOrCreate(info);
     const wasInWindow = isInWindow(s);
     s.events.push(ev);
@@ -280,7 +282,12 @@ startTailer({
     const result = ingestEvent(s.turns, ev);
     if (result.closed) {
       maybeOpenThread(s, result.closed);
-      if (observer && isInWindow(s) && Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS) {
+      if (
+        observer &&
+        !isObserverSelf &&
+        isInWindow(s) &&
+        Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS
+      ) {
         observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
       }
     }

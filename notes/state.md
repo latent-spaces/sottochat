@@ -74,7 +74,7 @@ env vars (all optional):
 | D     | break-it-down item flow                                                | partial · uncommitted (ui wired; spawn-new-agent on send not) |
 | E     | userpromptsubmit hook for handoff                                      | not started     |
 
-current head: `76d957e` (impeccable context + ui polish + coral-rule tightening landed; observer sessionSummary lands next).
+current head: `fef7c32` (impeccable context, ui polish, coral-rule tightening, observer sessionSummary, plan.md tagline rewrite all landed; observer-self-card change lands next).
 
 ---
 
@@ -218,7 +218,7 @@ normative source of truth is **`DESIGN.md`** at the repo root (visual system) an
 
 2. **send button is a stub.** clicking `›` logs the message; doesn't spawn anything. design walkthrough recommended a copy-to-clipboard interim (`navigator.clipboard.writeText(textarea.value)` → `✓` swap → "copied — paste into your claude session"); user deferred to a later pass. real fix: spawn a new sdk agent with the textarea text as first user message, stream replies into the slot.
 
-3. **observer's own subprocess sessions appear in the tailer log** as `[tailer] new session ... -chunk-to-chat-observer`. they're filtered at `server.ts` `onEvent` (slug includes "chunk-to-chat-observer") so events don't reach state, but the discovery log lines are noisy. cosmetic.
+3. ~~**observer's own subprocess sessions are filtered from the inbox.**~~ withdrawn: as of the observer-self-card change, observer events DO flow into session state and the observer surfaces as its own card (so the user can confirm it's alive + see its model tag). only the `observer.feed()` call back into the observer subprocess is gated on `!isObserverSelf` to prevent infinite mirroring. the discovery log lines (`[tailer] new session ... -chunk-to-chat-observer`) still appear and are still cosmetic.
 
 4. **dev hot-reload conflicts with the observer.** `bun run dev` (`bun --hot`) respawns the server on src edits, which orphans the existing sdk subprocess. for now: use `bun run src/server.ts` directly when observer is on. better fix: process-exit cleanup hook.
 
