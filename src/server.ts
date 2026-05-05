@@ -55,6 +55,7 @@ type SessionState = {
   observerDecisions: ObserverInsight[];
   observerByTurn: Map<string, number>;
   sessionSummary?: SessionSummary;  // rolling 1-sentence summary from the observer
+  sessionName?: string;             // observer-given 2-3 word display name
 };
 
 const sessions = new Map<string, SessionState>();
@@ -99,6 +100,7 @@ function snapshot(s: SessionState) {
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
     ...(s.sessionSummary ? { sessionSummary: s.sessionSummary } : {}),
+    ...(s.sessionName ? { sessionName: s.sessionName } : {}),
   };
 }
 
@@ -222,11 +224,13 @@ const observer = OBSERVER_ENABLED
         const s = sessions.get(u.sessionKey);
         if (!s) return;
         s.sessionSummary = { text: u.summary, ts: Date.now() };
+        if (u.name) s.sessionName = u.name;
         if (isInWindow(s)) {
           broadcast({
             kind: "observer:summary",
             sessionKey: u.sessionKey,
             summary: s.sessionSummary,
+            ...(u.name ? { name: u.name } : {}),
           });
         }
       },

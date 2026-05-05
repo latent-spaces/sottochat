@@ -636,12 +636,18 @@
       s = String(s || "");
       return s.length > n ? s.slice(0, n) + "…" : s;
     }
-    function sessionName(s) {
-      if (!s || !s.slug) return "—";
+    function sessionName(infoOrSess) {
+      // accepts either a SessionState (with .sessionName) or just info (slug only).
+      // observer-given name wins; falls back to last hyphen-separated slug component.
+      if (!infoOrSess) return "—";
+      const sess = infoOrSess.info ? infoOrSess : null;
+      if (sess && sess.sessionName) return sess.sessionName;
+      const info = sess ? sess.info : infoOrSess;
+      if (!info || !info.slug) return "—";
       // -Users-oronans-workspace-reelmaker → reelmaker
       // -Users-oronans-workspace → workspace
-      const parts = s.slug.replace(/^-+/, "").split("-");
-      return parts[parts.length - 1] || s.slug;
+      const parts = info.slug.replace(/^-+/, "").split("-");
+      return parts[parts.length - 1] || info.slug;
     }
     function fmtElapsed(sess) {
       const ts = sess?.lastEventTs;
@@ -922,7 +928,7 @@
 
       card.innerHTML =
         '<div class="card-head">' +
-          '<h3>' + escapeHtml(sessionName(sess.info)) + '</h3>' +
+          '<h3>' + escapeHtml(sessionName(sess)) + '</h3>' +
           '<div class="card-meta">' +
             (modelLabel ? '<span class="model-tag">' + escapeHtml(modelLabel) + '</span>' : '') +
           '</div>' +
@@ -1038,7 +1044,7 @@
         dTerminalDetails.open = open;
       } catch {}
       const events = sess.events || [];
-      dName.textContent = sessionName(sess.info);
+      dName.textContent = sessionName(sess);
       const sourceEl = document.getElementById("d-source");
       if (sourceEl) sourceEl.textContent = sess?.info?.source || "claude-code";
       dElapsed.textContent = fmtElapsed(sess);
@@ -1102,13 +1108,15 @@
 
     function renderChats(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
-      const observerSlots = (sess.observerDecisions || [])
+      // one slot per session — the latest open+prefill insight wins.
+      // older flagged turns aren't lost (still in observerDecisions); they just
+      // don't get their own chat surface, since the user only acts on the latest.
+      const latestOpen = (sess.observerDecisions || [])
         .filter(d => d.open && d.prefill)
-        .slice()
-        .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
 
-      const slots = observerSlots.length > 0
-        ? observerSlots
+      const slots = latestOpen
+        ? [latestOpen]
         : [{
             turnId: "__default__",
             insight: null,
@@ -1202,6 +1210,7 @@
         totalOutputTokens: snap.totalOutputTokens || 0,
         observerDecisions: Array.isArray(snap.observerDecisions) ? snap.observerDecisions.slice() : [],
         sessionSummary: snap.sessionSummary || null,
+        sessionName: snap.sessionName || null,
       });
     }
 
@@ -1259,6 +1268,7 @@
           const s = sessionsByKey.get(msg.sessionKey);
           if (s) {
             s.sessionSummary = msg.summary;
+            if (msg.name) s.sessionName = msg.name;
             refresh();
           }
         }

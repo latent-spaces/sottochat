@@ -45,6 +45,7 @@ export type GateDecision = {
 export type SessionSummaryUpdate = {
   sessionKey: string;
   summary: string;
+  name?: string;
 };
 
 export type ObserverOptions = {
@@ -96,15 +97,24 @@ For every turn you flag open=true, also draft a "prefill": a one-sentence messag
 - no greeting, no fluff
 For open=false turns, prefill must be null.
 
-Additionally, for each distinct session that appears in the batch, produce a "sessionSummary": one sentence describing what that agent has been doing across the most recent 2-3 closed turns. Constraints:
+Additionally, for each distinct session that appears in the batch, produce a "sessionSummary" AND a "sessionName".
+
+sessionSummary constraints:
 - one sentence, lowercase, present-tense (e.g. "wrestling with the auth migration after a failed test", "drafting the renderer plan after codex review")
 - ≤25 words
 - written as a glance line for someone returning to the session, not as a recap
 - no greeting, no preface, no "the agent is..." stem
+
+sessionName constraints:
+- 2-3 words, lowercase, no punctuation (e.g. "auth migration", "renderer redesign", "polish queue", "scrape parser")
+- describe what the agent is working on RIGHT NOW, not the project's directory name
+- update as the focus shifts — if the agent pivots from auth to logging mid-session, name with the current focus
+- ≤20 characters total
+
 You see prior batches in your context; use that memory. If you've only seen one turn for a session this run, omit it from summaries.
 
 Reply with ONLY a JSON object with two arrays. No prose, no markdown fences. Schema:
-{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...], "summaries": [{"sessionKey": "<from input>", "sessionSummary": "..."}, ...]}
+{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...], "summaries": [{"sessionKey": "<from input>", "sessionName": "...", "sessionSummary": "..."}, ...]}
 
 The decisions array is in the same order as the input batch (one entry per turn). The summaries array contains one entry per distinct session you can speak to.
 
@@ -233,7 +243,11 @@ function tryParseResponse(text: string): ParsedResponse | null {
         ? o.sessionSummary.trim()
         : null;
     if (!sessionKey || !summary) continue;
-    summaries.push({ sessionKey, summary });
+    const name =
+      typeof o.sessionName === "string" && o.sessionName.trim().length > 0
+        ? o.sessionName.trim().slice(0, 24)
+        : undefined;
+    summaries.push({ sessionKey, summary, ...(name ? { name } : {}) });
   }
 
   return { decisions, summaries };
@@ -361,7 +375,8 @@ export function startObserver(opts: ObserverOptions): {
         }
         for (const s of parsed.summaries) {
           opts.onSummary?.(s);
-          console.log(`[observer] summary ${s.sessionKey.slice(0, 24)} — ${clip(s.summary, 120)}`);
+          const tag = s.name ? `[${s.name}] ` : "";
+          console.log(`[observer] summary ${s.sessionKey.slice(0, 24)} ${tag}— ${clip(s.summary, 120)}`);
         }
       }
     } finally {
