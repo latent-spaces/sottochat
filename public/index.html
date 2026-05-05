@@ -54,10 +54,35 @@
       margin: 0;
     }
 
-    main {
-      max-width: 880px;
+    main.layout {
+      max-width: 1280px;
       margin: 0 auto;
-      padding: 24px 24px 96px;
+      padding: 16px 24px 96px;
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+    .sidebar {
+      flex: 0 0 320px;
+      position: sticky;
+      top: 16px;
+    }
+    .detail-pane {
+      flex: 1;
+      min-width: 0;
+    }
+    .detail-empty {
+      padding: 80px 24px;
+      text-align: center;
+      color: var(--fg-soft);
+      font-style: italic;
+      font-size: 14px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius);
+    }
+    @media (max-width: 880px) {
+      main.layout { flex-direction: column; }
+      .sidebar { flex: 1 1 auto; position: static; width: 100%; }
     }
     .section-label {
       font-size: 12px;
@@ -69,13 +94,13 @@
     }
 
     /* inbox */
-    .cards { display: grid; gap: 16px; }
+    .cards { display: grid; gap: 8px; }
     .empty-inbox {
       text-align: center;
-      padding: 56px 24px;
+      padding: 32px 16px;
       color: var(--fg-soft);
       font-style: italic;
-      font-size: 14px;
+      font-size: 13px;
       border: 1px dashed var(--border-strong);
       border-radius: var(--radius);
     }
@@ -86,24 +111,26 @@
       color: var(--fg);
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px 24px;
-      transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
+      border-radius: 8px;
+      padding: 10px 12px;
+      transition: border-color 0.12s, background 0.12s;
     }
     .card:hover {
       border-color: var(--accent);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px -10px rgba(99, 102, 241, 0.25);
+    }
+    .card.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
     }
     .card-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 4px;
-      gap: 12px;
+      margin-bottom: 2px;
+      gap: 8px;
     }
     .card-head h3 {
-      font-size: 17px;
+      font-size: 13px;
       font-weight: 600;
       margin: 0;
       letter-spacing: -0.01em;
@@ -112,67 +139,194 @@
       white-space: nowrap;
     }
     .badge {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 500;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      padding: 3px 8px;
-      border-radius: 4px;
+      padding: 2px 6px;
+      border-radius: 3px;
       flex-shrink: 0;
     }
     .badge.light { background: var(--accent-soft); color: var(--accent); }
     .badge.medium { background: var(--accent-soft); color: var(--accent); }
     .badge.heavy { background: var(--coral-soft); color: var(--coral); }
-    .card .source {
-      font-size: 12px;
+    .model-tag {
+      font-family: var(--mono);
+      font-size: 9px;
       color: var(--fg-soft);
-      margin: 0 0 18px;
+      background: #f3f3f7;
+      padding: 2px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .observer-insight {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin: 6px 0;
+      padding: 6px 8px;
+      background: var(--accent-soft);
+      border-left: 2px solid var(--accent);
+      border-radius: 3px;
+      font-size: 11px;
+      color: var(--fg);
+      line-height: 1.4;
+    }
+    .observer-insight .obs-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+      padding-top: 1px;
+    }
+    .observer-insight .obs-tags {
+      margin-top: 2px;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--fg-muted);
+    }
+    .card-meta {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .card .source {
+      font-size: 10px;
+      color: var(--fg-soft);
+      margin: 0 0 6px;
       font-family: var(--mono);
     }
     .kv {
       display: flex;
-      flex-direction: column;
-      margin-bottom: 12px;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 11px;
     }
     .kv .k {
-      font-size: 11px;
       color: var(--fg-muted);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 2px;
+      letter-spacing: 0.05em;
+      font-size: 10px;
+      flex-shrink: 0;
     }
     .kv .v {
-      font-size: 14px;
       color: var(--fg);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      flex: 1;
+      min-width: 0;
     }
 
-    .rhythm { margin: 14px 0 4px; }
-    .rhythm-bars {
+    /* turn complexity chart — paired bars with horizontal grid */
+    .cx { margin: 18px 0 4px; }
+    .cx-head {
       display: flex;
-      align-items: flex-end;
-      gap: 4px;
-      height: 36px;
-    }
-    .bar {
-      flex: 1;
-      min-width: 6px;
-      max-width: 28px;
-      border-radius: 2px 2px 0 0;
-      background: var(--accent-soft);
-      transition: background 0.12s;
-    }
-    .bar.user { background: var(--accent-soft); }
-    .bar.agent { background: var(--accent); opacity: 0.8; }
-    .bar.agent.latest { background: var(--coral); opacity: 1; }
-    .rhythm-label {
+      justify-content: space-between;
+      align-items: baseline;
       font-size: 11px;
       color: var(--fg-muted);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      margin-top: 8px;
+      margin-bottom: 10px;
+    }
+    .cx-legend {
+      display: flex;
+      gap: 14px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 11px;
+      color: var(--fg-soft);
+    }
+    .cx-legend .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+    .cx-legend .dot-input { background: var(--fg-muted); opacity: 0.55; }
+    .cx-legend .dot-output { background: var(--accent); }
+    .cx-chart {
+      display: flex;
+      height: 96px;
+      gap: 6px;
+    }
+    .cx-yaxis {
+      flex: 0 0 30px;
+      position: relative;
+    }
+    .cx-yaxis .tick {
+      position: absolute;
+      right: 4px;
+      transform: translateY(-50%);
+      white-space: nowrap;
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--fg-muted);
+      line-height: 1;
+    }
+    .cx-yaxis .tick.top { top: 0; }
+    .cx-yaxis .tick.mid { top: 50%; }
+    .cx-yaxis .tick.bot { top: 100%; }
+    .cx-plot {
+      flex: 0 0 auto;
+      position: relative;
+      border-left: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .cx-grid {
+      position: absolute;
+      left: 0;
+      right: 0;
+      border-top: 1px dashed var(--border);
+      pointer-events: none;
+    }
+    .cx-grid.top { top: 0; }
+    .cx-grid.mid { top: 50%; }
+    .cx-bars {
+      padding: 0 10px;
+      display: flex;
+      align-items: flex-end;
+      gap: 14px;
+      height: 100%;
+    }
+    .cx-scroll {
+      max-width: 100%;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .cx-pair {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      height: 100%;
+    }
+    .cx-bar {
+      width: 14px;
+      min-height: 1px;
+      border-radius: 2px 2px 0 0;
+    }
+    .bar-input { background: var(--fg-muted); opacity: 0.55; }
+    .bar-output { background: var(--accent); opacity: 0.9; }
+    .cx-pair.latest .bar-output { background: var(--coral); opacity: 1; }
+    .bar-added { background: #10b981; opacity: 0.9; }
+    .bar-removed { background: #ef4444; opacity: 0.9; }
+    .cx-legend .dot-added { background: #10b981; }
+    .cx-legend .dot-removed { background: #ef4444; }
+    .cx-xaxis {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 8px 0 36px;
+      font-size: 10px;
+      font-family: var(--mono);
+      color: var(--fg-muted);
     }
     .card-action {
       font-size: 13px;
@@ -299,67 +453,149 @@
       margin-top: 4px;
     }
 
+    /* break-it-down chat slots in detail pane */
+    .chats { display: flex; flex-direction: column; gap: 12px; }
+    .chat-slot {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .chat-slot .chat-context {
+      font-size: 12px;
+      color: var(--fg-soft);
+      margin: 0 0 8px;
+      line-height: 1.5;
+    }
+    .chat-slot .chat-context .chat-tags {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-muted);
+      margin-left: 6px;
+    }
+    .chat-input-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .chat-input-row textarea {
+      flex: 1;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.5;
+      padding: 8px 10px;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      resize: vertical;
+      min-height: 40px;
+      background: var(--bg);
+      color: var(--fg);
+    }
+    .chat-input-row textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--surface);
+    }
+    .chat-input-row .send-btn {
+      flex: 0 0 auto;
+      width: 40px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .chat-input-row .send-btn:hover { background: var(--accent-hover); }
+    .chat-input-row .send-btn:disabled {
+      background: var(--border-strong);
+      color: var(--fg-soft);
+      cursor: not-allowed;
+    }
+    .chat-sent {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--fg-soft);
+      font-style: italic;
+    }
+    .chats-empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--fg-soft);
+      font-style: italic;
+      font-size: 13px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius);
+    }
+
     code, .mono { font-family: var(--mono); font-size: 13px; }
   </style>
 </head>
 <body>
   <header class="app-header">
     <h1>chunk-to-chat</h1>
-    <p class="tag">passive review layer for agent sessions</p>
+    <p class="tag">turn long agent runs into a quick iterative chat</p>
   </header>
 
-  <main id="view-inbox">
-    <h2 class="section-label">sessions</h2>
-    <div class="cards" id="cards">
-      <div class="empty-inbox" id="inbox-empty">no active session detected — start claude code in a project</div>
-    </div>
-  </main>
-
-  <main id="view-detail" hidden>
-    <a class="back" href="#">← sessions</a>
-    <div class="session-head">
-      <h2 id="d-name">—</h2>
-      <p class="source"><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
-    </div>
-
-    <div class="panel">
-      <p class="label">what happened so far</p>
-      <p class="prose muted" id="d-summary">running summary lands in phase 3.</p>
-      <div class="constraints" id="d-constraints" hidden>
-        <p class="label">remembered constraints</p>
-        <p class="prose" id="d-constraints-text"></p>
+  <main class="layout">
+    <aside class="sidebar">
+      <h2 class="section-label">sessions</h2>
+      <div class="cards" id="cards">
+        <div class="empty-inbox" id="inbox-empty">no active session detected — start claude code in a project</div>
       </div>
-    </div>
+    </aside>
 
-    <p class="label section-label" style="margin-top: 28px;">latest model output</p>
-    <pre class="terminal empty" id="d-latest"><span class="prompt">$ </span><span class="prose-block">no output yet</span></pre>
+    <section class="detail-pane" id="detail-pane">
+      <div class="detail-empty" id="detail-empty">select a session</div>
+      <article class="detail-content" id="detail-content" hidden>
+        <div class="session-head">
+          <h2 id="d-name">—</h2>
+          <p class="source"><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
+        </div>
 
-    <p class="load-line">review load: <strong id="d-load">—</strong></p>
+        <div class="panel">
+          <p class="label">what happened so far</p>
+          <p class="prose muted" id="d-summary">running summary lands in phase 3.</p>
+          <div class="constraints" id="d-constraints" hidden>
+            <p class="label">remembered constraints</p>
+            <p class="prose" id="d-constraints-text"></p>
+          </div>
+        </div>
 
-    <button class="cta" id="cta-break" disabled>
-      break it down
-      <span class="sub">one piece at a time</span>
-    </button>
+        <div id="d-chart"></div>
+        <div id="d-code-chart"></div>
+
+        <p class="label section-label" style="margin-top: 28px;">latest model output</p>
+        <pre class="terminal empty" id="d-latest"><span class="prompt">$ </span><span class="prose-block">no output yet</span></pre>
+
+        <p class="load-line">review load: <strong id="d-load">—</strong></p>
+
+        <p class="label section-label" style="margin-top: 28px;">break it down — one at a time</p>
+        <div id="d-chats"></div>
+      </article>
+    </section>
   </main>
 
   <script>
     // dom
-    const inboxEl = document.getElementById("view-inbox");
-    const detailEl = document.getElementById("view-detail");
     const cardsEl = document.getElementById("cards");
     const inboxEmpty = document.getElementById("inbox-empty");
+    const detailEmpty = document.getElementById("detail-empty");
+    const detailContent = document.getElementById("detail-content");
     const dName = document.getElementById("d-name");
     const dElapsed = document.getElementById("d-elapsed");
     const dSummary = document.getElementById("d-summary");
     const dLatest = document.getElementById("d-latest");
     const dLoad = document.getElementById("d-load");
-    const dBreak = document.getElementById("cta-break");
+    const dChart = document.getElementById("d-chart");
+    const dCodeChart = document.getElementById("d-code-chart");
+    const dChats = document.getElementById("d-chats");
 
-    // state
-    let session = null;
-    let events = [];
-    let threads = [];
-    let sessionStartTs = null;
+    // state — one entry per discovered session, keyed by server-side key
+    // ("<source>:<path>"). Each carries its own events/threads/lastEventTs.
+    const sessionsByKey = new Map();
 
     // utils
     function escapeHtml(s) {
@@ -378,18 +614,53 @@
       const parts = s.slug.replace(/^-+/, "").split("-");
       return parts[parts.length - 1] || s.slug;
     }
-    function sourceLine() {
-      return "claude-code · " + fmtElapsed();
+    function sourceLine(sess) {
+      return (sess?.info?.source || "claude-code") + " · " + fmtElapsed(sess);
     }
-    function fmtElapsed() {
-      if (sessionStartTs == null) return "—";
-      const ms = Date.now() - sessionStartTs;
+    function fmtElapsed(sess) {
+      const ts = sess?.lastEventTs;
+      if (!ts) return "—";
+      const ms = Date.now() - ts;
+      if (ms < 5000) return "now";
       const s = Math.floor(ms / 1000);
       const h = Math.floor(s / 3600);
       const m = Math.floor((s % 3600) / 60);
-      if (h) return h + "h " + m + "m";
-      if (m) return m + "m";
-      return s + "s";
+      if (h) return h + "h " + m + "m ago";
+      if (m) return m + "m ago";
+      return s + "s ago";
+    }
+    function keyForSnapshot(sess) {
+      return sess.key || (sess.info ? (sess.info.source + ":" + sess.info.path) : "");
+    }
+    function latestOpenInsight(decisions) {
+      if (!Array.isArray(decisions)) return null;
+      for (let i = decisions.length - 1; i >= 0; i--) {
+        if (decisions[i].open && decisions[i].insight) return decisions[i];
+      }
+      return null;
+    }
+
+    function renderObserverHtml(decisions) {
+      const latest = latestOpenInsight(decisions);
+      if (!latest) return "";
+      const tagsHtml = latest.tags && latest.tags.length
+        ? '<div class="obs-tags">' + escapeHtml(latest.tags.join(" · ")) + '</div>'
+        : "";
+      return (
+        '<div class="observer-insight">' +
+          '<div class="obs-label">open</div>' +
+          '<div>' +
+            escapeHtml(latest.insight) +
+            tagsHtml +
+          '</div>' +
+        '</div>'
+      );
+    }
+    function shortModel(m) {
+      if (!m) return "";
+      // claude-opus-4-7 → opus 4.7 ; claude-sonnet-4-6-20250929 → sonnet 4.6
+      const stripped = String(m).replace(/^claude-/, "").replace(/-\d{8}$/, "");
+      return stripped.replace(/-(\d+)-(\d+)$/, " $1.$2");
     }
 
     // derive turns from raw events (mirrors src/turns.ts)
@@ -410,6 +681,8 @@
             agentChars: 0,
             agentTokens: 0,
             toolUses: 0,
+            linesAdded: 0,
+            linesRemoved: 0,
           };
         } else if (cur) {
           cur.endTs = ev.ts;
@@ -419,6 +692,8 @@
             if (typeof ev.tokens === "number") cur.agentTokens += ev.tokens;
           } else if (ev.kind === "tool_use") {
             cur.toolUses += 1;
+            if (typeof ev.linesAdded === "number") cur.linesAdded += ev.linesAdded;
+            if (typeof ev.linesRemoved === "number") cur.linesRemoved += ev.linesRemoved;
           } else if (ev.kind === "stop") {
             close();
           }
@@ -428,20 +703,132 @@
       return turns;
     }
 
-    function rhythmBars(turns) {
-      const last = turns.slice(-6);
-      const items = [];
-      for (const t of last) {
-        items.push({ kind: "user", weight: t.userChars });
-        const agentWeight = t.agentChars + t.toolUses * 200;
-        items.push({ kind: "agent", weight: agentWeight });
-      }
-      const max = Math.max(40, ...items.map(it => it.weight));
-      return items.map((it, i) => ({
-        kind: it.kind,
-        height: 14 + Math.round((it.weight / max) * 86),
-        latest: i === items.length - 1 && it.kind === "agent",
-      }));
+    function wordCount(s) {
+      return (s || "").trim().split(/\s+/).filter(Boolean).length;
+    }
+    function fmtCount(n) {
+      if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+      return String(n);
+    }
+
+    function niceMax(v) {
+      if (v <= 0) return 100;
+      if (v <= 50) return 50;
+      if (v <= 100) return 100;
+      if (v <= 200) return 200;
+      if (v <= 500) return 500;
+      if (v <= 1000) return 1000;
+      if (v <= 2000) return 2000;
+      return Math.ceil(v / 500) * 500;
+    }
+
+    function complexityChart(turns, count) {
+      const last = count ? turns.slice(-count) : turns.slice();
+      if (last.length === 0) return null;
+      const data = last.map(t => {
+        const inputW = wordCount(t.userText);
+        const outputW = wordCount(t.agentText);
+        return {
+          input: inputW,
+          output: outputW + t.toolUses * 30,
+          outputWords: outputW,
+          tools: t.toolUses,
+        };
+      });
+      const peak = Math.max(20, ...data.map(d => Math.max(d.input, d.output)));
+      return { data, yMax: niceMax(peak) };
+    }
+
+    function renderChartHtml(turns, count) {
+      const cx = complexityChart(turns, count);
+      if (!cx) return "";
+      const yMax = cx.yMax;
+      const pairs = cx.data.map((d, i) => {
+        const last = i === cx.data.length - 1;
+        const inputH = Math.max(0.5, (d.input / yMax) * 100);
+        const outputH = Math.max(0.5, (d.output / yMax) * 100);
+        const tip =
+          "output: " + d.outputWords + "w" +
+          (d.tools ? " · " + d.tools + "t" : "") +
+          " · input: " + d.input + "w";
+        return (
+          '<div class="cx-pair' + (last ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
+            '<div class="cx-bar bar-input" style="height: ' + inputH + '%"></div>' +
+            '<div class="cx-bar bar-output" style="height: ' + outputH + '%"></div>' +
+          '</div>'
+        );
+      }).join("");
+      return (
+        '<div class="cx">' +
+          '<div class="cx-head">' +
+            '<span>turn complexity (words)</span>' +
+            '<span class="cx-legend">' +
+              '<span><span class="dot dot-input"></span>input</span>' +
+              '<span><span class="dot dot-output"></span>output</span>' +
+            '</span>' +
+          '</div>' +
+          '<div class="cx-scroll">' +
+            '<div class="cx-chart">' +
+              '<div class="cx-yaxis">' +
+                '<span class="tick top">' + fmtCount(yMax) + '</span>' +
+                '<span class="tick mid">' + fmtCount(Math.round(yMax / 2)) + '</span>' +
+                '<span class="tick bot">0</span>' +
+              '</div>' +
+              '<div class="cx-plot">' +
+                '<div class="cx-grid top"></div>' +
+                '<div class="cx-grid mid"></div>' +
+                '<div class="cx-bars">' + pairs + '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
+
+    function renderCodeChartHtml(turns, count) {
+      const last = count ? turns.slice(-count) : turns.slice();
+      if (last.length === 0) return "";
+      const data = last.map(t => ({ added: t.linesAdded || 0, removed: t.linesRemoved || 0 }));
+      if (data.every(d => d.added === 0 && d.removed === 0)) return "";
+      const peak = Math.max(20, ...data.map(d => Math.max(d.added, d.removed)));
+      const yMax = niceMax(peak);
+      const pairs = data.map((d, i) => {
+        const last = i === data.length - 1;
+        const addedH = Math.max(0.5, (d.added / yMax) * 100);
+        const removedH = Math.max(0.5, (d.removed / yMax) * 100);
+        const tip = "+" + d.added + " / -" + d.removed + " lines";
+        return (
+          '<div class="cx-pair' + (last ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
+            '<div class="cx-bar bar-added" style="height: ' + addedH + '%"></div>' +
+            '<div class="cx-bar bar-removed" style="height: ' + removedH + '%"></div>' +
+          '</div>'
+        );
+      }).join("");
+      return (
+        '<div class="cx">' +
+          '<div class="cx-head">' +
+            '<span>code changes (lines)</span>' +
+            '<span class="cx-legend">' +
+              '<span><span class="dot dot-added"></span>added</span>' +
+              '<span><span class="dot dot-removed"></span>removed</span>' +
+            '</span>' +
+          '</div>' +
+          '<div class="cx-scroll">' +
+            '<div class="cx-chart">' +
+              '<div class="cx-yaxis">' +
+                '<span class="tick top">' + fmtCount(yMax) + '</span>' +
+                '<span class="tick mid">' + fmtCount(Math.round(yMax / 2)) + '</span>' +
+                '<span class="tick bot">0</span>' +
+              '</div>' +
+              '<div class="cx-plot">' +
+                '<div class="cx-grid top"></div>' +
+                '<div class="cx-grid mid"></div>' +
+                '<div class="cx-bars">' + pairs + '</div>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+        '</div>'
+      );
     }
 
     function reviewLoad(turns, threads) {
@@ -455,106 +842,230 @@
       return { severity, text, items };
     }
 
-    function latestThreadHint() {
-      if (threads.length === 0) return "—";
+    function latestThreadHint(threads) {
+      if (!threads || threads.length === 0) return "—";
       const t = threads[threads.length - 1];
       return t.hint || t.trigger?.reason || "—";
     }
 
-    // render inbox (one card for the active session)
+    function sortedSessions() {
+      return Array.from(sessionsByKey.values())
+        .filter(s => (s.threads && s.threads.length > 0))
+        .sort((a, b) => (b.lastEventTs || 0) - (a.lastEventTs || 0));
+    }
+
+    function findSessionBySessionId(sessionId) {
+      for (const s of sessionsByKey.values()) {
+        if (s.info?.sessionId === sessionId) return s;
+      }
+      return null;
+    }
+
+    function buildCard(sess) {
+      const events = sess.events || [];
+      const threads = sess.threads || [];
+      const card = document.createElement("a");
+      card.className = "card";
+      const sessionId = sess.info.sessionId;
+      card.href = "#session/" + encodeURIComponent(sessionId);
+      card.dataset.sessionId = sessionId;
+      const modelLabel = shortModel(sess.model);
+      const obsHtml = renderObserverHtml(sess.observerDecisions);
+      card.innerHTML =
+        '<div class="card-head">' +
+          '<h3>' + escapeHtml(sessionName(sess.info)) + '</h3>' +
+          '<div class="card-meta">' +
+            (modelLabel ? '<span class="model-tag">' + escapeHtml(modelLabel) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<p class="source">' + escapeHtml(sourceLine(sess)) + '</p>' +
+        obsHtml +
+        '<div class="kv"><div class="k">items</div>' +
+          '<div class="v">' + escapeHtml(String(threads.length)) + '</div></div>' +
+        '<div class="kv"><div class="k">tokens</div>' +
+          '<div class="v">' + fmtCount(sess.contextTokens || 0) + ' ctx · ' +
+                              fmtCount(sess.totalOutputTokens || 0) + ' out</div></div>';
+      return card;
+    }
+
+    function selectedSessionId() {
+      return decodeURIComponent((location.hash.match(/^#session\/(.+)$/) || [])[1] || "");
+    }
+
     function renderInbox() {
-      if (!session) {
-        cardsEl.innerHTML = "";
+      const list = sortedSessions();
+      const sel = selectedSessionId();
+      cardsEl.innerHTML = "";
+      if (list.length === 0) {
         cardsEl.appendChild(inboxEmpty);
         inboxEmpty.hidden = false;
         return;
       }
-      cardsEl.innerHTML = "";
-      const turns = deriveTurns(events);
-      const load = reviewLoad(turns, threads);
-      const bars = rhythmBars(turns);
-      const card = document.createElement("a");
-      card.className = "card";
-      card.href = "#session/" + session.sessionId;
-
-      const barsHtml = bars.map(b =>
-        '<div class="bar ' + b.kind + (b.latest ? " latest" : "") + '" style="height: ' + b.height + '%"></div>'
-      ).join("");
-
-      card.innerHTML =
-        '<div class="card-head">' +
-          '<h3>' + escapeHtml(sessionName(session)) + '</h3>' +
-          '<span class="badge ' + load.severity + '">' + load.severity + '</span>' +
-        '</div>' +
-        '<p class="source">' + escapeHtml(sourceLine()) + '</p>' +
-        '<div class="kv"><div class="k">latest</div>' +
-          '<div class="v">' + escapeHtml(clip(latestThreadHint(), 70)) + '</div></div>' +
-        '<div class="kv"><div class="k">review load</div>' +
-          '<div class="v">' + load.severity + ' · ' + escapeHtml(load.text) + '</div></div>' +
-        (bars.length > 0 ?
-          '<div class="rhythm"><div class="rhythm-bars">' + barsHtml + '</div>' +
-          '<div class="rhythm-label">conversation rhythm</div></div>' : '') +
-        '<div class="card-action">open session →</div>';
-      cardsEl.appendChild(card);
+      inboxEmpty.hidden = true;
+      for (const sess of list) {
+        const card = buildCard(sess);
+        if (sess.info.sessionId === sel) card.classList.add("selected");
+        cardsEl.appendChild(card);
+      }
     }
 
     function renderDetail() {
-      if (!session) {
-        location.hash = "";
+      const sessionId = selectedSessionId();
+      if (!sessionId) {
+        detailEmpty.hidden = false;
+        detailContent.hidden = true;
         return;
       }
-      dName.textContent = sessionName(session);
-      dElapsed.textContent = fmtElapsed();
+      const sess = findSessionBySessionId(sessionId);
+      if (!sess) {
+        detailEmpty.hidden = false;
+        detailContent.hidden = true;
+        return;
+      }
+      detailEmpty.hidden = true;
+      detailContent.hidden = false;
+      const events = sess.events || [];
+      const threads = sess.threads || [];
+      dName.textContent = sessionName(sess.info);
+      dElapsed.textContent = fmtElapsed(sess);
       const turns = deriveTurns(events);
       const load = reviewLoad(turns, threads);
-      dLoad.innerHTML = load.severity + ' · ' + escapeHtml(load.text);
+      dLoad.innerHTML = escapeHtml(load.text);
+      dChart.innerHTML = renderChartHtml(turns, null);
+      dCodeChart.innerHTML = renderCodeChartHtml(turns, null);
 
-      // latest model output: most recent triggered thread's agent text
       const latestThread = threads[threads.length - 1];
+      let latestText = "";
       if (latestThread) {
         const turn = turns.find(t => t.id === latestThread.turnId);
-        const text = turn?.agentText || latestThread.hint || "";
-        if (text) {
-          dLatest.classList.remove("empty");
-          dLatest.innerHTML = '<span class="prompt">$ </span>' + escapeHtml(text);
-          dBreak.disabled = false;
-        }
+        latestText = turn?.agentText || latestThread.hint || "";
+      }
+      if (latestText) {
+        dLatest.classList.remove("empty");
+        dLatest.innerHTML = '<span class="prompt">$ </span>' + escapeHtml(latestText);
       } else {
         dLatest.classList.add("empty");
         dLatest.innerHTML = '<span class="prompt">$ </span><span class="prose-block">no output yet</span>';
-        dBreak.disabled = true;
       }
+      renderChats(sess);
     }
 
-    function showInbox() {
-      inboxEl.hidden = false;
-      detailEl.hidden = true;
-      renderInbox();
-    }
-    function showDetail() {
-      inboxEl.hidden = true;
-      detailEl.hidden = false;
-      renderDetail();
-    }
+    // shown when the observer hasn't (yet) flagged any turn for the active
+    // session — keeps a usable chat surface available from the first click.
+    const DEFAULT_PREFILL = "Walk me through what you've done, one piece at a time. Pause for my take after each.";
 
-    function route() {
-      const h = location.hash || "";
-      if (h.startsWith("#session/")) showDetail();
-      else showInbox();
+    // remember user-edited textareas + which chats have been "sent" so refresh
+    // doesn't blow away the user's typing or the sent indicator. keyed
+    // (sessionKey, slotId) so default slots from different sessions don't share state.
+    const chatDrafts = new Map();
+    const chatSent = new Set();
+    const slotKey = (sessionKey, turnId) => sessionKey + "::" + turnId;
+
+    function renderChats(sess) {
+      const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+      const observerSlots = (sess.observerDecisions || [])
+        .filter(d => d.open && d.prefill)
+        .slice()
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+      const slots = observerSlots.length > 0
+        ? observerSlots
+        : [{
+            turnId: "__default__",
+            insight: null,
+            tags: null,
+            prefill: DEFAULT_PREFILL,
+            ts: 0,
+            isDefault: true,
+          }];
+
+      dChats.innerHTML = '<div class="chats" id="chats-list"></div>';
+      const list = document.getElementById("chats-list");
+      for (const d of slots) {
+        const sk = slotKey(sessionKey, d.turnId);
+        const slot = document.createElement("div");
+        slot.className = "chat-slot";
+        const tagsHtml = d.tags && d.tags.length
+          ? '<span class="chat-tags">' + escapeHtml(d.tags.join(" · ")) + '</span>'
+          : "";
+        const ctxHtml = d.insight
+          ? '<p class="chat-context">' + escapeHtml(d.insight) + tagsHtml + '</p>'
+          : (d.isDefault
+              ? '<p class="chat-context">no observer flag yet — pick this up and edit it.</p>'
+              : "");
+        const initial = chatDrafts.has(sk) ? chatDrafts.get(sk) : d.prefill;
+        const sent = chatSent.has(sk);
+        slot.innerHTML =
+          ctxHtml +
+          '<div class="chat-input-row">' +
+            '<textarea data-slot-key="' + escapeHtml(sk) + '" rows="2">' + escapeHtml(initial) + '</textarea>' +
+            '<button class="send-btn" data-slot-key="' + escapeHtml(sk) + '" title="send">›</button>' +
+          '</div>' +
+          (sent ? '<div class="chat-sent">queued (agent not wired yet)</div>' : '');
+        list.appendChild(slot);
+      }
+      list.querySelectorAll('textarea').forEach(t => {
+        t.addEventListener('input', e => {
+          chatDrafts.set(e.target.dataset.slotKey, e.target.value);
+        });
+      });
+      list.querySelectorAll('.send-btn').forEach(b => {
+        b.addEventListener('click', e => {
+          const sk = e.currentTarget.dataset.slotKey;
+          const ta = list.querySelector('textarea[data-slot-key="' + sk + '"]');
+          const text = (ta && ta.value || "").trim();
+          if (!text) return;
+          chatSent.add(sk);
+          // M-stub: log; real spawn lands when we wire the new agent
+          console.log("[chat] send", { slotKey: sk, text });
+          renderChats(sess);
+        });
+      });
     }
-    window.addEventListener("hashchange", route);
 
     function refresh() {
-      if (detailEl.hidden) renderInbox();
-      else renderDetail();
+      renderInbox();
+      renderDetail();
     }
-    setInterval(refresh, 30000);
+    window.addEventListener("hashchange", refresh);
+    setInterval(refresh, 5000);
 
-    function setSession(info) {
-      if (!info) return;
-      session = info;
-      if (sessionStartTs == null) sessionStartTs = Date.now();
-      refresh();
+    function upsertSession(snap) {
+      if (!snap || !snap.info) return;
+      const key = keyForSnapshot(snap);
+      sessionsByKey.set(key, {
+        key,
+        info: snap.info,
+        events: Array.isArray(snap.events) ? snap.events.slice() : [],
+        threads: Array.isArray(snap.threads) ? snap.threads.slice() : [],
+        lastEventTs: snap.lastEventTs || 0,
+        model: snap.model,
+        contextTokens: snap.contextTokens || 0,
+        totalOutputTokens: snap.totalOutputTokens || 0,
+        observerDecisions: Array.isArray(snap.observerDecisions) ? snap.observerDecisions.slice() : [],
+      });
+    }
+
+    function appendEvent(sessionKey, ev) {
+      const s = sessionsByKey.get(sessionKey);
+      if (!s) return false;
+      s.events.push(ev);
+      if (s.events.length > 6000) s.events.splice(0, s.events.length - 6000);
+      if (typeof ev.ts === "number" && ev.ts > (s.lastEventTs || 0)) s.lastEventTs = ev.ts;
+      if (ev.kind === "assistant_text") {
+        if (ev.model) s.model = ev.model;
+        // overwrite, not sum — input_tokens reports current context size, not delta.
+        if (typeof ev.inputTokens === "number") s.contextTokens = ev.inputTokens;
+        if (typeof ev.tokens === "number") s.totalOutputTokens = (s.totalOutputTokens || 0) + ev.tokens;
+      }
+      return true;
+    }
+
+    function appendThread(sessionKey, thread) {
+      const s = sessionsByKey.get(sessionKey);
+      if (!s) return false;
+      s.threads.push(thread);
+      return true;
     }
 
     function connect() {
@@ -562,26 +1073,33 @@
       ws.addEventListener("message", e => {
         let msg; try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.kind === "hello") {
-          if (msg.session) setSession(msg.session);
-          events = Array.isArray(msg.events) ? msg.events : [];
-          threads = Array.isArray(msg.threads) ? msg.threads : [];
+          sessionsByKey.clear();
+          const list = Array.isArray(msg.sessions) ? msg.sessions : [];
+          for (const snap of list) upsertSession(snap);
           refresh();
-        } else if (msg.kind === "session") {
-          setSession(msg.session);
+        } else if (msg.kind === "session:upsert") {
+          upsertSession(msg.session);
+          refresh();
         } else if (msg.kind === "event") {
-          events.push(msg.event);
-          if (events.length > 6000) events.splice(0, events.length - 6000);
-          refresh();
+          if (appendEvent(msg.sessionKey, msg.event)) refresh();
         } else if (msg.kind === "thread:new") {
-          threads.push(msg.thread);
-          refresh();
+          if (appendThread(msg.sessionKey, msg.thread)) refresh();
+        } else if (msg.kind === "observer:decision") {
+          const s = sessionsByKey.get(msg.sessionKey);
+          if (s) {
+            if (!Array.isArray(s.observerDecisions)) s.observerDecisions = [];
+            const idx = s.observerDecisions.findIndex(d => d.turnId === msg.decision.turnId);
+            if (idx >= 0) s.observerDecisions[idx] = msg.decision;
+            else s.observerDecisions.push(msg.decision);
+            refresh();
+          }
         }
       });
       ws.addEventListener("close", () => setTimeout(connect, 1000));
     }
 
     connect();
-    route();
+    refresh();
   </script>
 </body>
 </html>

@@ -12,6 +12,8 @@ export type Turn = {
   outputTokens: number;       // sum of assistant_text.tokens (when present)
   outputChars: number;        // sum of assistant_text.text.length (fallback)
   toolUseCount: number;
+  linesAdded: number;
+  linesRemoved: number;
   closed: boolean;
 };
 
@@ -58,6 +60,8 @@ function newTurn(ev: MetaEvent): Turn {
     outputTokens: 0,
     outputChars: 0,
     toolUseCount: 0,
+    linesAdded: 0,
+    linesRemoved: 0,
     closed: false,
   };
   if (ev.kind === "user_message") turn.userPromptText = ev.text;
@@ -72,6 +76,8 @@ function tally(turn: Turn, ev: MetaEvent): void {
     turn.outputChars += ev.text.length;
   } else if (ev.kind === "tool_use") {
     turn.toolUseCount += 1;
+    if (typeof ev.linesAdded === "number") turn.linesAdded += ev.linesAdded;
+    if (typeof ev.linesRemoved === "number") turn.linesRemoved += ev.linesRemoved;
   }
 }
 

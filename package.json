@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.128",
     "@anthropic-ai/sdk": "latest"
   },
   "devDependencies": {

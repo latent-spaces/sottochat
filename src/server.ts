@@ -1,12 +1,20 @@
 import { startTailer, type SessionInfo } from "./tailer";
 import type { MetaEvent } from "./jsonl";
-import { createTurnsState, ingestEvent, type Turn } from "./turns";
+import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
 import { evaluateTurn, type Trigger } from "./triggers";
+import { buildTurnFeed, startObserver } from "./observer";
 
 const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
 const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
 const PROJECT_SLUG = Bun.env.META_PROJECT_SLUG;
-const MAX_EVENTS = 5000;
+const RECENT_MS = Number(Bun.env.META_INBOX_MINUTES ?? 60) * 60 * 1000;
+const MAX_EVENTS_PER_SESSION = 5000;
+const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED === "1";
+const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-4-6";
+const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
+// only feed the observer turns whose close ts is within the last
+// OBSERVER_FRESH_MS — backfill of historical turns at startup is skipped.
+const OBSERVER_FRESH_MS = Number(Bun.env.META_OBSERVER_FRESH_MS ?? 5 * 60 * 1000);
 
 export type Thread = {
   id: string;
@@ -17,20 +25,91 @@ export type Thread = {
   createdTs: number;
 };
 
-const events: MetaEvent[] = [];
-const turnsState = createTurnsState();
-const threads: Thread[] = [];
-const threadByTurn = new Map<string, Thread>();
-let session: SessionInfo | null = null;
+type ObserverInsight = {
+  turnId: string;
+  open: boolean;
+  insight?: string;
+  tags?: string[];
+  prefill?: string;
+  ts: number;
+};
+
+type SessionState = {
+  info: SessionInfo;
+  events: MetaEvent[];
+  turns: TurnsState;
+  threads: Thread[];
+  threadByTurn: Map<string, Thread>;
+  lastEventTs: number;
+  model?: string;
+  contextTokens: number;       // latest assistant message's input total (= current conversation size)
+  totalOutputTokens: number;   // cumulative output across all assistant messages
+  observerDecisions: ObserverInsight[];
+  observerByTurn: Map<string, number>;
+};
+
+const sessions = new Map<string, SessionState>();
 const sockets = new Set<Bun.ServerWebSocket<unknown>>();
+
+function keyFor(info: SessionInfo): string {
+  return `${info.source}:${info.path}`;
+}
+
+function getOrCreate(info: SessionInfo): SessionState {
+  const k = keyFor(info);
+  let s = sessions.get(k);
+  if (!s) {
+    s = {
+      info,
+      events: [],
+      turns: createTurnsState(),
+      threads: [],
+      threadByTurn: new Map(),
+      lastEventTs: 0,
+      contextTokens: 0,
+      totalOutputTokens: 0,
+      observerDecisions: [],
+      observerByTurn: new Map(),
+    };
+    sessions.set(k, s);
+  } else {
+    s.info = info;
+  }
+  return s;
+}
+
+function snapshot(s: SessionState) {
+  return {
+    key: keyFor(s.info),
+    info: s.info,
+    events: s.events,
+    threads: s.threads,
+    lastEventTs: s.lastEventTs,
+    model: s.model,
+    contextTokens: s.contextTokens,
+    totalOutputTokens: s.totalOutputTokens,
+    observerDecisions: s.observerDecisions,
+  };
+}
+
+function isInWindow(s: SessionState): boolean {
+  return s.lastEventTs > 0 && Date.now() - s.lastEventTs <= RECENT_MS;
+}
+
+function recentSessions() {
+  return Array.from(sessions.values())
+    .filter(isInWindow)
+    .sort((a, b) => b.lastEventTs - a.lastEventTs)
+    .map(snapshot);
+}
 
 function broadcast(msg: unknown) {
   const data = JSON.stringify(msg);
   for (const ws of sockets) ws.send(data);
 }
 
-function maybeOpenThread(turn: Turn) {
-  if (threadByTurn.has(turn.id)) return;
+function maybeOpenThread(s: SessionState, turn: Turn) {
+  if (s.threadByTurn.has(turn.id)) return;
   const trigger = evaluateTurn(turn);
   if (!trigger) return;
   const thread: Thread = {
@@ -41,9 +120,11 @@ function maybeOpenThread(turn: Turn) {
     createdTs: Date.now(),
   };
   if (turn.userPromptText) thread.hint = clip(turn.userPromptText, 80);
-  threads.push(thread);
-  threadByTurn.set(turn.id, thread);
-  broadcast({ kind: "thread:new", thread });
+  s.threads.push(thread);
+  s.threadByTurn.set(turn.id, thread);
+  if (isInWindow(s)) {
+    broadcast({ kind: "thread:new", sessionKey: keyFor(s.info), thread });
+  }
 }
 
 function clip(s: string, n: number): string {
@@ -65,7 +146,18 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/state" && req.method === "GET") {
-      return Response.json({ session, events, threads });
+      return Response.json({ sessions: recentSessions() });
+    }
+
+    if (url.pathname === "/sessions" && req.method === "GET") {
+      const list = Array.from(sessions.values()).map((s) => ({
+        info: s.info,
+        eventCount: s.events.length,
+        threadCount: s.threads.length,
+        lastEventTs: s.lastEventTs,
+        inWindow: isInWindow(s),
+      }));
+      return Response.json({ sessions: list, recentMs: RECENT_MS });
     }
 
     return new Response("not found", { status: 404 });
@@ -73,7 +165,7 @@ const server = Bun.serve({
   websocket: {
     open(ws) {
       sockets.add(ws);
-      ws.send(JSON.stringify({ kind: "hello", session, events, threads }));
+      ws.send(JSON.stringify({ kind: "hello", sessions: recentSessions() }));
     },
     message() {
       // no client → server messages yet
@@ -86,20 +178,92 @@ const server = Bun.serve({
 
 console.log(`chunk-to-chat · listening on http://localhost:${server.port}`);
 
+const observer = OBSERVER_ENABLED
+  ? startObserver({
+      model: OBSERVER_MODEL,
+      batchMs: OBSERVER_BATCH_MS,
+      onDecision(d) {
+        const s = sessions.get(d.sessionKey);
+        if (!s) return;
+        const decision: ObserverInsight = {
+          turnId: d.turnId,
+          open: d.open,
+          ts: Date.now(),
+          ...(d.insight ? { insight: d.insight } : {}),
+          ...(d.tags && d.tags.length ? { tags: d.tags } : {}),
+          ...(d.prefill ? { prefill: d.prefill } : {}),
+        };
+        const existingIdx = s.observerByTurn.get(d.turnId);
+        if (existingIdx !== undefined) {
+          s.observerDecisions[existingIdx] = decision;
+        } else {
+          s.observerByTurn.set(d.turnId, s.observerDecisions.length);
+          s.observerDecisions.push(decision);
+        }
+        if (isInWindow(s)) {
+          broadcast({
+            kind: "observer:decision",
+            sessionKey: d.sessionKey,
+            decision,
+          });
+        }
+      },
+    })
+  : null;
+if (observer) {
+  console.log(`[observer] enabled · model=${OBSERVER_MODEL} · batch=${OBSERVER_BATCH_MS}ms`);
+  // graceful shutdown — give the abort signal a moment to terminate the sdk subprocess
+  // before the server process exits, otherwise the claude subprocess can be orphaned.
+  const onSignal = (sig: string) => {
+    console.log(`[server] received ${sig} — stopping observer`);
+    observer.stop();
+    setTimeout(() => process.exit(0), 500);
+  };
+  process.on("SIGINT", () => onSignal("SIGINT"));
+  process.on("SIGTERM", () => onSignal("SIGTERM"));
+}
+
 startTailer({
   ...(PROJECT_SLUG ? { projectSlug: PROJECT_SLUG } : {}),
   pollMs: POLL_MS,
+  recentMs: RECENT_MS,
   onSession(info) {
-    session = info;
-    broadcast({ kind: "session", session: info });
-    console.log(`[tailer] tailing ${info.path}`);
+    console.log(`[tailer] new session ${info.source}/${info.sessionId.slice(0, 8)} (${info.slug})`);
   },
-  onEvent(ev) {
-    events.push(ev);
-    if (events.length > MAX_EVENTS) events.splice(0, events.length - MAX_EVENTS);
-    broadcast({ kind: "event", event: ev });
+  onEvent(info, ev) {
+    // skip the observer's own subprocess session — it lives at
+    // ~/.chunk-to-chat/observer/ which CC encodes as this slug.
+    if (info.slug.includes("chunk-to-chat-observer")) return;
+    const s = getOrCreate(info);
+    const wasInWindow = isInWindow(s);
+    s.events.push(ev);
+    if (s.events.length > MAX_EVENTS_PER_SESSION) {
+      s.events.splice(0, s.events.length - MAX_EVENTS_PER_SESSION);
+    }
+    s.lastEventTs = Math.max(s.lastEventTs, ev.ts);
+    if (ev.kind === "assistant_text") {
+      if (ev.model) s.model = ev.model;
+      // each assistant message's input total reports the full context up to
+      // that point (cache + new). overwrite — don't sum (would N-count cached prefix).
+      if (typeof ev.inputTokens === "number") s.contextTokens = ev.inputTokens;
+      if (typeof ev.tokens === "number") s.totalOutputTokens += ev.tokens;
+    }
 
-    const result = ingestEvent(turnsState, ev);
-    if (result.closed) maybeOpenThread(result.closed);
+    const nowInWindow = isInWindow(s);
+
+    if (!wasInWindow && nowInWindow) {
+      // first time this session crosses into the inbox window — send full snapshot
+      broadcast({ kind: "session:upsert", session: snapshot(s) });
+    } else if (nowInWindow) {
+      broadcast({ kind: "event", sessionKey: keyFor(s.info), event: ev });
+    }
+
+    const result = ingestEvent(s.turns, ev);
+    if (result.closed) {
+      maybeOpenThread(s, result.closed);
+      if (observer && isInWindow(s) && Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS) {
+        observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
+      }
+    }
   },
 });
