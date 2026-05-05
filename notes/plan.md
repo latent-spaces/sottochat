@@ -1,8 +1,8 @@
 # chunk-to-chat v1 plan
 
-> note: project was renamed from `claude-meta` to **chunk-to-chat** during phase 2. the framing shifted from "passive observer" to "passive review layer" — same product, sharper tagline. this plan still describes the engine; the v1.5 ui brief lives in `notes/ui-chunk-to-chat.md` (todo).
+> note: project was renamed from `claude-meta` to **chunk-to-chat** during phase 2. tagline: *"turn long agent runs into a quick iterative chat."* the engine is unchanged; the v1.5 ui brief lives in `notes/ui-chunk-to-chat.md` (todo).
 
-a passive review layer for live claude code sessions. watches the active session jsonl, surfaces "moments worth breaking down" when claude produces a large or decision-heavy output, and turns each moment into a guided one-piece-at-a-time review flow that converges on a refined instruction injected back into the next prompt.
+a chat layer for long claude code sessions and other autonomous agent runs. watches the active session jsonl, surfaces moments where the agent produced a large or decision-heavy output, and turns each moment into a quick iterative dialogue — one piece at a time — that converges on a refined instruction injected back into the next prompt.
 
 reference for stolen patterns: [`claude-mem-patterns.md`](./claude-mem-patterns.md).
 
