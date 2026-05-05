@@ -31,11 +31,11 @@ what's not wired yet: send → spawn new agent · observer profile persistence (
 cd /Users/oronans/workspace/claude-meta   # repo renamed to chunk-to-chat on github; local dir kept
 export PATH="$HOME/.bun/bin:$PATH"
 bun install
-META_OBSERVER_ENABLED=1 bun run src/server.ts
+bun run src/server.ts
 open http://localhost:3737/
 ```
 
-note: prefer `bun run src/server.ts` (no `--hot`) when the observer is enabled — `bun --hot` reloads on file edits and each reload spawns a new sdk subprocess. orphans accumulate fast.
+observer is on by default. set `META_OBSERVER_ENABLED=0` to opt out — useful when iterating in `bun run dev` (`bun --hot` orphans the sdk subprocess on every file edit, see issue #4).
 
 env vars (all optional):
 
@@ -45,7 +45,7 @@ env vars (all optional):
 | `META_POLL_MS`            | 500                  | tailer poll interval                                    |
 | `META_PROJECT_SLUG`       | unset                | restrict cc tailing to one project dir                  |
 | `META_INBOX_MINUTES`      | 60                   | only tail jsonl files whose mtime is within this window |
-| `META_OBSERVER_ENABLED`   | 0 (off)              | set `1` to spawn the sdk observer                       |
+| `META_OBSERVER_ENABLED`   | 1 (on)               | set `0` to skip spawning the sdk observer               |
 | `META_OBSERVER_MODEL`     | `claude-sonnet-4-6`  | model the observer subprocess runs                      |
 | `META_OBSERVER_BATCH_MS`  | 30000                | batch interval for sending closed turns                 |
 | `META_OBSERVER_FRESH_MS`  | 300000               | only feed turns whose endTs is within this window       |
@@ -288,8 +288,8 @@ backend / observer work (independent of the design queue):
 
 ## dev-server lifecycle
 
-- run (with observer): `META_OBSERVER_ENABLED=1 bun run src/server.ts`
-- run (without observer, hot-reload): `bun run dev`
+- run (default, with observer): `bun run src/server.ts`
+- run (no observer, hot-reload safe): `META_OBSERVER_ENABLED=0 bun run dev`
 - typecheck: `bun run typecheck` (`tsc --noEmit`)
 - port conflict: `lsof -ti :3737 | xargs -r kill -TERM`
 - kill stray observer subprocesses: `pkill -f claude-agent-sdk`

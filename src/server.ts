@@ -9,7 +9,10 @@ const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
 const PROJECT_SLUG = Bun.env.META_PROJECT_SLUG;
 const RECENT_MS = Number(Bun.env.META_INBOX_MINUTES ?? 60) * 60 * 1000;
 const MAX_EVENTS_PER_SESSION = 5000;
-const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED === "1";
+// observer is on by default; set META_OBSERVER_ENABLED=0 to opt out
+// (e.g. when iterating in `bun run dev` to avoid orphaning the sdk subprocess
+// on every hot reload — see state.md issue #4).
+const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED !== "0";
 const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-4-6";
 const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
 // only feed the observer turns whose close ts is within the last
