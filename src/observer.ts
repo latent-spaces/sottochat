@@ -42,10 +42,16 @@ export type GateDecision = {
   prefill?: string;
 };
 
+export type SessionSummaryUpdate = {
+  sessionKey: string;
+  summary: string;
+};
+
 export type ObserverOptions = {
   model?: string;
   batchMs?: number;
   onDecision?: (d: GateDecision) => void;
+  onSummary?: (s: SessionSummaryUpdate) => void;
 };
 
 const DISALLOWED_TOOLS = [
@@ -90,8 +96,17 @@ For every turn you flag open=true, also draft a "prefill": a one-sentence messag
 - no greeting, no fluff
 For open=false turns, prefill must be null.
 
-Reply with ONLY a JSON array, one object per turn IN THE SAME ORDER as the batch. No prose, no markdown fences. Schema:
-[{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}]
+Additionally, for each distinct session that appears in the batch, produce a "sessionSummary": one sentence describing what that agent has been doing across the most recent 2-3 closed turns. Constraints:
+- one sentence, lowercase, present-tense (e.g. "wrestling with the auth migration after a failed test", "drafting the renderer plan after codex review")
+- ≤25 words
+- written as a glance line for someone returning to the session, not as a recap
+- no greeting, no preface, no "the agent is..." stem
+You see prior batches in your context; use that memory. If you've only seen one turn for a session this run, omit it from summaries.
+
+Reply with ONLY a JSON object with two arrays. No prose, no markdown fences. Schema:
+{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...], "summaries": [{"sessionKey": "<from input>", "sessionSummary": "..."}, ...]}
+
+The decisions array is in the same order as the input batch (one entry per turn). The summaries array contains one entry per distinct session you can speak to.
 
 Tags are short kebab-case labels you invent; we will use them later to learn your patterns. Examples: "loop-suspected", "scope-creep", "test-failures", "style-rewrite".`;
 
@@ -142,6 +157,7 @@ function formatBatch(batch: TurnFeed[]): string {
     lines.push("");
     lines.push(`---`);
     lines.push(`turnId: ${t.turnId}`);
+    lines.push(`sessionKey: ${t.sessionKey}`);
     lines.push(`session: ${sName} (${t.sessionInfo.source})`);
     lines.push(
       `metrics: ${t.outputTokens} tok · ${t.outputChars} chars · ${t.toolUseCount} tools · +${t.linesAdded}/-${t.linesRemoved} lines`
@@ -151,12 +167,17 @@ function formatBatch(batch: TurnFeed[]): string {
   }
   lines.push("");
   lines.push(
-    "Reply with a JSON array of decisions, one object per turn, in input order. No other text."
+    `Reply with a JSON object: {"decisions": [...one per turn in input order...], "summaries": [...one per distinct session you can speak to...]}. No other text.`
   );
   return lines.join("\n");
 }
 
-function tryParseDecisions(text: string): Array<Omit<GateDecision, "sessionKey">> | null {
+type ParsedResponse = {
+  decisions: Array<Omit<GateDecision, "sessionKey">>;
+  summaries: SessionSummaryUpdate[];
+};
+
+function tryParseResponse(text: string): ParsedResponse | null {
   // strip optional markdown fences
   const stripped = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
   let parsed: unknown;
@@ -165,9 +186,22 @@ function tryParseDecisions(text: string): Array<Omit<GateDecision, "sessionKey">
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed)) return null;
-  const out: Array<Omit<GateDecision, "sessionKey">> = [];
-  for (const item of parsed) {
+
+  // accept either {decisions: [...], summaries: [...]} or the legacy bare array.
+  let decisionsRaw: unknown[];
+  let summariesRaw: unknown[] = [];
+  if (Array.isArray(parsed)) {
+    decisionsRaw = parsed;
+  } else if (parsed && typeof parsed === "object") {
+    const o = parsed as Record<string, unknown>;
+    decisionsRaw = Array.isArray(o.decisions) ? o.decisions : [];
+    summariesRaw = Array.isArray(o.summaries) ? o.summaries : [];
+  } else {
+    return null;
+  }
+
+  const decisions: Array<Omit<GateDecision, "sessionKey">> = [];
+  for (const item of decisionsRaw) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const turnId = typeof o.turnId === "string" ? o.turnId : null;
@@ -180,7 +214,7 @@ function tryParseDecisions(text: string): Array<Omit<GateDecision, "sessionKey">
       : undefined;
     const prefill =
       typeof o.prefill === "string" && o.prefill.trim().length > 0 ? o.prefill.trim() : undefined;
-    out.push({
+    decisions.push({
       turnId,
       open,
       ...(insight ? { insight } : {}),
@@ -188,7 +222,21 @@ function tryParseDecisions(text: string): Array<Omit<GateDecision, "sessionKey">
       ...(prefill ? { prefill } : {}),
     });
   }
-  return out;
+
+  const summaries: SessionSummaryUpdate[] = [];
+  for (const item of summariesRaw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
+    const summary =
+      typeof o.sessionSummary === "string" && o.sessionSummary.trim().length > 0
+        ? o.sessionSummary.trim()
+        : null;
+    if (!sessionKey || !summary) continue;
+    summaries.push({ sessionKey, summary });
+  }
+
+  return { decisions, summaries };
 }
 
 export function startObserver(opts: ObserverOptions): {
@@ -292,12 +340,12 @@ export function startObserver(opts: ObserverOptions): {
           text = content;
         }
         if (!text.trim()) continue;
-        const decisions = tryParseDecisions(text);
-        if (!decisions) {
+        const parsed = tryParseResponse(text);
+        if (!parsed) {
           console.log(`[observer] could not parse: ${clip(text, 200)}`);
           continue;
         }
-        for (const d of decisions) {
+        for (const d of parsed.decisions) {
           const feed = inflight.get(d.turnId);
           if (!feed) {
             console.log(`[observer] unknown turnId in response: ${d.turnId}`);
@@ -310,6 +358,10 @@ export function startObserver(opts: ObserverOptions): {
           const ins = decision.insight ? ` — ${decision.insight}` : "";
           const tags = decision.tags?.length ? ` [${decision.tags.join(",")}]` : "";
           console.log(`[observer] ${tag} ${decision.turnId.slice(0, 8)}${ins}${tags}`);
+        }
+        for (const s of parsed.summaries) {
+          opts.onSummary?.(s);
+          console.log(`[observer] summary ${s.sessionKey.slice(0, 24)} — ${clip(s.summary, 120)}`);
         }
       }
     } finally {

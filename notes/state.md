@@ -74,7 +74,7 @@ env vars (all optional):
 | D     | break-it-down item flow                                                | partial · uncommitted (ui wired; spawn-new-agent on send not) |
 | E     | userpromptsubmit hook for handoff                                      | not started     |
 
-current head: `6ae6e69` (impeccable context committed; ui polish + this state.md update lands next).
+current head: `76d957e` (impeccable context + ui polish + coral-rule tightening landed; observer sessionSummary lands next).
 
 ---
 
@@ -160,7 +160,7 @@ one persistent claude code subprocess spawned by `query()` from `@anthropic-ai/c
 - **model:** `claude-sonnet-4-6` by default. swap via `META_OBSERVER_MODEL`.
 - **input feed:** an async-generator yielding synthetic user messages built from a queue; the queue receives one `TurnFeed` per closed turn that's within `META_OBSERVER_FRESH_MS`. server filters out the observer's own subprocess jsonl by slug match.
 - **system prompt:** prepended to the first batch only. tells the observer the heuristics to start with (>1500 tok / >5 tools / >100 lines / signs of trouble), the json schema, and the prefill voice (≤14 words, second-person to the agent, "one at a time" + ask user response per item).
-- **response shape:** `[{turnId, open, insight, tags, prefill}, ...]` — one object per turn in input order. prefill is null for `open: false`.
+- **response shape:** `{decisions: [{turnId, open, insight, tags, prefill}, ...], summaries: [{sessionKey, sessionSummary}, ...]}`. decisions array is one entry per turn in input order; summaries array is one entry per distinct session the observer has enough context to speak to (≥2 turns seen across all batches in this run). parser accepts the legacy bare-array shape as a fallback.
 - **respawn:** the sdk loop is wrapped in a lifecycle while-loop with 5s backoff; up to 5 consecutive failures before giving up. each respawn creates a fresh AbortController and drops in-flight prompts. on shutdown, SIGINT/SIGTERM trigger `observer.stop()` → abort → exit after 500ms grace.
 
 **what's not wired yet:**
@@ -241,9 +241,11 @@ normative source of truth is **`DESIGN.md`** at the repo root (visual system) an
 
 ## what's next (priority order, my read)
 
-ui design queue (locked via `/impeccable critique` walkthrough; commit 1 done; commit 2 absorbed into a doc tightening):
+ui design queue (locked via `/impeccable critique` walkthrough; all three commits landed):
 
-1. **commit 3: observer rolling sessionSummary** — extend observer system prompt to also produce a top-level `sessionSummary` per session per batch (1 sentence, present-tense, lowercase, ≤25 words, covers the last 3 closed turns, null if <2 turns). server stores latest per session. ui renders in the now-real `#d-summary` panel above chat slots, fades to muted ink-soft after 5min staleness. brings back the "what happened so far" panel, this time load-bearing.
+- ✅ commit 1: ui polish (`1d0d1a9`)
+- ✅ commit 2: doc tightening — Latest-Only Coral Rule (`76d957e`)
+- ✅ commit 3: observer rolling sessionSummary (this commit)
 
 then the deferred design items (per the walkthrough):
 

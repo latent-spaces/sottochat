@@ -375,6 +375,29 @@
       padding-left: 2px;
     }
 
+    /* rolling session summary from the observer (sits above chat slots).
+       fades to ink-soft + (stale) tag when the underlying session has gone
+       quiet for >5 minutes since the summary's timestamp. */
+    .session-summary {
+      font-size: 15px;
+      line-height: 1.5;
+      color: var(--fg);
+      margin: 0 0 16px;
+      padding-left: 2px;
+    }
+    .session-summary.stale {
+      color: var(--fg-soft);
+      font-style: italic;
+    }
+    .session-summary .stale-tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-right: 6px;
+    }
+
     /* instrument band — paired charts in one frame */
     .charts-band {
       display: grid;
@@ -558,6 +581,7 @@
           <p class="source"><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
         </div>
 
+        <p class="session-summary" id="d-summary" hidden></p>
         <p class="untouched-line" id="d-untouched" hidden>untouched for <span id="d-untouched-mins">—</span></p>
         <div id="d-chats"></div>
 
@@ -585,6 +609,7 @@
     const dName = document.getElementById("d-name");
     const dElapsed = document.getElementById("d-elapsed");
     const dLatest = document.getElementById("d-latest");
+    const dSummary = document.getElementById("d-summary");
     const dUntouched = document.getElementById("d-untouched");
     const dUntouchedMins = document.getElementById("d-untouched-mins");
     const dChart = document.getElementById("d-chart");
@@ -1019,6 +1044,20 @@
       dElapsed.textContent = fmtElapsed(sess);
       const turns = deriveTurns(events);
 
+      // rolling observer summary — fade to ink-soft + (stale) tag when the
+      // *session* (not the summary) has been quiet for >5 minutes.
+      const summary = sess.sessionSummary;
+      if (summary && summary.text) {
+        const sessionAge = Date.now() - (sess.lastEventTs || summary.ts || 0);
+        const isStale = sessionAge >= 5 * 60 * 1000;
+        dSummary.hidden = false;
+        dSummary.classList.toggle("stale", isStale);
+        dSummary.innerHTML = (isStale ? '<span class="stale-tag">(stale)</span>' : '')
+          + escapeHtml(summary.text);
+      } else {
+        dSummary.hidden = true;
+      }
+
       // suppress complexity chart on <2 turns (a single bar reads as broken).
       // code-changes chart already self-suppresses on zero changes.
       dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, null) : "";
@@ -1162,6 +1201,7 @@
         contextTokens: snap.contextTokens || 0,
         totalOutputTokens: snap.totalOutputTokens || 0,
         observerDecisions: Array.isArray(snap.observerDecisions) ? snap.observerDecisions.slice() : [],
+        sessionSummary: snap.sessionSummary || null,
       });
     }
 
@@ -1213,6 +1253,12 @@
             const idx = s.observerDecisions.findIndex(d => d.turnId === msg.decision.turnId);
             if (idx >= 0) s.observerDecisions[idx] = msg.decision;
             else s.observerDecisions.push(msg.decision);
+            refresh();
+          }
+        } else if (msg.kind === "observer:summary") {
+          const s = sessionsByKey.get(msg.sessionKey);
+          if (s) {
+            s.sessionSummary = msg.summary;
             refresh();
           }
         }
