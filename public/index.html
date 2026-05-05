@@ -2,28 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>meta</title>
+  <title>chunk-to-chat</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
-      --fg: #1a1a1a;
-      --fg-soft: #6b6b6b;
-      --bg: #fafaf7;
-      --accent: #4a6a4a;
-      --user: #5e7e9e;
-      --tool-result: #8a6a5e;
-      --mono: ui-monospace, "SF Mono", Menlo, monospace;
+      --bg: #fafafb;
+      --surface: #ffffff;
+      --fg: #1a1a1f;
+      --fg-soft: #6e6e7a;
+      --fg-muted: #9090a0;
+      --border: #e7e7ec;
+      --border-strong: #d4d4dd;
+      --accent: #6366f1;
+      --accent-hover: #4f52e0;
+      --accent-soft: #eef0fe;
+      --coral: #ef5e5e;
+      --coral-soft: #fdecec;
+      --term-bg: #15151c;
+      --term-fg: #e5e5ee;
+      --term-prompt: #a8aafd;
+      --term-muted: #65657a;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --fg: #ececec;
-        --fg-soft: #8a8a8a;
-        --bg: #141414;
-        --accent: #a8c8a8;
-        --user: #8eaad0;
-        --tool-result: #c2a08e;
-      }
+      --radius: 12px;
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
@@ -35,104 +36,354 @@
       font-size: 15px;
       -webkit-font-smoothing: antialiased;
     }
-    main {
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 64px 24px 96px;
-    }
-    .header {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--fg-soft);
-      margin-bottom: 40px;
-      letter-spacing: 0.02em;
-    }
-    .summary { margin-bottom: 32px; }
-    .threads {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-bottom: 48px;
-    }
-    .thread {
-      font-family: var(--mono);
-      font-size: 13px;
-      color: var(--fg);
-      text-decoration: none;
-      padding: 6px 0;
-    }
-    .thread:hover { color: var(--accent); }
-    .arrow { color: var(--fg-soft); margin-right: 8px; }
-    .empty {
-      color: var(--fg-soft);
-      font-style: italic;
-      font-size: 13px;
-    }
-    code, .mono { font-family: var(--mono); font-size: 13px; }
 
-    /* phase 1 debug feed */
-    .feed {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      margin-top: 48px;
-      padding-top: 16px;
-      border-top: 1px dashed var(--fg-soft);
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--fg);
+    .app-header {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 24px 16px;
     }
-    .feed .label-row {
+    .app-header h1 {
+      font-size: 26px;
+      font-weight: 600;
+      margin: 0 0 4px;
+      letter-spacing: -0.02em;
+    }
+    .app-header .tag {
+      font-size: 13px;
+      color: var(--fg-soft);
+      margin: 0;
+    }
+
+    main {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 24px 24px 96px;
+    }
+    .section-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0 0 12px;
+    }
+
+    /* inbox */
+    .cards { display: grid; gap: 16px; }
+    .empty-inbox {
+      text-align: center;
+      padding: 56px 24px;
       color: var(--fg-soft);
       font-style: italic;
-      margin-bottom: 8px;
+      font-size: 14px;
+      border: 1px dashed var(--border-strong);
+      border-radius: var(--radius);
     }
-    .feed .ev { padding: 2px 0; line-height: 1.5; word-break: break-word; }
-    .feed .ev .label {
+
+    .card {
+      display: block;
+      text-decoration: none;
+      color: var(--fg);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px -10px rgba(99, 102, 241, 0.25);
+    }
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      gap: 12px;
+    }
+    .card-head h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin: 0;
+      letter-spacing: -0.01em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .badge {
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .badge.light { background: var(--accent-soft); color: var(--accent); }
+    .badge.medium { background: var(--accent-soft); color: var(--accent); }
+    .badge.heavy { background: var(--coral-soft); color: var(--coral); }
+    .card .source {
+      font-size: 12px;
+      color: var(--fg-soft);
+      margin: 0 0 18px;
+      font-family: var(--mono);
+    }
+    .kv {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 12px;
+    }
+    .kv .k {
+      font-size: 11px;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 2px;
+    }
+    .kv .v {
+      font-size: 14px;
+      color: var(--fg);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .rhythm { margin: 14px 0 4px; }
+    .rhythm-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 4px;
+      height: 36px;
+    }
+    .bar {
+      flex: 1;
+      min-width: 6px;
+      max-width: 28px;
+      border-radius: 2px 2px 0 0;
+      background: var(--accent-soft);
+      transition: background 0.12s;
+    }
+    .bar.user { background: var(--accent-soft); }
+    .bar.agent { background: var(--accent); opacity: 0.8; }
+    .bar.agent.latest { background: var(--coral); opacity: 1; }
+    .rhythm-label {
+      font-size: 11px;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 8px;
+    }
+    .card-action {
+      font-size: 13px;
+      color: var(--accent);
+      margin-top: 16px;
+      text-align: right;
+      font-weight: 500;
+    }
+
+    /* detail page */
+    .back {
       display: inline-block;
-      min-width: 78px;
+      font-size: 13px;
       color: var(--fg-soft);
+      text-decoration: none;
+      margin-bottom: 24px;
+      font-family: var(--mono);
     }
-    .feed .ev.user_message .label { color: var(--user); }
-    .feed .ev.assistant_text .label { color: var(--fg); }
-    .feed .ev.tool_use .label { color: var(--accent); }
-    .feed .ev.tool_result .label { color: var(--tool-result); }
-    .feed .ev.stop {
+    .back:hover { color: var(--accent); }
+
+    .session-head {
+      margin-bottom: 32px;
+    }
+    .session-head h2 {
+      font-size: 26px;
+      font-weight: 600;
+      margin: 0 0 4px;
+      letter-spacing: -0.02em;
+    }
+    .session-head .source {
+      font-size: 13px;
       color: var(--fg-soft);
-      text-align: center;
-      padding: 8px 0;
-      letter-spacing: 8px;
+      margin: 0;
+      font-family: var(--mono);
     }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      margin-bottom: 20px;
+    }
+    .panel .label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0 0 10px;
+    }
+    .prose {
+      font-size: 15px;
+      color: var(--fg);
+      margin: 0;
+    }
+    .prose.muted {
+      color: var(--fg-soft);
+      font-style: italic;
+    }
+    .constraints {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .terminal {
+      background: var(--term-bg);
+      color: var(--term-fg);
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.65;
+      padding: 18px 22px;
+      border-radius: 10px;
+      max-height: 360px;
+      overflow-y: auto;
+      margin: 0 0 20px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .terminal .prompt { color: var(--term-prompt); user-select: none; }
+    .terminal.empty .prose-block { color: var(--term-muted); font-style: italic; }
+
+    .load-line {
+      font-size: 14px;
+      color: var(--fg-soft);
+      margin: 0 0 24px;
+      padding-left: 4px;
+    }
+    .load-line strong { color: var(--fg); font-weight: 500; }
+
+    .cta {
+      display: block;
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 22px 24px;
+      font-family: inherit;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: -0.005em;
+      transition: background 0.12s, transform 0.12s, box-shadow 0.12s;
+      box-shadow: 0 6px 20px -10px rgba(99, 102, 241, 0.5);
+    }
+    .cta:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px -12px rgba(99, 102, 241, 0.6);
+    }
+    .cta:disabled {
+      background: var(--border-strong);
+      color: var(--fg-soft);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .cta .sub {
+      display: block;
+      font-size: 12px;
+      font-weight: 400;
+      opacity: 0.85;
+      margin-top: 4px;
+    }
+
+    code, .mono { font-family: var(--mono); font-size: 13px; }
   </style>
 </head>
 <body>
-  <main>
-    <div class="header">meta · <span id="project">—</span> · <span id="elapsed">—</span></div>
+  <header class="app-header">
+    <h1>chunk-to-chat</h1>
+    <p class="tag">passive review layer for agent sessions</p>
+  </header>
 
-    <div class="summary" id="summary">
-      <span class="empty">waiting for the first turn…</span>
-    </div>
-
-    <div class="threads" id="threads"></div>
-
-    <div class="empty" id="closing">nothing pressing? cool, close the tab.</div>
-
-    <div class="feed" id="feed">
-      <div class="label-row">debug feed (phase 1)</div>
+  <main id="view-inbox">
+    <h2 class="section-label">sessions</h2>
+    <div class="cards" id="cards">
+      <div class="empty-inbox" id="inbox-empty">no active session detected — start claude code in a project</div>
     </div>
   </main>
 
-  <script>
-    const projectEl = document.getElementById("project");
-    const elapsedEl = document.getElementById("elapsed");
-    const summaryEl = document.getElementById("summary");
-    const closingEl = document.getElementById("closing");
-    const feedEl = document.getElementById("feed");
+  <main id="view-detail" hidden>
+    <a class="back" href="#">← sessions</a>
+    <div class="session-head">
+      <h2 id="d-name">—</h2>
+      <p class="source"><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
+    </div>
 
+    <div class="panel">
+      <p class="label">what happened so far</p>
+      <p class="prose muted" id="d-summary">running summary lands in phase 3.</p>
+      <div class="constraints" id="d-constraints" hidden>
+        <p class="label">remembered constraints</p>
+        <p class="prose" id="d-constraints-text"></p>
+      </div>
+    </div>
+
+    <p class="label section-label" style="margin-top: 28px;">latest model output</p>
+    <pre class="terminal empty" id="d-latest"><span class="prompt">$ </span><span class="prose-block">no output yet</span></pre>
+
+    <p class="load-line">review load: <strong id="d-load">—</strong></p>
+
+    <button class="cta" id="cta-break" disabled>
+      break it down
+      <span class="sub">one piece at a time</span>
+    </button>
+  </main>
+
+  <script>
+    // dom
+    const inboxEl = document.getElementById("view-inbox");
+    const detailEl = document.getElementById("view-detail");
+    const cardsEl = document.getElementById("cards");
+    const inboxEmpty = document.getElementById("inbox-empty");
+    const dName = document.getElementById("d-name");
+    const dElapsed = document.getElementById("d-elapsed");
+    const dSummary = document.getElementById("d-summary");
+    const dLatest = document.getElementById("d-latest");
+    const dLoad = document.getElementById("d-load");
+    const dBreak = document.getElementById("cta-break");
+
+    // state
+    let session = null;
+    let events = [];
+    let threads = [];
     let sessionStartTs = null;
 
-    function fmtElapsed(ms) {
-      if (ms == null) return "—";
+    // utils
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+    function clip(s, n) {
+      s = String(s || "");
+      return s.length > n ? s.slice(0, n) + "…" : s;
+    }
+    function sessionName(s) {
+      if (!s || !s.slug) return "—";
+      // -Users-oronans-workspace-reelmaker → reelmaker
+      // -Users-oronans-workspace → workspace
+      const parts = s.slug.replace(/^-+/, "").split("-");
+      return parts[parts.length - 1] || s.slug;
+    }
+    function sourceLine() {
+      return "claude-code · " + fmtElapsed();
+    }
+    function fmtElapsed() {
+      if (sessionStartTs == null) return "—";
+      const ms = Date.now() - sessionStartTs;
       const s = Math.floor(ms / 1000);
       const h = Math.floor(s / 3600);
       const m = Math.floor((s % 3600) / 60);
@@ -141,97 +392,196 @@
       return s + "s";
     }
 
-    function tickElapsed() {
-      if (sessionStartTs == null) return;
-      elapsedEl.textContent = fmtElapsed(Date.now() - sessionStartTs);
+    // derive turns from raw events (mirrors src/turns.ts)
+    function deriveTurns(evs) {
+      const turns = [];
+      let cur = null;
+      const close = () => { if (cur) { turns.push(cur); cur = null; } };
+      for (const ev of evs) {
+        if (ev.kind === "user_message") {
+          close();
+          cur = {
+            id: ev.uuid,
+            startTs: ev.ts,
+            endTs: ev.ts,
+            userText: ev.text || "",
+            userChars: (ev.text || "").length,
+            agentText: "",
+            agentChars: 0,
+            agentTokens: 0,
+            toolUses: 0,
+          };
+        } else if (cur) {
+          cur.endTs = ev.ts;
+          if (ev.kind === "assistant_text") {
+            cur.agentText += (cur.agentText ? "\n\n" : "") + (ev.text || "");
+            cur.agentChars += (ev.text || "").length;
+            if (typeof ev.tokens === "number") cur.agentTokens += ev.tokens;
+          } else if (ev.kind === "tool_use") {
+            cur.toolUses += 1;
+          } else if (ev.kind === "stop") {
+            close();
+          }
+        }
+      }
+      if (cur) turns.push(cur);
+      return turns;
     }
-    setInterval(tickElapsed, 30000);
 
-    function escapeHtml(s) {
-      return String(s).replace(/[&<>"']/g, (c) => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-      }[c]));
+    function rhythmBars(turns) {
+      const last = turns.slice(-6);
+      const items = [];
+      for (const t of last) {
+        items.push({ kind: "user", weight: t.userChars });
+        const agentWeight = t.agentChars + t.toolUses * 200;
+        items.push({ kind: "agent", weight: agentWeight });
+      }
+      const max = Math.max(40, ...items.map(it => it.weight));
+      return items.map((it, i) => ({
+        kind: it.kind,
+        height: 14 + Math.round((it.weight / max) * 86),
+        latest: i === items.length - 1 && it.kind === "agent",
+      }));
     }
 
-    function clip(s, n) {
-      s = String(s);
-      return s.length > n ? s.slice(0, n) + "…" : s;
+    function reviewLoad(turns, threads) {
+      const items = threads.length;
+      let severity;
+      if (items === 0) severity = "light";
+      else if (items <= 2) severity = "light";
+      else if (items <= 5) severity = "medium";
+      else severity = "heavy";
+      const text = items === 1 ? "1 item" : items + " items";
+      return { severity, text, items };
     }
+
+    function latestThreadHint() {
+      if (threads.length === 0) return "—";
+      const t = threads[threads.length - 1];
+      return t.hint || t.trigger?.reason || "—";
+    }
+
+    // render inbox (one card for the active session)
+    function renderInbox() {
+      if (!session) {
+        cardsEl.innerHTML = "";
+        cardsEl.appendChild(inboxEmpty);
+        inboxEmpty.hidden = false;
+        return;
+      }
+      cardsEl.innerHTML = "";
+      const turns = deriveTurns(events);
+      const load = reviewLoad(turns, threads);
+      const bars = rhythmBars(turns);
+      const card = document.createElement("a");
+      card.className = "card";
+      card.href = "#session/" + session.sessionId;
+
+      const barsHtml = bars.map(b =>
+        '<div class="bar ' + b.kind + (b.latest ? " latest" : "") + '" style="height: ' + b.height + '%"></div>'
+      ).join("");
+
+      card.innerHTML =
+        '<div class="card-head">' +
+          '<h3>' + escapeHtml(sessionName(session)) + '</h3>' +
+          '<span class="badge ' + load.severity + '">' + load.severity + '</span>' +
+        '</div>' +
+        '<p class="source">' + escapeHtml(sourceLine()) + '</p>' +
+        '<div class="kv"><div class="k">latest</div>' +
+          '<div class="v">' + escapeHtml(clip(latestThreadHint(), 70)) + '</div></div>' +
+        '<div class="kv"><div class="k">review load</div>' +
+          '<div class="v">' + load.severity + ' · ' + escapeHtml(load.text) + '</div></div>' +
+        (bars.length > 0 ?
+          '<div class="rhythm"><div class="rhythm-bars">' + barsHtml + '</div>' +
+          '<div class="rhythm-label">conversation rhythm</div></div>' : '') +
+        '<div class="card-action">open session →</div>';
+      cardsEl.appendChild(card);
+    }
+
+    function renderDetail() {
+      if (!session) {
+        location.hash = "";
+        return;
+      }
+      dName.textContent = sessionName(session);
+      dElapsed.textContent = fmtElapsed();
+      const turns = deriveTurns(events);
+      const load = reviewLoad(turns, threads);
+      dLoad.innerHTML = load.severity + ' · ' + escapeHtml(load.text);
+
+      // latest model output: most recent triggered thread's agent text
+      const latestThread = threads[threads.length - 1];
+      if (latestThread) {
+        const turn = turns.find(t => t.id === latestThread.turnId);
+        const text = turn?.agentText || latestThread.hint || "";
+        if (text) {
+          dLatest.classList.remove("empty");
+          dLatest.innerHTML = '<span class="prompt">$ </span>' + escapeHtml(text);
+          dBreak.disabled = false;
+        }
+      } else {
+        dLatest.classList.add("empty");
+        dLatest.innerHTML = '<span class="prompt">$ </span><span class="prose-block">no output yet</span>';
+        dBreak.disabled = true;
+      }
+    }
+
+    function showInbox() {
+      inboxEl.hidden = false;
+      detailEl.hidden = true;
+      renderInbox();
+    }
+    function showDetail() {
+      inboxEl.hidden = true;
+      detailEl.hidden = false;
+      renderDetail();
+    }
+
+    function route() {
+      const h = location.hash || "";
+      if (h.startsWith("#session/")) showDetail();
+      else showInbox();
+    }
+    window.addEventListener("hashchange", route);
+
+    function refresh() {
+      if (detailEl.hidden) renderInbox();
+      else renderDetail();
+    }
+    setInterval(refresh, 30000);
 
     function setSession(info) {
       if (!info) return;
-      const slug = info.slug || "";
-      const pretty = slug.replace(/^-+/, "").replace(/-/g, "/");
-      projectEl.textContent = pretty || "—";
+      session = info;
       if (sessionStartTs == null) sessionStartTs = Date.now();
-      tickElapsed();
-      closingEl.style.display = "none";
-    }
-
-    function renderEvent(ev) {
-      const div = document.createElement("div");
-      div.className = "ev " + ev.kind;
-
-      if (ev.kind === "stop") {
-        div.textContent = "· · ·";
-        feedEl.appendChild(div);
-        return;
-      }
-
-      let label = ev.kind;
-      let body = "";
-      switch (ev.kind) {
-        case "user_message":
-          label = "you";
-          body = clip(ev.text, 240);
-          break;
-        case "assistant_text":
-          label = "claude";
-          body = clip(ev.text, 240);
-          if (ev.tokens != null) body += "  ·  " + ev.tokens + " tok";
-          break;
-        case "tool_use":
-          label = "→ " + ev.tool;
-          body = ev.summary || "";
-          break;
-        case "tool_result":
-          label = "← result";
-          body = (ev.isError ? "[err] " : "") + (ev.summary || "");
-          break;
-      }
-      div.innerHTML =
-        '<span class="label">' + escapeHtml(label) + "</span>" +
-        '<span>' + escapeHtml(body) + "</span>";
-      feedEl.appendChild(div);
-    }
-
-    function clearFeed() {
-      feedEl.innerHTML = '<div class="label-row">debug feed (phase 1)</div>';
+      refresh();
     }
 
     function connect() {
       const ws = new WebSocket("ws://" + location.host + "/ws");
-      ws.addEventListener("message", (e) => {
-        let msg;
-        try { msg = JSON.parse(e.data); } catch { return; }
+      ws.addEventListener("message", e => {
+        let msg; try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.kind === "hello") {
           if (msg.session) setSession(msg.session);
-          if (Array.isArray(msg.events)) {
-            clearFeed();
-            for (const ev of msg.events) renderEvent(ev);
-          }
+          events = Array.isArray(msg.events) ? msg.events : [];
+          threads = Array.isArray(msg.threads) ? msg.threads : [];
+          refresh();
         } else if (msg.kind === "session") {
           setSession(msg.session);
         } else if (msg.kind === "event") {
-          renderEvent(msg.event);
+          events.push(msg.event);
+          if (events.length > 6000) events.splice(0, events.length - 6000);
+          refresh();
+        } else if (msg.kind === "thread:new") {
+          threads.push(msg.thread);
+          refresh();
         }
       });
-      ws.addEventListener("close", () => {
-        setTimeout(connect, 1000);
-      });
+      ws.addEventListener("close", () => setTimeout(connect, 1000));
     }
 
     connect();
+    route();
   </script>
 </body>
 </html>
