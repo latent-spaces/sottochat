@@ -18,10 +18,6 @@
       --accent-soft: #eef0fe;
       --coral: #ef5e5e;
       --coral-soft: #fdecec;
-      --term-bg: #15151c;
-      --term-fg: #e5e5ee;
-      --term-prompt: #a8aafd;
-      --term-muted: #65657a;
       --diff-green: #10b981;
       --diff-red: #ef4444;
       --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -411,47 +407,39 @@
     .charts-band:has(> div:empty) { grid-template-columns: 1fr; }
     @media (max-width: 880px) { .charts-band { grid-template-columns: 1fr; } }
 
-    /* reference band — collapsible terminal */
-    details.terminal-toggle {
-      margin-top: 32px;
+    /* conversation tail — chat-style view of the last N turns */
+    .conversation {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      max-height: 480px;
+      overflow-y: auto;
+      padding: 4px 2px 16px;
+      margin: 8px 0 16px;
+      border-bottom: 1px solid var(--border);
     }
-    details.terminal-toggle > summary {
-      list-style: none;
-      cursor: pointer;
+    .conv-turn { display: flex; flex-direction: column; gap: 4px; }
+    .conv-role {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 10px;
       color: var(--fg-muted);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      padding: 6px 2px;
-      user-select: none;
     }
-    details.terminal-toggle > summary::-webkit-details-marker { display: none; }
-    details.terminal-toggle > summary::before {
-      content: "▸ ";
-      display: inline-block;
-      width: 12px;
-      transition: transform 200ms var(--ease-out);
-    }
-    details.terminal-toggle[open] > summary::before { transform: rotate(90deg); }
-    details.terminal-toggle[open] > summary { color: var(--fg-soft); }
-
-    .terminal {
-      background: var(--term-bg);
-      color: var(--term-fg);
-      font-family: var(--mono);
-      font-size: 13px;
-      line-height: 1.65;
-      padding: 18px 22px;
-      border-radius: 10px;
-      max-height: 360px;
-      overflow-y: auto;
-      margin: 8px 0 0;
+    .conv-text {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--fg);
       white-space: pre-wrap;
       word-break: break-word;
     }
-    .terminal .prompt { color: var(--term-prompt); user-select: none; }
-    .terminal.empty .prose-block { color: var(--term-muted); font-style: italic; }
+    .conv-empty {
+      text-align: center;
+      color: var(--fg-soft);
+      font-style: italic;
+      font-size: 13px;
+      padding: 24px 0;
+    }
 
     /* ambient quiet — collapses sidebar when all sessions idle */
     .ambient-quiet {
@@ -471,21 +459,21 @@
       vertical-align: middle;
     }
 
-    /* break-it-down chat slots in detail pane */
-    .chats { display: flex; flex-direction: column; gap: 12px; }
-    .chat-slot {
+    /* chat input — single row below the conversation tail */
+    .chat-input {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 12px 14px;
     }
-    .chat-slot .chat-context {
+    .chat-input .chat-context {
       font-size: 12px;
       color: var(--fg-soft);
       margin: 0 0 8px;
       line-height: 1.5;
     }
-    .chat-slot .chat-context .chat-tags {
+    .chat-input .chat-context.muted { font-style: italic; color: var(--fg-muted); }
+    .chat-input .chat-context .chat-tags {
       font-family: var(--mono);
       font-size: 10px;
       color: var(--fg-muted);
@@ -538,15 +526,6 @@
       color: var(--fg-soft);
       font-style: italic;
     }
-    .chats-empty {
-      padding: 24px;
-      text-align: center;
-      color: var(--fg-soft);
-      font-style: italic;
-      font-size: 13px;
-      border: 1px dashed var(--border-strong);
-      border-radius: var(--radius);
-    }
 
     code, .mono { font-family: var(--mono); font-size: 13px; }
 
@@ -583,17 +562,14 @@
 
         <p class="session-summary" id="d-summary" hidden></p>
         <p class="untouched-line" id="d-untouched" hidden>untouched for <span id="d-untouched-mins">—</span></p>
-        <div id="d-chats"></div>
+
+        <div class="conversation" id="d-conversation"></div>
+        <div class="chat-input" id="d-chat-input"></div>
 
         <div class="charts-band">
           <div id="d-chart"></div>
           <div id="d-code-chart"></div>
         </div>
-
-        <details class="terminal-toggle" id="d-terminal-details">
-          <summary>latest output</summary>
-          <pre class="terminal empty" id="d-latest"><span class="prompt">$ </span><span class="prose-block">no output yet</span></pre>
-        </details>
       </article>
     </section>
   </main>
@@ -608,14 +584,13 @@
     const detailContent = document.getElementById("detail-content");
     const dName = document.getElementById("d-name");
     const dElapsed = document.getElementById("d-elapsed");
-    const dLatest = document.getElementById("d-latest");
     const dSummary = document.getElementById("d-summary");
     const dUntouched = document.getElementById("d-untouched");
     const dUntouchedMins = document.getElementById("d-untouched-mins");
     const dChart = document.getElementById("d-chart");
     const dCodeChart = document.getElementById("d-code-chart");
-    const dChats = document.getElementById("d-chats");
-    const dTerminalDetails = document.getElementById("d-terminal-details");
+    const dConversation = document.getElementById("d-conversation");
+    const dChatInput = document.getElementById("d-chat-input");
 
     // state thresholds
     const LIVE_MS = 30 * 1000;          // <30s = live
@@ -636,18 +611,26 @@
       s = String(s || "");
       return s.length > n ? s.slice(0, n) + "…" : s;
     }
-    function sessionName(infoOrSess) {
-      // accepts either a SessionState (with .sessionName) or just info (slug only).
-      // observer-given name wins; falls back to last hyphen-separated slug component.
-      if (!infoOrSess) return "—";
-      const sess = infoOrSess.info ? infoOrSess : null;
-      if (sess && sess.sessionName) return sess.sessionName;
-      const info = sess ? sess.info : infoOrSess;
-      if (!info || !info.slug) return "—";
+    function projectName(info) {
       // -Users-oronans-workspace-reelmaker → reelmaker
       // -Users-oronans-workspace → workspace
+      if (!info || !info.slug) return "";
       const parts = info.slug.replace(/^-+/, "").split("-");
       return parts[parts.length - 1] || info.slug;
+    }
+    function sessionName(infoOrSess) {
+      // accepts either a SessionState (with .sessionName) or just info (slug only).
+      // when the observer has named the session, prefix it with the project folder
+      // in brackets so [reelmaker] auth migration tells you both what + where.
+      // bare info or no observer name → just the project folder name.
+      if (!infoOrSess) return "—";
+      const sess = infoOrSess.info ? infoOrSess : null;
+      const info = sess ? sess.info : infoOrSess;
+      const project = projectName(info);
+      const obs = sess && sess.sessionName ? sess.sessionName : null;
+      if (!obs) return project || "—";
+      if (obs === project) return project;
+      return "[" + project + "] " + obs;
     }
     function fmtElapsed(sess) {
       const ts = sess?.lastEventTs;
@@ -1039,10 +1022,6 @@
       }
       detailEmpty.hidden = true;
       detailContent.hidden = false;
-      try {
-        const open = localStorage.getItem("terminal-open:" + sessionId) === "1";
-        dTerminalDetails.open = open;
-      } catch {}
       const events = sess.events || [];
       dName.textContent = sessionName(sess);
       const sourceEl = document.getElementById("d-source");
@@ -1079,95 +1058,104 @@
         dUntouched.hidden = true;
       }
 
-      const latestThread = sess.threads && sess.threads[sess.threads.length - 1];
-      let latestText = "";
-      if (latestThread) {
-        const turn = turns.find(t => t.id === latestThread.turnId);
-        latestText = turn?.agentText || latestThread.hint || "";
-      }
-      if (latestText) {
-        dLatest.classList.remove("empty");
-        dLatest.innerHTML = '<span class="prompt">$ </span>' + escapeHtml(latestText);
-      } else {
-        dLatest.classList.add("empty");
-        dLatest.innerHTML = '<span class="prompt">$ </span><span class="prose-block">no output yet</span>';
-      }
-      renderChats(sess);
+      renderConversation(sess, turns);
+      renderChatInput(sess);
     }
 
     // shown when the observer hasn't (yet) flagged any turn for the active
     // session — keeps a usable chat surface available from the first click.
     const DEFAULT_PREFILL = "Walk me through what you've done, one piece at a time. Pause for my take after each.";
 
-    // remember user-edited textareas + which chats have been "sent" so refresh
-    // doesn't blow away the user's typing or the sent indicator. keyed
-    // (sessionKey, slotId) so default slots from different sessions don't share state.
+    // tail length for the conversation view — last N turns, user+agent interleaved.
+    const TAIL_TURNS = 5;
+
+    // per-session draft + sent state. keeps user typing across 5s render ticks
+    // and ws updates. keyed by sessionKey (one input per session now).
     const chatDrafts = new Map();
     const chatSent = new Set();
-    const slotKey = (sessionKey, turnId) => sessionKey + "::" + turnId;
 
-    function renderChats(sess) {
+    // remember last (sessionId, turnCount) so we only auto-scroll the
+    // conversation when the session changes or a new turn arrives — not on
+    // every 5s refresh tick (would yank the user mid-read).
+    let convoLastSession = null;
+    let convoLastTurnCount = 0;
+
+    function renderConversation(sess, turns) {
+      const sessionId = sess.info?.sessionId || "";
+      const tail = turns.slice(-TAIL_TURNS);
+      if (tail.length === 0) {
+        dConversation.innerHTML = '<p class="conv-empty">no turns yet</p>';
+        convoLastSession = sessionId;
+        convoLastTurnCount = 0;
+        return;
+      }
+      const html = tail.map(t => {
+        const userBlock = t.userText
+          ? '<div class="conv-turn">' +
+              '<div class="conv-role">you</div>' +
+              '<div class="conv-text">' + escapeHtml(t.userText) + '</div>' +
+            '</div>'
+          : "";
+        const agentBlock = t.agentText
+          ? '<div class="conv-turn">' +
+              '<div class="conv-role">agent</div>' +
+              '<div class="conv-text">' + escapeHtml(t.agentText) + '</div>' +
+            '</div>'
+          : "";
+        return userBlock + agentBlock;
+      }).join("");
+      dConversation.innerHTML = html;
+      const sessionChanged = convoLastSession !== sessionId;
+      const newTurns = turns.length > convoLastTurnCount;
+      if (sessionChanged || newTurns) {
+        dConversation.scrollTop = dConversation.scrollHeight;
+      }
+      convoLastSession = sessionId;
+      convoLastTurnCount = turns.length;
+    }
+
+    function renderChatInput(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
-      // one slot per session — the latest open+prefill insight wins.
-      // older flagged turns aren't lost (still in observerDecisions); they just
-      // don't get their own chat surface, since the user only acts on the latest.
       const latestOpen = (sess.observerDecisions || [])
         .filter(d => d.open && d.prefill)
         .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
 
-      const slots = latestOpen
-        ? [latestOpen]
-        : [{
-            turnId: "__default__",
-            insight: null,
-            tags: null,
-            prefill: DEFAULT_PREFILL,
-            ts: 0,
-            isDefault: true,
-          }];
+      const tagsHtml = latestOpen && latestOpen.tags && latestOpen.tags.length
+        ? '<span class="chat-tags">' + escapeHtml(latestOpen.tags.join(" · ")) + '</span>'
+        : "";
+      const ctxHtml = latestOpen && latestOpen.insight
+        ? '<p class="chat-context">' + escapeHtml(latestOpen.insight) + tagsHtml + '</p>'
+        : '<p class="chat-context muted">no observer flag yet — pick this up and edit it.</p>';
 
-      dChats.innerHTML = '<div class="chats" id="chats-list"></div>';
-      const list = document.getElementById("chats-list");
-      for (const d of slots) {
-        const sk = slotKey(sessionKey, d.turnId);
-        const slot = document.createElement("div");
-        slot.className = "chat-slot";
-        const tagsHtml = d.tags && d.tags.length
-          ? '<span class="chat-tags">' + escapeHtml(d.tags.join(" · ")) + '</span>'
-          : "";
-        const ctxHtml = d.insight
-          ? '<p class="chat-context">' + escapeHtml(d.insight) + tagsHtml + '</p>'
-          : (d.isDefault
-              ? '<p class="chat-context">no observer flag yet — pick this up and edit it.</p>'
-              : "");
-        const initial = chatDrafts.has(sk) ? chatDrafts.get(sk) : d.prefill;
-        const sent = chatSent.has(sk);
-        slot.innerHTML =
-          ctxHtml +
-          '<div class="chat-input-row">' +
-            '<textarea data-slot-key="' + escapeHtml(sk) + '" rows="2">' + escapeHtml(initial) + '</textarea>' +
-            '<button class="send-btn" data-slot-key="' + escapeHtml(sk) + '" title="send">›</button>' +
-          '</div>' +
-          (sent ? '<div class="chat-sent">queued (agent not wired yet)</div>' : '');
-        list.appendChild(slot);
-      }
-      list.querySelectorAll('textarea').forEach(t => {
-        t.addEventListener('input', e => {
-          chatDrafts.set(e.target.dataset.slotKey, e.target.value);
+      const prefill = (latestOpen && latestOpen.prefill) || DEFAULT_PREFILL;
+      const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : prefill;
+      const sent = chatSent.has(sessionKey);
+
+      dChatInput.innerHTML =
+        ctxHtml +
+        '<div class="chat-input-row">' +
+          '<textarea rows="2">' + escapeHtml(initial) + '</textarea>' +
+          '<button class="send-btn" title="send">›</button>' +
+        '</div>' +
+        (sent ? '<div class="chat-sent">queued (agent not wired yet)</div>' : '');
+
+      const ta = dChatInput.querySelector('textarea');
+      const btn = dChatInput.querySelector('.send-btn');
+      if (ta) {
+        ta.addEventListener('input', e => {
+          chatDrafts.set(sessionKey, e.target.value);
         });
-      });
-      list.querySelectorAll('.send-btn').forEach(b => {
-        b.addEventListener('click', e => {
-          const sk = e.currentTarget.dataset.slotKey;
-          const ta = list.querySelector('textarea[data-slot-key="' + sk + '"]');
+      }
+      if (btn) {
+        btn.addEventListener('click', () => {
           const text = (ta && ta.value || "").trim();
           if (!text) return;
-          chatSent.add(sk);
+          chatSent.add(sessionKey);
           // M-stub: log; real spawn lands when we wire the new agent
-          console.log("[chat] send", { slotKey: sk, text });
-          renderChats(sess);
+          console.log("[chat] send", { sessionKey, text });
+          renderChatInput(sess);
         });
-      });
+      }
     }
 
     function refresh() {
@@ -1181,18 +1169,6 @@
     });
     // initial mark on load if a session is already selected via #hash
     (() => { const sid = selectedSessionId(); if (sid) markViewed(sid); })();
-
-    // persist terminal-toggle open state across renders, per session.
-    dTerminalDetails.addEventListener("toggle", () => {
-      const sid = selectedSessionId();
-      if (!sid) return;
-      try {
-        localStorage.setItem(
-          "terminal-open:" + sid,
-          dTerminalDetails.open ? "1" : "0",
-        );
-      } catch {}
-    });
 
     setInterval(refresh, 5000);
 

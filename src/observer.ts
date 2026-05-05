@@ -305,7 +305,9 @@ export function startObserver(opts: ObserverOptions): {
     })();
   }
 
-  // tick: every batchMs, drain queue and push as a prompt
+  // tick: every batchMs, drain queue and push as a prompt.
+  // when nothing closed in this window, queue is empty → no sonnet call.
+  // the batch interval is a ceiling on send rate, not a heartbeat.
   const tick = setInterval(() => {
     if (queue.length === 0) return;
     const batch = queue.splice(0, queue.length);
