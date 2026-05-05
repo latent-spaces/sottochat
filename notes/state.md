@@ -74,7 +74,7 @@ env vars (all optional):
 | D     | break-it-down item flow                                                | partial · uncommitted (ui wired; spawn-new-agent on send not) |
 | E     | userpromptsubmit hook for handoff                                      | not started     |
 
-current head: `fef7c32` (impeccable context, ui polish, coral-rule tightening, observer sessionSummary, plan.md tagline rewrite all landed; observer-self-card change lands next).
+current head: `80d022b` (impeccable context, ui polish, coral-rule tightening, observer sessionSummary, plan.md tagline rewrite, observer-self-card surfaced, observer-default-on flip, observer-given session names, one-chat-slot-per-session all landed). next chunk: chat-style detail pane redesign (see what's-next #1).
 
 ---
 
@@ -160,7 +160,7 @@ one persistent claude code subprocess spawned by `query()` from `@anthropic-ai/c
 - **model:** `claude-sonnet-4-6` by default. swap via `META_OBSERVER_MODEL`.
 - **input feed:** an async-generator yielding synthetic user messages built from a queue; the queue receives one `TurnFeed` per closed turn that's within `META_OBSERVER_FRESH_MS`. server filters out the observer's own subprocess jsonl by slug match.
 - **system prompt:** prepended to the first batch only. tells the observer the heuristics to start with (>1500 tok / >5 tools / >100 lines / signs of trouble), the json schema, and the prefill voice (≤14 words, second-person to the agent, "one at a time" + ask user response per item).
-- **response shape:** `{decisions: [{turnId, open, insight, tags, prefill}, ...], summaries: [{sessionKey, sessionSummary}, ...]}`. decisions array is one entry per turn in input order; summaries array is one entry per distinct session the observer has enough context to speak to (≥2 turns seen across all batches in this run). parser accepts the legacy bare-array shape as a fallback.
+- **response shape:** `{decisions: [{turnId, open, insight, tags, prefill}, ...], summaries: [{sessionKey, sessionName, sessionSummary}, ...]}`. decisions array is one entry per turn in input order; summaries array is one entry per distinct session the observer has enough context to speak to (≥2 turns seen across all batches in this run). `sessionName` is a 2-3 word lowercase phrase capturing what the agent is currently doing (e.g. "auth migration", "polish queue") — capped at 24 chars by the parser, falls back client-side to the slug-derived last component when absent. parser accepts the legacy bare-array shape as a fallback.
 - **respawn:** the sdk loop is wrapped in a lifecycle while-loop with 5s backoff; up to 5 consecutive failures before giving up. each respawn creates a fresh AbortController and drops in-flight prompts. on shutdown, SIGINT/SIGTERM trigger `observer.stop()` → abort → exit after 500ms grace.
 
 **what's not wired yet:**
@@ -180,21 +180,23 @@ normative source of truth is **`DESIGN.md`** at the repo root (visual system) an
 
 - **header**: H1 + tag, with a `reconnecting…` indicator (mono Pewter) that appears when the ws drops and clears on reconnect.
 - **left sidebar** (320px, sticky-top): session cards. each card is two or three lines:
-  - title row: session name + model-tag pill
+  - title row: **observer-given session name** when present (e.g. "auth migration") else slug-derived fallback ("reelmaker") + model-tag pill
   - (when observer flagged) latest insight prose, 13px Ink sans, no callout chrome — placement is the role
   - foot line, mono Pewter: optional source · optional tags · `live` / `Xs ago` / `idle Xm`
   - card states: `live` (indigo border, <30s since last event) · `recent` (default, <5min) · `idle` (0.55 opacity, ≥5min). selected always wins (indigo border + tint + full opacity).
+  - the observer's own subprocess (`-Users-oronans--chunk-to-chat-observer` slug) shows as its own card so the user can confirm sonnet 4.6 is alive; its events do NOT get fed back into the observer (`!isObserverSelf` guard at server.ts).
 - **ambient quiet:** when every visible session is idle 5min+ and nothing is selected, the sidebar collapses to a single mono line: `quiet — N agents running, last activity Xm ago`. mouse movement temporarily wakes the inbox; re-arms after 30s of stillness.
 - **right pane (detail)**: when no selection → "select a session" placeholder. when selected, three bands:
   - **action band** (top): session header (name + source · elapsed), optional `untouched for Xm` line (per-session, persisted in localStorage on click-into), chat slots.
   - **instrument band** (middle): paired complexity + code-changes charts in a 2-column grid (collapses to 1 column at <880px or when one chart is suppressed).
   - **reference band** (bottom): collapsed `▸ latest output` toggle (HTML `<details>`); expanded state persists per session in localStorage. the dark terminal block lives inside the `<details>`.
 
-**chat slot** (per flagged turn or default):
-- context line: insight + tags (or "no observer flag yet — pick this up and edit it.")
+**chat slot** (one per session, latest open+prefill insight wins):
+- context line: insight + tags (or "no observer flag yet — pick this up and edit it." when no insight yet).
 - editable textarea prefilled with observer's prefill (or `DEFAULT_PREFILL`).
 - `›` send button (indigo). currently no-op — logs `[chat] send {turnId, text}` to console + shows "queued (agent not wired yet)". copy-to-clipboard interim deferred per design walkthrough.
 - drafts and sent-state stored in two in-memory maps keyed `(sessionKey, turnId)`. survives 5s render ticks. lost on page reload.
+- older flagged turns are still tracked in `observerDecisions` but no longer get their own input surface; the user only ever acts on the latest.
 
 **charts** (turn complexity + code changes): paired bars per turn.
 - complexity: `input` (Pewter at 0.55 opacity) + `output` (Signal Indigo at 0.9; latest = Live Coral at 1.0). suppressed entirely when `<2 turns` (a single bar reads as broken).
@@ -241,17 +243,29 @@ normative source of truth is **`DESIGN.md`** at the repo root (visual system) an
 
 ## what's next (priority order, my read)
 
-ui design queue (locked via `/impeccable critique` walkthrough; all three commits landed):
+**already landed in this run** (impeccable critique walkthrough + follow-ons):
+- ✅ `6ae6e69` impeccable context (PRODUCT.md, DESIGN.md, design.json)
+- ✅ `1d0d1a9` ui polish: three-band detail, ambient idle, live/idle cards, terminal collapse
+- ✅ `76d957e` Latest-Only Coral Rule scoping (doc only)
+- ✅ `455885e` observer rolling sessionSummary
+- ✅ `fef7c32` plan.md tagline rewrite
+- ✅ `61fc731` observer-self surfaced as a session card (with infinite-mirror guard)
+- ✅ `f5b5827` observer default-on (`META_OBSERVER_ENABLED=1` is implicit)
+- ✅ `80d022b` observer-given session names + one chat slot per session
 
-- ✅ commit 1: ui polish (`1d0d1a9`)
-- ✅ commit 2: doc tightening — Latest-Only Coral Rule (`76d957e`)
-- ✅ commit 3: observer rolling sessionSummary (this commit)
+---
 
-then the deferred design items (per the walkthrough):
+**resume-here queue** (in priority order, top is what to start on after a /clear):
 
-3. **send button copy-to-clipboard interim** — `›` writes textarea to clipboard, swaps to `✓` for 1.4s, indicator copy "copied — paste into your claude session." real send (#4) supersedes when ready.
-4. **wire send → spawn agent** — when `›` clicked, spawn an ephemeral sdk subprocess with the textarea text as init prompt, stream assistant replies into the slot below the input. observer isn't part of this — different agent, different role. this is the actual product.
-5. **feed-vs-dashboard reframe** (held as v2) — the current shape is two-pane dashboard. the brief is glance-from-side-monitor, which is feed-shaped. revisit once we've lived with the cleaned-up dashboard for a week.
+1. **chat-style detail pane** — drop the `<details>` "latest output" terminal collapse and the per-turn chat-slot stack. Replace with a single chat-client view: a scrollable conversation tail of the last N turns (N≈5; user prompts + agent outputs interleaved, role labels in mono Pewter, white-space pre-wrap, no syntax highlighting), then a single chat input row at the bottom (textarea + `›` send) prefilled with the latest observer prefill (or `DEFAULT_PREFILL`). Charts move below the input or get demoted to a separate band. Reference: like Claude.ai / ChatGPT / Cluely. The user's exact words: *"single chat session (like in chatly and chatgpt and claude) we show the tail -N x of the output of the agent, and we have next the box for the user input with the prefiled input like we said."* Touches `public/index.html` only — drops `dTerminalDetails`, the `terminal-toggle` CSS, the localStorage open-state code, and the existing `renderChats` chat-slot layout. Everything else (sidebar, ambient idle, observer-given names, summary panel) stays.
+
+2. **bump `META_INBOX_MINUTES` default** — current default 60min feels too short; gone projects vanish from the inbox on reload. User asked to "leave the gone projects for a while" but didn't pick a number when offered 4h / 8h / 24h. Default recommendation: 240 (4h). One-line change in `src/server.ts` + state.md env-table update.
+
+3. **send button copy-to-clipboard interim** — `›` writes textarea to clipboard, swaps to `✓` for 1.4s, indicator copy "copied — paste into your claude session." Real send (#4) supersedes when ready.
+
+4. **wire send → spawn agent** — when `›` clicked, spawn an ephemeral sdk subprocess with the textarea text as init prompt, stream assistant replies into the chat tail (above the input box). Observer isn't part of this — different agent, different role. This is the actual product.
+
+5. **feed-vs-dashboard reframe** (held as v2) — the current shape is two-pane dashboard. The brief is glance-from-side-monitor, which is feed-shaped. Revisit once we've lived with the cleaned-up dashboard for a week.
 
 backend / observer work (independent of the design queue):
 
@@ -259,6 +273,12 @@ backend / observer work (independent of the design queue):
 7. **feedback channel (M3)** — server tracks user interactions (which sessions the user opens, which slots they send, dwell time), pushes a "since last batch the user did X, Y, Z" prompt to the observer periodically. observer adapts gate.
 8. **userpromptsubmit hook (phase E)** — once we have a draft instruction in the chat, a hook script should be able to inject it into the user's main cc session. correct stdout shape per `claude-mem-patterns.md` §21.
 9. **codex schema parser** — `~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl`; uses different `{type, payload}` envelope. straightforward second parser branch in `jsonl.ts` after we sketch a `RawCodexRecord` type.
+
+---
+
+**process notes for the next session:**
+- saved feedback memory: after big chunks of work, run `/codex:review` (generic) or ask the user to invoke `/codex:adversarial-review <args>` themselves (the latter is gated against model invocation — only the user can launch it). don't confuse with `codex:rescue`.
+- design source-of-truth: `PRODUCT.md` (strategic) + `DESIGN.md` (visual). both are normative; check them before any UI decision.
 
 ---
 
