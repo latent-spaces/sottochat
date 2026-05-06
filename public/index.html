@@ -99,6 +99,47 @@
     }
     .sprinkle-burst.round { width: 5px; height: 5px; }
 
+    /* a single cake icon perches somewhere in the detail pane, picked at random
+       on every session-open. lives inside its target so it scrolls with it.
+       size + anchor are set per-target via inline custom props + an anchor class.
+       gsap entrance: drop in from above with blur-fade + soft overshoot. */
+    .cake-perch {
+      position: absolute;
+      width: var(--cake-size, 26px);
+      height: var(--cake-size, 26px);
+      pointer-events: none;
+      z-index: 5;
+      transform-origin: 50% 100%;
+      filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.12));
+    }
+    .cake-perch img { width: 100%; height: 100%; display: block; }
+    /* anchor variants — left/top/right resolved relative to the target's offset parent. */
+    .cake-perch.bar-top {
+      left: 50%;
+      top: calc(-1 * var(--cake-size, 26px) - 2px);
+      transform: translate(-50%, 0) rotate(var(--cake-tilt, 0deg));
+    }
+    .cake-perch.card-top-right {
+      right: 12px;
+      top: calc(-1 * var(--cake-size, 36px) * 0.55);
+      transform: rotate(var(--cake-tilt, 0deg));
+    }
+    .cake-perch.head-right {
+      right: -8px;
+      top: calc(-1 * var(--cake-size, 30px) * 0.4);
+      transform: rotate(var(--cake-tilt, 0deg));
+    }
+    .cake-perch.input-top-right {
+      right: 14px;
+      top: calc(-1 * var(--cake-size, 36px) * 0.6);
+      transform: rotate(var(--cake-tilt, 0deg));
+    }
+    .cake-perch.legend-corner {
+      right: -14px;
+      top: -14px;
+      transform: rotate(var(--cake-tilt, 0deg));
+    }
+
     /* keep main content above the sprinkle layer */
     main.layout { position: relative; z-index: 1; }
 
@@ -327,8 +368,8 @@
       position: absolute;
       right: -4px;
       bottom: -8px;
-      width: 76px;
-      height: 76px;
+      width: 61px;   /* 80% of the prior 76px */
+      height: 61px;
       pointer-events: none;
       object-fit: contain;
     }
@@ -1036,8 +1077,8 @@
     const AMBIENT_MS = 5 * 60 * 1000;   // all sessions idle this long → quiet collapse
 
     // assets
-    const MASCOT_ACTIVE = "/assets/mascot-cupcake-wand.webp";
-    const MASCOT_IDLE = "/assets/mascot-cupcake-fork.webp";
+    const MASCOT_ACTIVE = "/assets/cake-icon.svg";
+    const MASCOT_IDLE = "/assets/mascot-var-2.svg";
 
     // motion helpers — magicui-style ports.
     // blurFadeIn = the BlurFade pattern: opacity 0 + blur(8px) + small y offset → reveal.
@@ -1246,6 +1287,89 @@
     // only to bars taller than this threshold (% of yMax) so short bars don't get
     // crushed by their own frosting silhouette.
     const BAR_FROST_MIN_PCT = 25;
+
+    // a single cake decoration perches somewhere in the detail pane on every
+    // session-open. target is picked deterministically per session (so it
+    // doesn't jump every 5s refresh) but varies between sessions. softly
+    // animates in via gsap (drop + blur-fade + soft overshoot).
+    function cakeHash(seed) {
+      let h = 5381;
+      const s = String(seed || "");
+      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+      return h;
+    }
+    // pool of perch surfaces. each entry: a query selector + the size of the
+    // cake at that surface + the anchor class describing how to position it.
+    // size adapts to the surface — 26px on a bar, 40px on a chart card.
+    // two mascot variants — perch picks one per session via hash, so different
+    // sessions get different mascots while a given session stays consistent.
+    const CAKE_PERCH_ICONS = [
+      "/assets/cake-icon.svg",
+      "/assets/mascot-var-2.svg",
+    ];
+    const CAKE_PERCH_POOL = [
+      // frosted bars (output / added) — same as before, smallest size.
+      { selectorAll: "#detail-content .cx-bar.bar-output, #detail-content .cx-bar.bar-added",
+        size: 26, anchor: "bar-top",
+        valid: (el) => !!el.querySelector(".bar-frost") },
+      // top-right corner of either chart card.
+      { selectorAll: "#detail-content .chart-card",          size: 38, anchor: "card-top-right" },
+      // floating off the session-head heading.
+      { selectorAll: "#detail-content .session-head h2",     size: 30, anchor: "head-right" },
+      // top-right of the chat-input panel.
+      { selectorAll: "#detail-content .chat-input",          size: 36, anchor: "input-top-right" },
+    ];
+    // last placed perch, recorded so we can short-circuit refresh re-mounts
+    // when the same session+target combo is still valid (avoids replay flicker).
+    let lastCakePerchKey = null;
+    function placeCakePerch(sessionId, opts) {
+      const animate = !!(opts && opts.animate);
+      // chart/chat-input innerHTML is wiped every 5s refresh, taking the cake
+      // with it. so this function gets called from renderDetail every tick and
+      // re-mounts a fresh cake in the same deterministic spot. the `animate`
+      // flag controls whether to play the entrance — only true on session-open.
+      const prior = document.getElementById("cake-perch");
+      if (prior) {
+        if (animate && typeof gsap !== "undefined" && !reduceMotionOn()) {
+          gsap.killTweensOf(prior);
+          gsap.to(prior, {
+            opacity: 0, scale: 0.55, y: -14, duration: 0.35, ease: "power2.in",
+            onComplete: () => prior.remove(),
+          });
+        } else {
+          prior.remove();
+        }
+      }
+      if (!sessionId) { lastCakePerchKey = null; return; }
+      // gather candidates across the pool — flatten matches into a single list.
+      const candidates = [];
+      for (const cfg of CAKE_PERCH_POOL) {
+        const matches = document.querySelectorAll(cfg.selectorAll);
+        for (const el of matches) {
+          if (cfg.valid && !cfg.valid(el)) continue;
+          candidates.push({ el, size: cfg.size, anchor: cfg.anchor });
+        }
+      }
+      if (!candidates.length) return;
+      const pickH = cakeHash(sessionId + ":pick");
+      const tiltH = cakeHash(sessionId + ":tilt");
+      const pick = candidates[pickH % candidates.length];
+      const tilt = (tiltH % 31) - 15; // -15..+15 deg
+      // ensure the host is a positioned ancestor so absolute children anchor here.
+      if (getComputedStyle(pick.el).position === "static") pick.el.style.position = "relative";
+      const iconIdx = cakeHash(sessionId + ":icon") % CAKE_PERCH_ICONS.length;
+      const iconSrc = CAKE_PERCH_ICONS[iconIdx];
+      const cake = document.createElement("span");
+      cake.id = "cake-perch";
+      cake.className = "cake-perch " + pick.anchor;
+      cake.style.cssText = "--cake-size: " + pick.size + "px; --cake-tilt: " + tilt + "deg;";
+      cake.innerHTML = '<img src="' + iconSrc + '" alt="" />';
+      pick.el.appendChild(cake);
+      lastCakePerchKey = sessionId + "|" + pick.anchor;
+      // mascot appears silently — no entrance animation, just shows up in place.
+      // (the prior fade-out on session change still runs so the old cake clears
+      // cleanly before the new one mounts.)
+    }
     // as a css mask so editing the svg file updates every bar. the span itself
     // carries no markup; the bar's currentColor fills the masked shape.
     const BAR_FROST = '<span class="bar-frost" aria-hidden="true"></span>';
@@ -1744,6 +1868,12 @@
       renderConversation(sess, turns);
       renderChatThread(sess);
       renderChatInput(sess, latestFlag);
+
+      // the cake perch is re-mounted every refresh tick (chart/chat-input
+      // innerHTML wipes wreck DOM nodes inside them every 5s). animate only on
+      // session-open — silent re-mount on refresh keeps the cake visually
+      // pinned without replaying the entrance.
+      placeCakePerch(sessionId, { animate: opening });
 
       // when the open session changes (or first opens), blur-fade the detail
       // pane in with a two-tier cascade — the region step is the spine, the
