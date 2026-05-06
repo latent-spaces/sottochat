@@ -7,7 +7,7 @@ import { buildTurnFeed, startObserver } from "./observer";
 const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
 const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
 const PROJECT_SLUG = Bun.env.META_PROJECT_SLUG;
-const RECENT_MS = Number(Bun.env.META_INBOX_MINUTES ?? 60) * 60 * 1000;
+const RECENT_MS = Number(Bun.env.META_INBOX_MINUTES ?? 240) * 60 * 1000;
 const MAX_EVENTS_PER_SESSION = 5000;
 // observer is on by default; set META_OBSERVER_ENABLED=0 to opt out
 // (e.g. when iterating in `bun run dev` to avoid orphaning the sdk subprocess

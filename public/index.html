@@ -164,21 +164,38 @@
       margin: 0 auto;
       padding: 24px 24px 96px;
       display: flex;
-      gap: 24px;
+      gap: 0;
       align-items: flex-start;
     }
+    /* the panes carry barely-there gradients of two different temperatures —
+       sidebar trends rose, detail trends cream — separated by a hairline.
+       at full opacity it would read as two coloured panels; at these alphas
+       the eye reads "single surface, gently divided." */
     .sidebar {
       flex: 0 0 320px;
       position: sticky;
       top: 80px;
+      padding: 4px 22px 20px 0;
+      border-right: 1px solid rgba(244, 114, 182, 0.10);
+      background: linear-gradient(180deg, rgba(252, 231, 243, 0.32) 0%, rgba(252, 231, 243, 0) 70%);
     }
     .detail-pane {
       flex: 1;
       min-width: 0;
+      padding: 4px 0 20px 22px;
+      background: linear-gradient(180deg, rgba(255, 244, 232, 0.30) 0%, rgba(255, 244, 232, 0) 70%);
     }
     @media (max-width: 880px) {
       main.layout { flex-direction: column; }
-      .sidebar { flex: 1 1 auto; position: static; width: 100%; }
+      .sidebar {
+        flex: 1 1 auto;
+        position: static;
+        width: 100%;
+        padding: 0 0 16px;
+        border-right: none;
+        border-bottom: 1px solid rgba(244, 114, 182, 0.10);
+      }
+      .detail-pane { padding: 16px 0 0; }
     }
     .section-label {
       font-size: 11px;
@@ -447,12 +464,31 @@
       min-height: 1px;
       border-radius: 3px 3px 0 0;
       max-width: 22px;
+      position: relative;
+      overflow: visible;
     }
-    .bar-input { background: var(--accent); opacity: 0.55; }
-    .bar-output { background: var(--plum); opacity: 0.9; }
-    .cx-pair.latest .bar-output { background: var(--plum); opacity: 1; }
-    .bar-added { background: var(--diff-green); opacity: 0.9; }
-    .bar-removed { background: var(--diff-red); opacity: 0.9; }
+    /* dripping-icing cap — silhouette comes from /assets/bar-frost.svg used as
+       a mask, the fill is the bar's own `currentColor` (so the bar's opacity
+       carries through and frost == bar). edit the svg file to change shape;
+       the inline rendering follows automatically. */
+    .bar-frost {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: -11px;
+      width: 100%;
+      height: 12px;
+      pointer-events: none;
+      display: block;
+      background-color: currentColor;
+      -webkit-mask: url("/assets/bar-frost.svg") no-repeat top / 100% 100%;
+              mask: url("/assets/bar-frost.svg") no-repeat top / 100% 100%;
+    }
+    .bar-input { background: var(--accent); color: var(--accent); opacity: 0.55; }
+    .bar-output { background: var(--plum); color: var(--plum); opacity: 0.9; }
+    .cx-pair.latest .bar-output { background: var(--plum); color: var(--plum); opacity: 1; }
+    .bar-added { background: var(--diff-green); color: var(--diff-green); opacity: 0.9; }
+    .bar-removed { background: var(--diff-red); color: var(--diff-red); opacity: 0.9; }
 
     .chart-foot {
       display: flex;
@@ -871,6 +907,40 @@
       els.forEach((el, i) => blurFadeIn(el, { delay: start + step * i, duration: o.duration }));
     }
 
+    // per-session colour palette — each session hashes to one entry; the
+    // resulting accent/plum/hover overrides --accent etc. on the card root
+    // and on the detail pane while that session is open. all hues stay in the
+    // dessert/patisserie register so the brand still reads.
+    const SESSION_PALETTE = [
+      // strawberry (default brand)
+      { accent: "236, 72, 153",  hover: "219, 39, 119",  plum: "168, 85, 247" },
+      // peach
+      { accent: "249, 115, 22",  hover: "234, 88, 12",   plum: "236, 72, 153" },
+      // mint
+      { accent: "16, 185, 129",  hover: "5, 150, 105",   plum: "20, 184, 166" },
+      // blueberry
+      { accent: "59, 130, 246",  hover: "37, 99, 235",   plum: "129, 140, 248" },
+      // lavender
+      { accent: "168, 85, 247",  hover: "147, 51, 234",  plum: "236, 72, 153" },
+      // honey
+      { accent: "234, 179, 8",   hover: "202, 138, 4",   plum: "249, 115, 22" },
+    ];
+    function sessionColorIdx(sessionId) {
+      const s = String(sessionId || "");
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+      return h % SESSION_PALETTE.length;
+    }
+    function sessionColorVars(sessionId) {
+      const c = SESSION_PALETTE[sessionColorIdx(sessionId)];
+      return (
+        "--accent: rgb(" + c.accent + ");" +
+        "--accent-hover: rgb(" + c.hover + ");" +
+        "--accent-soft: rgba(" + c.accent + ", 0.12);" +
+        "--plum: rgb(" + c.plum + ");"
+      );
+    }
+
     // state — one entry per discovered session, keyed by server-side key
     // ("<source>:<path>"). Each carries its own events/threads/lastEventTs.
     const sessionsByKey = new Map();
@@ -1006,6 +1076,10 @@
     // chart icons — small inline svgs sitting in a tinted bubble in the card head
     const ICON_COMPLEXITY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12 L5 8 L8 10 L11 5 L14 8"/></svg>';
     const ICON_CODE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4 L2 8 L5 12 M11 4 L14 8 L11 12 M9.5 3.5 L6.5 12.5"/></svg>';
+    // dripping-icing cap — shape lives in /assets/bar-frost.svg, applied here
+    // as a css mask so editing the svg file updates every bar. the span itself
+    // carries no markup; the bar's currentColor fills the masked shape.
+    const BAR_FROST = '<span class="bar-frost" aria-hidden="true"></span>';
     // charts cap at the last N turns — keeps bars wide and the panel uncluttered.
     const CHART_TURNS = 5;
 
@@ -1044,8 +1118,8 @@
           " · you: " + d.input + "w";
         return (
           '<div class="cx-pair' + (isLast ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
-            '<div class="cx-bar bar-input" style="height: ' + inputH + '%"></div>' +
-            '<div class="cx-bar bar-output" style="height: ' + outputH + '%"></div>' +
+            '<div class="cx-bar bar-input" style="height: ' + inputH + '%">' + BAR_FROST + '</div>' +
+            '<div class="cx-bar bar-output" style="height: ' + outputH + '%">' + BAR_FROST + '</div>' +
           '</div>'
         );
       }).join("");
@@ -1094,8 +1168,8 @@
         const tip = "+" + d.added + " / -" + d.removed + " lines";
         return (
           '<div class="cx-pair' + (isLast ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
-            '<div class="cx-bar bar-added" style="height: ' + addedH + '%"></div>' +
-            '<div class="cx-bar bar-removed" style="height: ' + removedH + '%"></div>' +
+            '<div class="cx-bar bar-added" style="height: ' + addedH + '%">' + BAR_FROST + '</div>' +
+            '<div class="cx-bar bar-removed" style="height: ' + removedH + '%">' + BAR_FROST + '</div>' +
           '</div>'
         );
       }).join("");
@@ -1127,10 +1201,42 @@
       );
     }
 
+    // collapse same-slug lineage: a `/clear` in claude code mints a new
+    // sessionId + new jsonl in the same project dir, leaving the old jsonl
+    // dormant. without coalescing, the user sees two cards for what's
+    // logically one continuing project — and accumulated dead siblings
+    // (bun --hot orphaning subprocesses, short-lived var-folders shells)
+    // pile up indefinitely. rule: within a (source, slug) group, the
+    // freshest is always shown; non-freshest siblings show only while they
+    // *themselves* are still active (lastEventTs within LINEAGE_FRESH_MS of
+    // now). this hides /clear predecessors after ~LINEAGE_FRESH_MS and the
+    // dead-on-arrival subprocesses too. parallel terminals on the same
+    // project keep emitting events and stay visible.
+    // pattern adapted from abtop's `find_live_session_id`
+    // (vendor/abtop/src/collector/claude.rs:1029-1041), without the PID-FD
+    // resolution since bun has no native libproc binding.
+    const LINEAGE_FRESH_MS = 60 * 1000;
+
     function sortedSessions() {
-      return Array.from(sessionsByKey.values())
-        .filter(s => (s.threads && s.threads.length > 0))
+      const all = Array.from(sessionsByKey.values())
         .sort((a, b) => (b.lastEventTs || 0) - (a.lastEventTs || 0));
+
+      const freshestByLineage = new Map();
+      for (const s of all) {
+        const key = (s.info?.source || "") + " " + (s.info?.slug || "");
+        const ts = s.lastEventTs || 0;
+        const cur = freshestByLineage.get(key) || 0;
+        if (ts > cur) freshestByLineage.set(key, ts);
+      }
+
+      return all.filter(s => {
+        const key = (s.info?.source || "") + " " + (s.info?.slug || "");
+        const my = s.lastEventTs || 0;
+        const fresh = freshestByLineage.get(key) || 0;
+        // freshest in lineage → always show. non-freshest → only if *i*
+        // had activity recently (parallel sessions / just-cleared edge cases).
+        return my >= fresh || (Date.now() - my) < LINEAGE_FRESH_MS;
+      });
     }
 
     function findSessionBySessionId(sessionId) {
@@ -1204,6 +1310,7 @@
       card.href = "#session/" + encodeURIComponent(sess.info.sessionId);
       card.dataset.sessionId = sess.info.sessionId;
       card.dataset.sig = cardSig(sess);
+      card.style.cssText = sessionColorVars(sess.info.sessionId);
       card.innerHTML = buildCardInnerHtml(sess, opts);
       applyCardClasses(card, sess, opts);
       return card;
@@ -1429,6 +1536,7 @@
       lastDetailSessionId = sessionId;
       detailEmpty.hidden = true;
       detailContent.hidden = false;
+      detailContent.style.cssText = sessionColorVars(sessionId);
       const events = sess.events || [];
       dName.textContent = sessionName(sess);
       const sourceEl = document.getElementById("d-source");
@@ -1654,8 +1762,9 @@
         '<div class="chat-input-row">' +
           '<textarea rows="2" placeholder="walk me through it…">' + escapeHtml(initial) + '</textarea>' +
           '<button class="send-btn" title="send" aria-label="send">' +
-            '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
-              '<path d="M21.45 11.05L3.49 3.07a1 1 0 00-1.4 1.13l1.94 6.32a1 1 0 00.83.7l8.7 1.13a.18.18 0 010 .36l-8.7 1.13a1 1 0 00-.83.7l-1.94 6.32a1 1 0 001.4 1.13l17.96-7.98a1 1 0 000-1.96z"/>' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+              '<line x1="12" y1="19" x2="12" y2="5"/>' +
+              '<polyline points="5 12 12 5 19 12"/>' +
             '</svg>' +
           '</button>' +
         '</div>' +

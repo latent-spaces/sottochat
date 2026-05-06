@@ -2,7 +2,12 @@
 // FileState (offset, partial buffer, seenUuids), so two simultaneous
 // claude code sessions don't fight over a shared offset (the old "flap"
 // bug). pattern: claude-mem TranscriptWatcher (notes/claude-mem-patterns.md
-// §1, §3), simplified — we re-glob each tick instead of watching roots.
+// §1, §3): per-tick re-glob as the steady-state baseline + a recursive
+// fs.watch on each source root that wakes the tick the moment a new file
+// appears — without it a brand-new session can be invisible for up to
+// pollMs (default 500ms), and on systems where dir mtime caching is sticky
+// the gap can stretch. fs.watch fires on creation so the next tick fires
+// within milliseconds.
 //
 // we only register a tailer for files whose mtime is within RECENT_MS,
 // so historical sessions on disk don't get fully parsed on startup.
@@ -15,6 +20,7 @@
 // codex sessions use a different schema and are not yet wired.
 
 import { open, readdir, stat } from "node:fs/promises";
+import { existsSync, watch as fsWatch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Dirent } from "node:fs";
@@ -37,6 +43,9 @@ export type TailerOptions = {
 
 type WatchTarget = {
   name: string;
+  // root for the recursive fs.watch (must be a real dir on disk; if it
+  // doesn't exist yet we just skip the watcher and rely on polling).
+  watchRoot: string;
   discover: () => Promise<string[]>;
   describe: (path: string) => { slug: string; sessionId: string };
 };
@@ -84,6 +93,7 @@ async function listJsonlRecursive(root: string, depth = 8): Promise<string[]> {
 function ccTarget(slugFilter?: string): WatchTarget {
   return {
     name: "claude-code",
+    watchRoot: CC_PROJECTS,
     async discover() {
       let slugs: string[];
       try {
@@ -120,6 +130,7 @@ function ccTarget(slugFilter?: string): WatchTarget {
 function claudeAppTarget(): WatchTarget {
   return {
     name: "claude-app",
+    watchRoot: CLAUDE_APP_LAM,
     async discover() {
       return await listJsonlRecursive(CLAUDE_APP_LAM, 8);
     },
@@ -233,6 +244,58 @@ export function startTailer(opts: TailerOptions): { stop: () => void } {
     }
   };
 
+  // wake-up channel: fs.watch on each watchRoot raises a flag, and a single
+  // sleep promise resolves either after pollMs or whenever that flag flips.
+  // this collapses bursty notify storms into one extra tick rather than one
+  // tick per fs.watch event (claude-mem §3 — "re-globbing is cheap because
+  // tailers.has guards keep it idempotent" applies here too).
+  let wakeResolve: (() => void) | null = null;
+  let pendingWake = false;
+  const wake = () => {
+    pendingWake = true;
+    if (wakeResolve) {
+      const r = wakeResolve;
+      wakeResolve = null;
+      r();
+    }
+  };
+  const sleep = (ms: number) =>
+    new Promise<void>((resolve) => {
+      if (pendingWake) {
+        pendingWake = false;
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => {
+        wakeResolve = null;
+        pendingWake = false;
+        resolve();
+      }, ms);
+      wakeResolve = () => {
+        clearTimeout(timer);
+        pendingWake = false;
+        resolve();
+      };
+    });
+
+  const watchers: FSWatcher[] = [];
+  for (const target of targets) {
+    if (!existsSync(target.watchRoot)) continue;
+    try {
+      const w = fsWatch(target.watchRoot, { recursive: true, persistent: false }, () => {
+        wake();
+      });
+      w.on("error", () => {
+        /* ignored — recursive watches occasionally drop on rename storms;
+           the poller is the source of truth, the watch is a wake-up signal. */
+      });
+      watchers.push(w);
+    } catch {
+      // some platforms (older linux kernels, network mounts) reject recursive
+      // watches; that's fine, polling still works.
+    }
+  }
+
   void (async () => {
     while (!stopped) {
       try {
@@ -240,13 +303,22 @@ export function startTailer(opts: TailerOptions): { stop: () => void } {
       } catch (e) {
         console.error("[tailer]", e);
       }
-      await new Promise((r) => setTimeout(r, pollMs));
+      await sleep(pollMs);
     }
   })();
 
   return {
     stop: () => {
       stopped = true;
+      for (const w of watchers) {
+        try {
+          w.close();
+        } catch {
+          /* swallow */
+        }
+      }
+      watchers.length = 0;
+      wake();
     },
   };
 }
