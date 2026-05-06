@@ -8,20 +8,22 @@ cold-start brief. read this first when resuming. intentionally redundant with `p
 
 **cut-the-cake** (formerly chunk-to-chat) — *turn long agent runs into a quick iterative chat.*
 
-a chat layer for long claude code (and other autonomous agent) sessions. tails session jsonl files in real time, runs a single long-lived sonnet observer over the closed-turn stream, and surfaces moments worth user attention as 1-sentence insights + editable prefills the user can hand back to the original agent.
+a chat layer for long claude code (and other autonomous agent) sessions. tails session jsonl files in real time, runs **two** long-lived sdk observers over the closed-turn stream — sonnet for per-turn decisions, haiku for session naming — and (when auto-break-down is on) automatically fires a sonnet chat-agent into a "break it down" thread the moment the decisions observer flags a turn.
 
 the loop:
 
 1. agents run (claude code cli, claude.app local-agent-mode; codex deferred)
 2. cut-the-cake tails every cc-schema jsonl across all known roots, parses events, groups into turns
-3. when turns close, they're batched (every 30s) and sent to a persistent sonnet observer subprocess
-4. observer returns per-turn `{open, insight, tags, prefill}` json plus a per-session `sessionName` (rolling display title — used in cards and detail header)
-5. ui shows a sidebar of session cards (left) + selected session detail (right). detail pane is now a chat-style strip (prev-agent → you → agent, markdown-rendered, height-truncated) with one chat input at the bottom prefilled with the observer's prefill
-6. user clicks the send button → **placeholder** (logs only); next step is to spawn a new sdk agent with that text and stream replies into the strip — `src/chat-agent.ts` is drafted but not yet wired
+3. when turns close, they're batched (every 30s) and sent to **two** persistent sdk subprocesses:
+   - **observer** (sonnet 4.6) returns per-turn `{open, insight, tags, prefill}`
+   - **namer** (haiku 4.5) returns per-session `{sessionName}` (rolling display title)
+4. ui shows a sidebar of session cards (left) + selected session detail (right). detail pane = charts band → 3-message chat strip → per-session chat-thread (the live "break it down" conversation) → chat input prefilled with the observer's prefill.
+5. when the observer flags `open: true` *and* the global auto-break-down toggle is on, the server fires the prefill into the chat-agent automatically — pre-seeded with the observer insight + last 5 turn excerpts. user opens the tab to a primed conversation. follow-ups go through the same sdk subprocess (one per upstream sessionKey).
+6. when auto-break-down is off (the default), the user clicks the send button → POST `/chat/send` does the same thing, just user-initiated.
 
-what's wired: multi-source tailer (recursive fs.watch + per-tick poll, lineage collapse) · multi-session inbox · diff-rendered sidebar with magicui-style enter/exit/update pulse + FLIP layout for inserts · observer (sonnet 4.6 sdk) with auto-respawn · chat strip with markdown + tail truncation · charts above the conversation, panel-styled, capped to last 5 turns · soft pink visual system (full strawberry/dessert redesign, six-hue per-session palette) · sticky frosted nav + github pill · sidebar/detail visual separation (hairline + two-tone gradient) · svg dripping-frosting cap on bar plots.
+what's wired: multi-source tailer (recursive fs.watch + per-tick poll, lineage collapse + temp-folder filter) · multi-session inbox · diff-rendered sidebar with magicui-style enter/exit/update pulse + FLIP layout (transform-leak fix) · split observer (sonnet decisions + haiku namer, both with auto-respawn) · chat-agent host (sonnet, one persistent subprocess per upstream sessionKey, tools disabled) · POST `/chat/send` + ws chat:chunk/chat:status broadcasts · auto-send on observer open=true with 5-min cooldown + global toggle (default off) · chat-thread block in detail pane (markdown, "auto" badge for server-fired chunks) · charts above the conversation, panel-styled, capped to last 5 turns · soft pink visual system (full strawberry/dessert redesign, six-hue per-session palette) · sticky frosted nav with github pill + auto-break-down toggle · sidebar/detail visual separation · svg dripping-frosting cap on bar plots (color-mix lightened, only on tall bars) · hover-burst radial sprinkle spray out of frosted bars · brand jump-roll on the cake logo · wandering cake-perch mascot picks a random DOM target on session-open · two svg mascots replacing the legacy webps · sidebar selected-card mascot with hover y-flip + fade in/out.
 
-what's not wired yet: send → spawn new agent (chat-agent.ts drafted, not connected) · observer profile persistence (`session_id` resume across restarts) · feedback channel back to observer · userpromptsubmit hook for the final injection back into the user's main claude session.
+what's not wired yet: observer profile persistence (`session_id` resume across restarts) · feedback channel back to observer · userpromptsubmit hook for the final injection back into the user's main claude session · codex schema parser.
 
 ---
 
@@ -35,23 +37,27 @@ bun run src/server.ts
 open http://localhost:3737/
 ```
 
-observer is on by default. set `META_OBSERVER_ENABLED=0` to opt out — useful when iterating in `bun run dev` (`bun --hot` orphans the sdk subprocess on every file edit, see issue #4).
+observer is on by default. set `META_OBSERVER_ENABLED=0` to opt out — useful when iterating in `bun run dev` (`bun --hot` orphans the sdk subprocess on every file edit, see issue #4). auto-break-down is **off** by default — flip it on via the top-nav pill or `META_AUTO_SEND_ENABLED=1`.
 
 env vars (all optional):
 
-| var                       | default              | purpose                                                 |
-|---------------------------|----------------------|---------------------------------------------------------|
-| `META_PORT`               | 3737                 | server port                                             |
-| `META_POLL_MS`            | 500                  | tailer poll interval (fs.watch wakes earlier on new files) |
-| `META_PROJECT_SLUG`       | unset                | restrict cc tailing to one project dir                  |
-| `META_INBOX_MINUTES`      | 240                  | only tail jsonl files whose mtime is within this window |
-| `META_OBSERVER_ENABLED`   | 1 (on)               | set `0` to skip spawning the sdk observer               |
-| `META_OBSERVER_MODEL`     | `claude-sonnet-4-6`  | model the observer subprocess runs                      |
-| `META_OBSERVER_BATCH_MS`  | 30000                | batch interval for sending closed turns (ceiling, not heartbeat — quiet windows skip the call) |
-| `META_OBSERVER_FRESH_MS`  | 300000               | only feed turns whose endTs is within this window       |
-| `META_MAGNITUDE_TOK`      | 1500                 | fallback trigger threshold (used when observer is off)  |
-| `META_MAGNITUDE_TC`       | 5                    | fallback trigger threshold (tools/turn)                 |
-| `META_MAGNITUDE_CHARS`    | 6000                 | fallback char trigger                                   |
+| var                            | default              | purpose                                                 |
+|--------------------------------|----------------------|---------------------------------------------------------|
+| `META_PORT`                    | 3737                 | server port                                             |
+| `META_POLL_MS`                 | 500                  | tailer poll interval (fs.watch wakes earlier on new files) |
+| `META_PROJECT_SLUG`            | unset                | restrict cc tailing to one project dir                  |
+| `META_INBOX_MINUTES`           | 240                  | only tail jsonl files whose mtime is within this window |
+| `META_OBSERVER_ENABLED`        | 1 (on)               | set `0` to skip spawning both sdk subprocesses          |
+| `META_OBSERVER_MODEL`          | `claude-sonnet-4-6`  | model for the per-turn decisions subprocess             |
+| `META_NAMER_MODEL`             | `claude-haiku-4-5`   | model for the session-naming subprocess                 |
+| `META_CHAT_MODEL`              | `claude-sonnet-4-6`  | model for the "break it down" chat-agent subprocesses   |
+| `META_OBSERVER_BATCH_MS`       | 30000                | batch interval for closed turns (ceiling, not heartbeat — quiet windows skip the call) |
+| `META_OBSERVER_FRESH_MS`       | 300000               | only feed turns whose endTs is within this window       |
+| `META_AUTO_SEND_ENABLED`       | 0 (off)              | set `1` to default-on the auto-break-down toggle        |
+| `META_AUTO_SEND_COOLDOWN_MS`   | 300000               | per-session cooldown between auto-fired chats           |
+| `META_MAGNITUDE_TOK`           | 1500                 | fallback trigger threshold (used when observer is off)  |
+| `META_MAGNITUDE_TC`            | 5                    | fallback trigger threshold (tools/turn)                 |
+| `META_MAGNITUDE_CHARS`         | 6000                 | fallback char trigger                                   |
 
 **locations:**
 
@@ -62,8 +68,13 @@ env vars (all optional):
 
 **revert anchors:**
 - tag `pre-cut-the-cake` → `cc383e9` — last clean state before the strawberry redesign.
-- commit `d27b2ac` — pre-strawberry-v' baseline: removal of what-happened summary panel + svg send icon + sidebar FLIP + slower cascade.
-- commit `398a85e` — current head: tailer fs.watch + lineage collapse, per-session palette, bar-frost svg, `chat-agent.ts` draft.
+- commit `398a85e` — pre-wire-up baseline: tailer fs.watch + lineage collapse, per-session palette, bar-frost svg, `chat-agent.ts` drafted (not yet wired).
+- commit `5f2d750` — observer split + chat send/auto-send + global toggle + frosting + jump-roll.
+- commit `40683db` — hover-burst: radial sprinkle spray out of frosted bars.
+- commit `43fd0eb` — auto-break-down default off + sidebar FLIP transform leak fix.
+- commit `c21139f` — wandering cake-perch mascot + svg mascots in sidebar cards.
+- commit `f631f6f` — add bar-frost-v2.svg.
+- commit `d72ec37` — current head: sidebar mascot smaller (36px) + overlays + hover y-flip with fade in/out.
 
 ---
 
@@ -71,19 +82,22 @@ env vars (all optional):
 
 | phase | description                                                            | state           |
 |-------|------------------------------------------------------------------------|-----------------|
-| 1     | jsonl tailer + raw event feed                                          | done (+ recursive fs.watch wake-up + lineage collapse) |
+| 1     | jsonl tailer + raw event feed                                          | done (+ recursive fs.watch wake-up + lineage collapse + temp-folder filter) |
 | 2     | turn assembly + magnitude trigger                                      | done            |
 | A     | rename to chunk-to-chat → cut-the-cake + two-view ui shell             | done            |
 | B     | multi-session inbox (cc + claude.app local-agent-mode)                 | done            |
-| C     | sonnet observer wiring (gate + insights + prefills + names)            | partial · committed (M1 + M1.5 done; sessionSummary removed; profile + resume not) |
-| D     | break-it-down item flow                                                | partial · committed (chat strip + input wired; chat-agent.ts drafted but not connected to send button) |
+| C     | observer wiring (split: sonnet decisions + haiku namer)                | done · committed (profile-resume across restarts not, feedback channel not) |
+| D     | break-it-down item flow (POST /chat/send + chat-thread + auto-send)    | done · committed |
+| D'    | auto-break-down global toggle (default off)                            | done · committed |
 | E     | userpromptsubmit hook for handoff                                      | not started     |
 | V     | strawberry/dessert visual system + animations                          | done · committed |
 | V'    | per-session colors + sidebar separation + svg frosting                 | done · committed |
+| V''   | new frosting svg + sprinkle burst + brand jump-roll + cake-perch       | done · committed |
+| V'''  | svg mascots + sidebar mascot hover y-flip with fade in/out             | done · committed |
 
-**current head:** `398a85e` (tailer fs.watch + lineage collapse; per-session palette + bar frosting; chat-agent draft).
+**current head:** `d72ec37` (sidebar mascot: smaller, overlays content, hover y-flip with fade in/out).
 
-**working tree:** clean. all the items previously listed as uncommitted (tailer fs.watch, `META_INBOX_MINUTES` 240, threads-filter drop, lineage collapse, per-session palette, sidebar separation, bar-frost svg, `src/chat-agent.ts` draft) shipped together in `398a85e`.
+**working tree:** clean.
 
 ---
 
@@ -115,24 +129,38 @@ src/triggers.ts      magnitude evaluator — used as fallback when observer off
        │  Trigger?
        ▼
 src/server.ts        Bun.serve; per-session state map; ws fanout; routes
-                     / /state /sessions /ws /assets/*
+                     / /state /sessions /chat/send /chat/auto-send /ws /assets/*
        │  ws msg                              ▲
-       ▼                                       │ ObserverInsight + name (broadcast)
-public/index.html    sidebar + detail spa     │
-   + public/assets/  webp art (mascots, empty-state, logo) + bar-frost.svg
+       ▼                                       │ broadcasts: observer:decision/name,
+public/index.html    sidebar + detail spa     │ chat:chunk, chat:status, autosend:setting,
+   + public/assets/  svg mascots, frosting,   │ session:upsert, event, thread:new
+                     empty-state, logo, etc.   │
    + cdn deps        marked@13 (markdown), gsap@3.12 (animations)
-                                              │
-src/observer.ts      single sdk subprocess (sonnet 4.6); batch every 30s;
-                     parses {decisions[], names[]} json (sessionSummary
-                     removed entirely); auto-respawn on crash; SIGINT →
-                     abort + exit
-       ▲
-       │ TurnFeed (closed turns from server, only when queue non-empty)
 
-src/chat-agent.ts    DRAFTED, NOT WIRED. one persistent sdk subprocess per
-                     upstream sessionKey; lazily spawned on first user
-                     send; reuses across follow-ups; tools disabled (talks
-                     only); cwd in ~/.cut-the-cake/chat/<hash>/.
+src/observer.ts      TWO persistent sdk subprocesses driven by a shared
+                     startSdkLoop helper:
+                       observer  · sonnet 4.6 · {decisions:[]}
+                       namer     · haiku 4.5  · {names:[]}
+                     batch every 30s, FIFO inflight tracking per loop,
+                     auto-respawn on crash, SIGINT → abort + exit.
+       ▲
+       │ TurnFeed (closed turns; visible non-self sessions only)
+
+src/chat-agent.ts    WIRED. one persistent sdk subprocess per upstream
+                     sessionKey, lazily spawned on first user send,
+                     reused for follow-ups. tools disabled (talks only),
+                     cwd ~/.cut-the-cake/chat/<sha1-hash>/.
+                     send(sessionKey, text, {seed?, userKind?}) — first
+                     prompt of a session prepends SYSTEM_INTRO + optional
+                     seed block (used by auto-send).
+                     onChunk emits {role, text, ts, kind} — kind="auto"
+                     when server-fired so the UI badges them.
+
+  /chat/send (POST) ─→ chatHost.send(sessionKey, text, {userKind:"user"})
+  observer onDecision (open=true + prefill, autoSendEnabled, cooldown)
+                    ─→ buildAutoSendSeed(s, decision)
+                    ─→ chatHost.send(sessionKey, decision.prefill,
+                                     {seed, userKind:"auto"})
 ```
 
 **stack:** bun + typescript on the server, vanilla browser js on the client. no react. no build step. server-side dep `@anthropic-ai/claude-agent-sdk@^0.2.128`. client-side cdn deps loaded inline: `marked@13.0.3` (~32 KB), `gsap@3.12.5` (~70 KB).
@@ -142,73 +170,153 @@ src/chat-agent.ts    DRAFTED, NOT WIRED. one persistent sdk subprocess per
 ## files (every tracked file, one-liner each)
 
 ```
-.gitignore                       vendor/, node_modules, env, settings.local.json
+.gitignore                       vendor/, node_modules, env, settings.local.json, diagnostics/
 package.json                     name = cut-the-cake (private); + claude-agent-sdk dep
 tsconfig.json                    strict, esm, bundler resolution, noEmit
 bun.lock                         committed (text format)
 PRODUCT.md                       brand: cut-the-cake patisserie press; "fun in voice + 5 places"
 DESIGN.md                        visual system: strawberry tokens, plum chart-only, glass nav
 .impeccable/design.json          stitch-style sidecar (legacy from indigo era; pre-rename)
-src/server.ts                    Bun server: per-session state, ws fanout, observer onDecision/onName, /assets static
+
+src/server.ts                    Bun server: per-session state, ws fanout, observer onDecision/onName,
+                                 chat host, POST /chat/send + /chat/auto-send, auto-send dispatcher
+                                 (buildAutoSendSeed + maybeAutoSendChat), temp-folder filter, /assets
 src/tailer.ts                    multi-source jsonl tailer (cc cli + claude.app); poll + recursive fs.watch
 src/jsonl.ts                     record parser → MetaEvent[]; tokens, model, lines added/removed
 src/turns.ts                     per-turn assembly + tally
 src/triggers.ts                  fallback magnitude evaluator
-src/observer.ts                  sdk observer: spawn, batch, parse, respawn (batch tick is ceiling, not heartbeat)
-public/index.html                spa: sticky frosted nav · diff-rendered sidebar with gsap enter/exit/update + FLIP ·
-                                 chat-style detail (markdown, tail truncation) · charts above conversation ·
-                                 per-session color palette · sidebar/detail two-tone separation · svg frosting cap
+src/observer.ts                  TWO sdk subprocesses (decisions:sonnet + namer:haiku) sharing a
+                                 generic startSdkLoop helper; FIFO inflight per loop; respawn
+src/chat-agent.ts                "break it down" host: one persistent sdk subprocess per upstream
+                                 sessionKey; tools disabled; first-prompt seed support; ChatChunk.kind
+
+public/index.html                spa: sticky frosted nav (logo with brand-jump-roll + auto break-down
+                                 toggle pill + gh pill) · diff-rendered sidebar with gsap enter/exit/
+                                 update + FLIP (transform-leak fixed) · selected-card mascot 36px,
+                                 z-index overlay, hover y-flip with fade in/out · chat-style detail
+                                 (markdown, tail truncation) · charts above conversation with
+                                 frosting-new svg + color-mix lighter cap (only on tall bars) +
+                                 hover radial sprinkle burst dominated by bar color · chat-thread
+                                 block + chat input · wandering cake-perch mascot picks a random
+                                 DOM target on session-open (size adapts per surface)
+
+public/assets/
+  cake-icon.svg                  primary mascot SVG (live state + cake-perch pool)
+  mascot-var-2.svg               secondary mascot SVG (idle state + cake-perch pool)
+  frosting-new.svg               bar-frost cap silhouette (in active use)
+  bar-frost.svg                  legacy frost silhouette (kept as alternate)
+  bar-frost-v2.svg               alternate frost silhouette (kept as alternate)
+  logo-cake-slice.webp           top-nav logo (gets the brand-jump-roll on hover)
+  empty-state-cake-duo.webp      empty detail-pane illustration
+  header-banner-cake-clouds.webp orphan (was the summary-panel backdrop) — safe to delete
+  send-button-rocket.webp        orphan (replaced by inline svg arrow) — safe to delete
+
 notes/plan.md                    v1 plan: 5 phases, data model, hook contract, defaults
 notes/claude-mem-patterns.md     24-section reference of patterns from claude-mem
 notes/state.md                   this file
 ```
 
-**uncommitted / untracked in working tree:**
-
-- `src/chat-agent.ts` — drafted "break it down" subprocess host (see "what's not wired yet" #2 below). uses claude-agent-sdk `query()` with disabled tools.
-- `public/assets/` — webp files (committed in d27b2ac):
-  `logo-cake-slice`, `mascot-cupcake-wand`, `mascot-cupcake-fork`, `empty-state-cake-duo`.
-  `header-banner-cake-clouds.webp` and `send-button-rocket.webp` are now orphaned (panel + send rocket replaced) — safe to delete.
-- `public/assets/bar-frost.svg` — single source of truth for the bar-plot frosting cap; loaded as a CSS `mask-image` so the bar's `currentColor` fills the silhouette.
-- `vendor/claude-mem/` — gitignored reference clone of claude-mem
-- `vendor/abtop/` — gitignored reference clone of graykode/abtop
-- `vendor/magicui/` — gitignored reference copies of `blur-fade.tsx` + `animated-list.tsx` (the magicui sources we ported to vanilla js + gsap)
-- `node_modules/`
+**gitignored references** (still around for grep + design study):
+- `vendor/claude-mem/` — observer pattern source
+- `vendor/abtop/` — token-counter + lineage discovery
+- `vendor/magicui/` — `blur-fade.tsx` + `animated-list.tsx` (we ported to vanilla js + gsap)
+- `diagnostics/` — exploratory screenshots from the chrome-devtools-mcp loop
 
 ---
 
-## the observer
+## the observer (split: decisions + namer)
 
-one persistent claude code subprocess spawned by `query()` from `@anthropic-ai/claude-agent-sdk` at `src/observer.ts`. closely follows `vendor/claude-mem/src/services/worker/ClaudeProvider.ts`.
+`src/observer.ts` runs **two** persistent sdk subprocesses, both spawned via `query()` from `@anthropic-ai/claude-agent-sdk` and driven by a shared `startSdkLoop` helper that owns lifecycle, FIFO inflight tracking, and respawn. observer pattern is closely modelled on `vendor/claude-mem/src/services/worker/ClaudeProvider.ts`.
 
-- **sandbox:** cwd `~/.chunk-to-chat/observer/` (path not renamed yet — TODO), `disallowedTools: [Bash, Read, Write, Edit, Grep, Glob, WebFetch, WebSearch, Task, NotebookEdit, AskUserQuestion, TodoWrite]`, `settingSources: []`, `mcpServers: {}`. observer can think and emit text; can't touch your files.
-- **auth:** uses your existing claude auth (whatever `which claude` returns).
-- **model:** `claude-sonnet-4-6` by default. swap via `META_OBSERVER_MODEL`.
-- **input feed:** an async-generator yielding synthetic user messages built from a queue; the queue receives one `TurnFeed` per closed turn that's within `META_OBSERVER_FRESH_MS`. server filters out the observer's own subprocess jsonl by slug match.
-- **batch tick:** the 30s setInterval early-returns when the queue is empty — so quiet windows make zero sonnet calls. the interval is a ceiling on send rate, not a heartbeat. comment in observer.ts pins this so it can't regress.
-- **system prompt:** prepended to the first batch only.
-- **response shape:** `{decisions: [...], names: [...]}`. decisions = one entry per turn `{turnId, open, insight?, tags?, prefill?}`. names = ≥2-turn sessions, just `{sessionKey, sessionName}` (≤24 chars, 2–3 words, lowercase). **`sessionSummary` was removed in d27b2ac** along with the "what happened so far" panel — observer prompt + parser + ws kind (`observer:summary` → `observer:name`) all rewritten.
-- **respawn:** lifecycle while-loop, 5s backoff, 5 consecutive-failure cap. SIGINT/SIGTERM → abort + exit after 500ms grace.
+**common:**
+- **auth**: uses your existing claude auth (whatever `which claude` returns).
+- **disallowedTools**: `[Bash, Read, Write, Edit, Grep, Glob, WebFetch, WebSearch, Task, NotebookEdit, AskUserQuestion, TodoWrite]`. both subprocesses can think + emit text; neither can touch your files.
+- **input feed**: an async-generator yielding synthetic user messages built from a queue; each loop has its own queue but `startObserver.feed(t)` enqueues into both.
+- **batch tick**: 30s setInterval early-returns when the queue is empty — quiet windows skip the call. ceiling on send rate, not a heartbeat.
+- **system prompt**: prepended to the first batch only.
+- **respawn**: lifecycle while-loop, 5s backoff, 5 consecutive-failure cap. SIGINT/SIGTERM → abort + exit after 500ms grace.
+
+**decisions subprocess** (the "observer" loop):
+- model: `claude-sonnet-4-6` (env `META_OBSERVER_MODEL`)
+- cwd: `~/.chunk-to-chat/observer/` — legacy path; rename to `~/.cut-the-cake/observer/` is open issue #3.
+- response shape: `{decisions: [{turnId, open, insight?, tags?, prefill?}, ...]}`
+- decisions feed `onDecision` callback in `src/server.ts` → ObserverInsight stored on SessionState → broadcast `observer:decision` ws msg → drives `maybeAutoSendChat` when open=true and the global toggle is on.
+
+**namer subprocess** (the "namer" loop):
+- model: `claude-haiku-4-5` (env `META_NAMER_MODEL`) — naming is a short label task, haiku is plenty.
+- cwd: `~/.cut-the-cake/namer/` (fresh, on the new path)
+- response shape: `{names: [{sessionKey, sessionName}, ...]}` — ≤20 chars, 2–3 words, lowercase, omit if only 1 turn seen this run.
+- names feed `onName` callback → `s.sessionName` → broadcast `observer:name` ws msg → sidebar card title.
+
+**self-feed filter** (`src/server.ts`): jsonl slugs containing `chunk-to-chat-observer`, `cut-the-cake-namer`, or `cut-the-cake-chat` are surfaced as cards but never fed back to the observer (would be an infinite mirror). plus the temp-folder filter (`-private-var-folders-`) hides claude code's own internal title-generator subprocesses entirely.
 
 **what's not wired yet:**
 - profile persistence — `session_id` is captured per spawn but not stored across restarts.
 - feedback channel — user interactions not yet sent back to adapt the gate.
 - per-turn pairing of tool_use ↔ tool_result — ignored.
 
-**observer cost:** one sonnet batch every active 30s, cache hits dominate. ~$0.20–$0.50/day for one developer running cc all day.
+**observer cost:** one sonnet batch + one haiku batch every active 30s, cache hits dominate. roughly the same envelope as the prior single-sonnet loop (haiku is cheap enough to be a rounding error).
 
 ---
 
-## the chat agent (drafted, not wired)
+## the chat agent (wired)
 
-`src/chat-agent.ts` defines a `startChatHost({onChunk, onStatus})` factory that mirrors the observer's pattern but spawns **one sdk subprocess per upstream `sessionKey`**, lazily on first user send and reused for follow-ups. tools disabled (same DISALLOWED_TOOLS list as observer); cwd is sandboxed under `~/.cut-the-cake/chat/<sha1-hash>/`. system prompt: short "break it down companion" preamble prepended only to the first prompt of a given subprocess.
+`src/chat-agent.ts` exports `startChatHost({model, onChunk, onStatus})` — one persistent sdk subprocess per upstream `sessionKey`, lazily spawned on first send and reused for every follow-up. tools disabled, cwd `~/.cut-the-cake/chat/<sha1-hash>/`, model `claude-sonnet-4-6` by default (env `META_CHAT_MODEL`).
 
-**status:** file written, typechecks, NOT yet imported by `src/server.ts`. pending wire-up:
+**send signature**: `send(sessionKey, text, {seed?, userKind?})`
+- `seed` (optional) — prepended to the FIRST prompt of a given subprocess, after `SYSTEM_INTRO`. used by auto-send to inject the observer insight + recent turn excerpts so the agent's first reply is grounded.
+- `userKind` — `"user"` (default, typed) or `"auto"` (server-fired). echoed on the user-role ChatChunk so the UI can badge auto-sent messages.
 
-1. server.ts: import `startChatHost`, instantiate alongside the observer, expose POST `/chat/send` route taking `{sessionKey, text}`, broadcast `chat:user` and `chat:assistant` ws messages.
-2. public/index.html: replace the send-button stub (`console.log("[chat] send", ...)`) with a `fetch("/chat/send", ...)` call. add per-session `chatThreads: Map<sessionKey, {role, text, ts}[]>` state, ws handlers for `chat:user`/`chat:assistant` that append, and a `.chat-thread` render block between `.conversation` and `.chat-input`.
+**design rationale (no fork):** instead of resuming the upstream cc session via SDK `resume:`, we keep this a fresh subprocess per sessionKey and pre-seed with a small context block. forking would dump 100k–500k tokens into every chat turn (cache helps but only within the 5min TTL), and would inherit the upstream session's tool-enabled config — defeating our sandbox + creating concurrency staleness vs the still-running cc session. pre-seeding is ~5k tokens for 80% of the value.
 
-design rationale: see the "let's connect the additional subprocess" exchange in chat history. ephemeral one-shot was rejected in favour of persistent-per-session because "break it down" is iterative — needs sdk session memory across user replies.
+**server wiring (`src/server.ts`):**
+- `chatThreads: Map<sessionKey, ChatChunk[]>` — last 200 chunks per session, in-memory only (lost on restart).
+- `chatStatuses: Map<sessionKey, {status, message?, ts}>` — latest agent status per session.
+- POST `/chat/send` `{sessionKey, text}` → `chatHost.send(sessionKey, text, {userKind:"user"})`. validates sessionKey is known.
+- `onChunk` → `pushChatChunk` → broadcast `chat:chunk` ws msg.
+- `onStatus` → broadcast `chat:status` ws msg.
+- snapshot includes `chatThread` + `chatStatus`, so `hello` payload rehydrates the UI on reload.
+
+**client wiring (`public/index.html`):**
+- `chatThreadByKey` Map + `chatStatusByKey` Map.
+- send button click → `fetch('/chat/send', ...)`. clears the textarea draft; the server broadcasts the user echo + agent reply back over ws.
+- `.chat-thread` block sits between `.conversation` and `.chat-input` in the detail pane. user rows are plain `escapeHtml`; agent rows use `marked.parse({breaks:true, gfm:true})` for markdown. auto-sent user chunks render with a small `auto` pill next to the "you" label.
+- status states: `thinking` shows pulsing dot; `respawning` / `error` show muted message text.
+
+---
+
+## auto-break-down (server-driven send)
+
+when the decisions observer flags `open: true` with a non-empty `prefill`, the server fires that prefill into the chat-agent automatically — the user opens the session tab to a primed conversation instead of an empty input.
+
+**triggers** (all must hold for `maybeAutoSendChat` to fire in `src/server.ts`):
+1. `autoSendEnabled === true` — global flag, default **off**, runtime-mutable via POST `/chat/auto-send` or env `META_AUTO_SEND_ENABLED=1`.
+2. `decision.open` and `decision.prefill` are present.
+3. `isVisible(s)` — never auto-fires on ephemeral helpers or our own subprocesses.
+4. per-session cooldown (`META_AUTO_SEND_COOLDOWN_MS`, default 5min) since last auto-send.
+5. no chat thread activity within the cooldown window — skip if the session already has an in-flight conversation (no second front while the first is unread).
+
+**seed payload** (`buildAutoSendSeed`):
+```
+The user just watched session "<sessionName>" finish a turn.
+Observer flagged: <decision.insight>
+Tags: <comma-sep>
+
+Recent <N> closed turn(s) (oldest first):
+---
+metrics: <tok> tok · <tools> tools · +<la>/-<lr> lines
+user: <userPrompt clipped to 800c>
+assistant: <assistantExcerpt clipped to 600c>
+---
+... (up to last 5)
+```
+seed is prepended to the FIRST chat-agent prompt only (subsequent follow-ups go through naturally).
+
+**recent-turn ring buffer**: `s.recentClosedTurns: Turn[]` capped at 5, pushed every time `result.closed` lands in `onEvent`. used as the seed source so the chat-agent has real context.
+
+**toggle pill** (top-nav, right side): button with a colored dot indicator, label `auto break-down` (or `auto break-down · off` when disabled). aria-pressed reflects state. click → POST `/chat/auto-send` `{enabled}` → server flips `autoSendEnabled` → broadcast `autosend:setting` ws msg → all connected clients re-paint. optimistic local flip on click, reverts if the POST fails.
+
+**auto-sent UI badge**: user-role chat-thread row carries a `auto` pill next to the "you" label when `chunk.kind === "auto"`. visually disambiguates server-fired from typed messages.
 
 ---
 
@@ -222,7 +330,8 @@ normative source of truth: `DESIGN.md` (visual) + `PRODUCT.md` (strategic). this
 
 **top nav:**
 - left: cake-slice logo + `cut-the-cake` wordmark in strawberry + tagline (>720px)
-- right: `reconnecting…` indicator (when ws drops) + GitHub pill (`★ —` placeholder, real link to oronanschel/cut-the-cake)
+  - **brand jump-roll**: hovering the logo + wordmark area triggers a gsap timeline (jump up 16px → 360° z-rotation → drop, total ~1.3s, debounced via `playing` flag). ported from `/Users/oronans/workspace/cutcake`'s `brandJumpRoll`.
+- right: `reconnecting…` indicator (when ws drops) + **auto-break-down toggle pill** (⚡ + colored dot + label, aria-pressed reflects server state) + GitHub pill (`★ —` placeholder, real link to oronanschel/cut-the-cake)
 - background: `glass-paper` (rgba 253,249,250,0.72) + `backdrop-filter: blur(12px) saturate(140%)`. only blur in the system.
 
 **ambient layers (behind everything):**
@@ -241,7 +350,8 @@ normative source of truth: `DESIGN.md` (visual) + `PRODUCT.md` (strategic). this
 - **FLIP layout** for inserts: snapshot persisting cards' `getBoundingClientRect().top` BEFORE the upsert, animate from delta after, `power3.out 0.55s, overwrite: "auto"`. mirrors `motion`'s `layout` prop in vanilla js.
 - update pulse: when `cardSig` (lastEventTs / latest insight / sessionName) changes, `is-updated` keyframe fires — accent box-shadow ring (8px) + 2.2% scale, 1.6s, `ease-out`. ignores model/state/elapsed (avoids minute-tick flash).
 - card body: `[project] observer-name` title + model-tag pill + insight prose (when flagged) + foot line (mono Pewter, optional source · tags · live/Xs ago/idle Xm).
-- selected card: accent-tint bg, accent border, mascot avatar (wand if active, fork if idle ≥5min) tucked into bottom-right with overflow-hidden clip.
+- selected card: accent-tint bg, accent border, **svg mascot** avatar in bottom-right corner (36×36px, `bottom: 1px`, `right: -2px`). MASCOT_ACTIVE = `cake-icon.svg` (live state), MASCOT_IDLE = `mascot-var-2.svg` (idle ≥5min). overlays the model tag + foot line via `z-index: 2` — no padding-right reserve, so layout doesn't shift.
+- **mascot hover anim**: jump up 9px + scale 1.07 + 360° rotation around the **y axis** (turntable spin, distinct from the brand's z-spin) + `back.out(1.2)` settle on landing. gradual opacity dive to 45% during the jump (`power2.inOut`, ~400ms), holds at 45% during the flip, gradual return to 100% during the landing. delegated via `mouseover` on document so re-rendered cards pick up the listener for free; `dataset.flipping` cooldown prevents stacked timelines.
 - ambient quiet: when every visible session is idle 5min+ and nothing's selected, sidebar collapses to one mono line; mouse movement temporarily wakes for 30s.
 
 **right pane (detail):**
@@ -257,7 +367,8 @@ normative source of truth: `DESIGN.md` (visual) + `PRODUCT.md` (strategic). this
 - code-changes: added diff-green @ 0.9, removed diff-red @ 0.9; chart self-suppresses on all-zero
 - both charts cap at `CHART_TURNS = 5` (last 5 turns only, no scrolling)
 - y-axis: 3 ticks (top yMax, mid yMax/2, bot 0). x-axis: dropped (no time labels). foot: small mono Pewter "Xm ago" right-aligned, derived from latest turn's `endTs`.
-- **frosting cap:** each `.cx-bar` carries a `<span class="bar-frost">` styled with `mask-image: url(/assets/bar-frost.svg)` and `background: currentColor`. svg is a 36×12-viewBox dripping-icing silhouette (irregular puffs + two pendant drips). edit `public/assets/bar-frost.svg` to change the shape; the inline rendering follows.
+- **frosting cap (current):** each `.cx-bar` ≥ `BAR_FROST_MIN_PCT` (25%) carries a `<span class="bar-frost">` styled with `mask-image: url(/assets/frosting-new.svg)` and `background-color: color-mix(in oklab, currentColor 60%, white 40%)` (so icing reads lighter than the bar — not just paint). 36px tall cap with **20% rim above** the bar's top edge / **80% overlap inside** the bar. legacy `bar-frost.svg` + alternate `bar-frost-v2.svg` are kept as alternates if we want to swap masks later.
+- **hover-burst sprinkle spray**: `mouseover` on a frosted bar fires a radial gsap burst — 9 sprinkles distributed across the full 360° (slice + ±35% jitter), 30–50px outward in one tween, ~60% match the bar's own color + ~40% accent picks for variety, 800ms per-bar cooldown via `dataset.burstTs`. only frosted bars participate.
 
 **conversation strip** (between charts and chat input):
 - exactly three messages: `prev-agent → you → agent`. older turns intentionally hidden — chat input below is the surface for the current ask.
@@ -266,13 +377,25 @@ normative source of truth: `DESIGN.md` (visual) + `PRODUCT.md` (strategic). this
 - user text is plain `escapeHtml` + pre-wrap (no markdown).
 - role labels: mono 10px uppercase Pewter, with `you` colored accent.
 
+**chat-thread block** (between conversation strip and chat input — only rendered when active):
+- one row per chunk in `chatThreadByKey[sessionKey]`. role label `you` (accent) / `agent` (plum), mono uppercase 10px.
+- user rows: plain `escapeHtml`, pre-wrap. server-fired chunks (`kind:"auto"`) render with a small `auto` pill next to the role label.
+- agent rows: `marked.parse({breaks:true, gfm:true})` into `.conv-md` (same styling as the conversation strip).
+- status pill at the bottom: `thinking` (pulsing dot), `respawning` (muted), `error` (with message). hidden when status is `idle` or `spawned`.
+
 **chat input** (one per session):
 - container: surface bg, hairline border, panel radius
 - context line: ⚡ "break it down" mono accent label + observer's latest insight prose (or italic muted "no observer flag yet — pick this up and edit it.")
 - textarea: paper bg → flips to surface on focus + accent border
-- send button: 44×44 accent square with **inline svg arrow-up** glyph (Lucide `arrow-up`, white stroke). previously was a paper-plane svg; before that, the rocket asset. `⌘ ↵` keyboard shortcut wired.
+- send button: 44×44 accent square with **inline svg arrow-up** glyph (Lucide). on click → `fetch('/chat/send', {method:'POST', body: {sessionKey, text}})`. textarea clears on success; chunk arrives back via ws and renders in the chat-thread above. `⌘ ↵` keyboard shortcut wired.
 - tip line: mono Pewter "tip: ask for smaller steps, rationale, or alternatives" left + "⌘ ↵ to send" right
-- per-session draft + sent state in `chatDrafts` Map / `chatSent` Set (lost on reload).
+- per-session draft state in `chatDrafts` Map (lost on reload).
+
+**wandering cake-perch mascot** (one per detail pane, picks a random target on session-open):
+- pool of perch surfaces: `.cx-bar.bar-output` / `.cx-bar.bar-added` (size 26px, only frosted), `.chart-card` (38px, top-right), `.session-head h2` (30px, right of text), `.chat-input` (36px, top-right). size adapts per surface.
+- target + tilt are deterministic via `djb2(sessionId)` so a session keeps a consistent look — different sessions pick different surfaces. icon also hashed: pool of two svgs (`cake-icon.svg`, `mascot-var-2.svg`) so different sessions get different mascot faces.
+- **mounts silently** (no entrance gsap). prior cake fades out softly on session change before the new one mounts. re-mounted on every 5s refresh tick (chart/chat-input innerHTML wipes wreck DOM nodes inside them) with no animation, so the cake stays visually pinned.
+- impl: `placeCakePerch(sessionId, {animate})` in `public/index.html`. `animate` only controls the prior cleanup fade — the new cake always mounts at rest.
 
 **motion:** `prefers-reduced-motion: reduce` zeroes all gsap + css transitions. default ease `cubic-bezier(0.22, 1, 0.36, 1)`.
 
@@ -304,82 +427,83 @@ if "missing sessions" comes up again: `curl -s localhost:3737/sessions | jq` is 
 
 ## open issues / known bugs
 
-1. **observer profile not persisted.** each respawn = fresh sdk session. fix: capture `session_id` on first response, pass `{ resume: id }` on respawn.
+1. **observer profile not persisted.** each respawn = fresh sdk session for both the decisions and namer subprocesses. fix: capture `session_id` on first response per loop, pass `{ resume: id }` on respawn. profile state would persist across server restarts via `~/.cut-the-cake/{observer,namer}.session`.
 
-2. **send button is a stub.** clicking the arrow-up logs `[chat] send {sessionKey, text}`; doesn't spawn anything. the *real* fix is partially drafted (`src/chat-agent.ts`) — see "the chat agent" section above for the wire-up checklist.
+2. ~~**send button is a stub.**~~ **RESOLVED** in `5f2d750`. POST `/chat/send` is wired end-to-end with chat-host + chat-thread block + ws fanout.
 
-3. **observer cwd path still references the old name.** `~/.chunk-to-chat/observer/` is what gets created on first run. local cosmetic — sandbox works fine. rename to `~/.cut-the-cake/observer/` next time observer.ts is touched. (chat-agent.ts already uses the new path: `~/.cut-the-cake/chat/<hash>/`.)
+3. **observer cwd path still references the old name.** `~/.chunk-to-chat/observer/` is what gets created on first run for the decisions loop. local cosmetic — sandbox works fine. rename to `~/.cut-the-cake/observer/` next time observer.ts is touched. (the namer already uses the new path: `~/.cut-the-cake/namer/`. chat-agent uses `~/.cut-the-cake/chat/<hash>/`.)
 
-4. **dev hot-reload conflicts with the observer.** `bun run dev` (`bun --hot`) respawns the server on src edits, orphaning the existing sdk subprocess. exacerbates "no observer flags" perception because each orphan dies before flagging anything. for now: use `bun run src/server.ts` directly when observer is on. better fix: process-exit cleanup hook.
+4. **dev hot-reload conflicts with the observer.** `bun run dev` (`bun --hot`) respawns the server on src edits, orphaning the existing sdk subprocesses. for now: use `bun run src/server.ts` directly when observer is on. better fix: process-exit cleanup hook.
 
-5. ~~**client-side filter for empty sessions.**~~ **RESOLVED** (working tree). `s.threads.length > 0` filter dropped; all in-window sessions are now shown.
+5. **task-notification turns trigger** — system-reminder text from claude code task-notifications gets parsed as `user_message` records and can flag threads. observer's `meta-feedback` tag handles this when it works, but a parser-level filter in `jsonl.ts` would be cleaner.
 
-6. **task-notification turns trigger** — system-reminder text from claude code task-notifications gets parsed as `user_message` records and can flag threads. observer's `meta-feedback` tag handles this when it works, but a parser-level filter in `jsonl.ts` would be cleaner.
-
-7. **doc drift — "passive" / old name in older notes:**
+6. **doc drift — "passive" / old name in older notes:**
    - `notes/plan.md` — still references "chunk-to-chat" + "passive observer" framing
    - `notes/claude-mem-patterns.md` — still references "passive"
    - `.impeccable/design.json` — sidecar from the indigo era; not yet rewritten for the strawberry tokens
    doc-only cleanup; not user-facing.
 
-8. **abort propagation depth.** `observer.stop()` calls `abortController.abort()` and waits 500ms before `process.exit(0)`. unverified the sdk subprocess actually dies in that window — could orphan on slow shutdown.
+7. **abort propagation depth.** server shutdown calls `observer.stop()` + `chatHost.stop()`, then `setTimeout(exit, 500)`. unverified the sdk subprocesses actually die in that window — could orphan on slow shutdown.
 
-9. **bg-blobs occasionally render outside the viewport on very small windows** — `position: fixed; inset: 0; overflow: hidden` should clip them but on iOS Safari with rubber-band scroll the blobs can briefly peek. minor.
+8. **bg-blobs occasionally render outside the viewport on very small windows** — `position: fixed; inset: 0; overflow: hidden` should clip them but on iOS Safari with rubber-band scroll the blobs can briefly peek. minor.
 
-10. **gh-pill star count is hardcoded `—` placeholder.** real github star fetch not wired (would need a client-side fetch to `api.github.com/repos/oronanschel/cut-the-cake` with rate-limit awareness, or a build step).
+9. **gh-pill star count is hardcoded `—` placeholder.** real github star fetch not wired (would need a client-side fetch to `api.github.com/repos/oronanschel/cut-the-cake` with rate-limit awareness, or a build step).
 
-11. **orphaned assets.** `public/assets/header-banner-cake-clouds.webp` (used by removed summary panel) and `public/assets/send-button-rocket.webp` (replaced by inline svg) are still on disk but unreferenced. safe to delete.
+10. **orphaned assets.** `public/assets/header-banner-cake-clouds.webp` (used by removed summary panel) and `public/assets/send-button-rocket.webp` (replaced by inline svg) are still on disk but unreferenced. safe to delete. (legacy webp mascots already deleted in `c21139f`.)
+
+11. **chat input prefills the same insight even after auto-fire.** when auto-send fires using the observer's latest prefill, the chat-input textarea still shows that same prefill — a user might re-send it. fix: when `lastAutoSendTs[sessionKey]` covers the current insight, render an empty placeholder textarea instead of the prefill. (cosmetic, called out during verification of the auto-send wire-up.)
+
+12. **chat thread state is in-memory only.** `chatThreads` and `chatStatuses` are server-side Maps that don't persist across restarts. on a server reboot, an in-flight conversation is lost from the UI even if the chat-agent subprocess could conceptually be resumed.
 
 ---
 
 ## what's next (priority order)
 
-**already landed in this run** (since last state.md update):
-- ✅ commit at `d27b2ac`: removed "what happened so far" panel end-to-end (HTML/CSS/state/observer/server/ws — channel renamed `summaries` → `names`, schema is now just `{sessionKey, sessionName}`).
-- ✅ commit at `d27b2ac`: send button → inline svg (paper-plane → arrow-up, Lucide style).
-- ✅ commit at `d27b2ac`: sidebar FLIP layout for inserts; top-anchor scale (`originY: 0`); update pulse ring 6px→8px / scale 1.015→1.022.
-- ✅ commit at `d27b2ac`: detail open is now a two-tier cascade (`region 0.12s` + `leaf 0.04s` + `duration 0.75s`).
-- ✅ commit at `398a85e`: per-session 6-hue palette (djb2 hash), applied to card + detail.
-- ✅ commit at `398a85e`: sidebar/detail visual separation (hairline + two-tone gradients).
-- ✅ commit at `398a85e`: svg dripping-frosting cap on bar plots (`public/assets/bar-frost.svg` as mask-image source of truth).
-- ✅ commit at `398a85e`: tailer recursive `fs.watch` wake-up + lineage collapse (abtop-inspired).
-- ✅ commit at `398a85e`: client `threads.length > 0` filter dropped; `META_INBOX_MINUTES` default 60 → 240.
-- ✅ commit at `398a85e`: `src/chat-agent.ts` drafted (typechecks, not wired).
-- ✅ saved magicui sources to `vendor/magicui/` for future reference (`blur-fade.tsx`, `animated-list.tsx`).
+**already landed in this run** (commits since last state.md update):
+- ✅ `5f2d750` — observer split into sonnet decisions + haiku namer (shared `startSdkLoop` helper). chat-agent wired: POST `/chat/send`, ws chat:chunk/chat:status, chat-thread block, hello-payload chat state. auto-send dispatcher (`maybeAutoSendChat` + `buildAutoSendSeed`) fires on observer open=true, with 5min cooldown + recent-turn ring buffer. global toggle pill (top-nav) + POST `/chat/auto-send`. temp-folder filter (`-private-var-folders-`) hides claude-code's title-generators. new frosting svg with 20% rim above / 80% inside + color-mix lighter cap + 25% min-bar threshold. brand jump-roll on the cake logo.
+- ✅ `40683db` — hover-burst radial sprinkle spray out of frosted bars; ~60% bar color + ~40% accent picks; 9 sprinkles, 30–50px outward.
+- ✅ `43fd0eb` — auto-break-down default off (`META_AUTO_SEND_ENABLED === "1"`). sidebar FLIP transform leak fix: `killTweensOf(el, "y,transform")` + `clearProps:"transform"` on completion.
+- ✅ `c21139f` — wandering cake-perch mascot picks a random DOM target on session-open; size adapts per surface (26/30/36/38px); two svg mascot variants picked by hash. sidebar mascot constants now point at the svg pair (`cake-icon.svg` / `mascot-var-2.svg`); webp mascots deleted.
+- ✅ `f631f6f` — `bar-frost-v2.svg` added as alternate.
+- ✅ `d72ec37` — sidebar mascot 36×36px, `bottom: 1px`, overlays content (z-index 2, no padding-right reserve). hover y-axis flip with smooth opacity fade in/out (45% mid-flip).
 
 ---
 
 **resume-here queue** (in priority order):
 
-1. **wire send → spawn chat agent.** `src/chat-agent.ts` already implements the host. wire-up checklist in "the chat agent" section above. this is the actual product moment.
+1. **observer profile persistence (M2)** — store `session_id` to `~/.cut-the-cake/{observer,namer}.session`, pass `resume: id` on respawn. preserves accumulated context across server restarts. arguably the highest-value backend item now that the chat path is wired.
 
-2. **sidebar update-pulse signature tuning.** `cardSig` currently includes `lastEventTs`, which jumps on every event. for very chatty sessions the pulse fires constantly. consider gating to `(insight|sessionName)` only, leaving the live-border + opacity for "still active" signal.
+2. **chat input prefill cleanup after auto-send** — when an auto-send has fired for a session, blank the textarea instead of re-rendering the same prefill the server just sent. one-line conditional in `renderChatInput`. (open issue #11.)
 
-3. **rename observer cwd.** `~/.chunk-to-chat/observer/` → `~/.cut-the-cake/observer/`. cosmetic but consistent.
+3. **sidebar update-pulse signature tuning.** `cardSig` currently includes `lastEventTs`, which jumps on every event. for very chatty sessions the pulse fires constantly. consider gating to `(insight|sessionName)` only, leaving the live-border + opacity for "still active" signal.
 
-4. **github stars on the gh-pill.** small cdn fetch; cache 10min in localStorage; fall back to `★` glyph + repo name if rate-limited.
+4. **rename observer cwd.** `~/.chunk-to-chat/observer/` → `~/.cut-the-cake/observer/`. cosmetic but consistent. (open issue #3.)
 
-5. **rewrite `notes/plan.md` and `notes/claude-mem-patterns.md`** to drop "passive" framing and the old name. doc cleanup.
+5. **github stars on the gh-pill.** small cdn fetch; cache 10min in localStorage; fall back to `★` glyph + repo name if rate-limited.
 
-6. **delete orphaned assets.** `public/assets/header-banner-cake-clouds.webp` + `public/assets/send-button-rocket.webp`.
+6. **rewrite `notes/plan.md` and `notes/claude-mem-patterns.md`** to drop "passive" framing and the old name. doc cleanup.
+
+7. **delete orphaned assets.** `public/assets/header-banner-cake-clouds.webp` + `public/assets/send-button-rocket.webp`.
 
 backend / observer work (independent of the design queue):
 
-7. **observer profile persistence (M2)** — store `session_id` to `~/.cut-the-cake/observer.session`, resume on respawn. preserves accumulated context.
-8. **feedback channel (M3)** — server tracks user interactions, pushes "since last batch the user did X, Y, Z" to the observer periodically. observer adapts gate.
-9. **userpromptsubmit hook (phase E)** — once we have a draft instruction in the chat, a hook script should be able to inject it into the user's main cc session. correct stdout shape per `claude-mem-patterns.md` §21.
+8. **feedback channel (M3)** — server tracks user interactions (which auto-fires the user kept vs ignored, which prefills they edited heavily, which sessions they opened then closed without reading), pushes a periodic summary back into the decisions observer. observer adapts gate.
+
+9. **userpromptsubmit hook (phase E)** — once we have a refined "break it down" thread, a hook script should be able to inject the chat-agent's last reply into the user's main cc session. correct stdout shape per `claude-mem-patterns.md` §21.
+
 10. **codex schema parser** — `~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl`; uses different `{type, payload}` envelope. straightforward second parser branch in `jsonl.ts`.
+
 11. **PID → FD session discovery (abtop-style).** would replace lineage-collapse heuristic with authoritative "this jsonl is held open by a live claude process" signal. requires libproc bindings on macOS / `/proc/<pid>/fd` on Linux / sysinfo on Windows. defer until the heuristic visibly fails.
 
 ---
 
 **process notes for the next session:**
-- after big chunks, run `/codex:review` (generic) or ask the user to invoke `/codex:adversarial-review <args>` themselves (the latter is gated against model invocation). don't confuse with `codex:rescue`.
+- per saved feedback memory: invoke `codex:rescue` for an independent pass after big chunks, before starting the next.
 - design source-of-truth: `PRODUCT.md` (strategic) + `DESIGN.md` (visual). both are normative.
 - the user prefers short replies. when iterating on UI, propose 2–3 directions tightly and let them pick a letter.
-- the impeccable skill's preflight + register checks were honored at the start of the redesign; the brand register stays "product" + Lane A.
-- after any animation change, the user has stated "too fast" multiple times — bias slow on initial proposals.
-- if "missing sessions" comes up, hit `curl -s localhost:3737/sessions` first to see what the server's actually tracking. the lineage filter is the most aggressive thing in front of the user; the threads filter is gone.
+- after any animation change, the user has stated "too fast" / "milder" multiple times — bias slow + soft on initial proposals.
+- when verifying UI changes, drive the page via chrome-devtools-mcp (snapshot → click/fill → evaluate_script) — saved an enormous amount of round-tripping during the chat-agent + auto-send wire-up.
+- if "missing sessions" comes up, hit `curl -s localhost:3737/sessions` first to see what the server's actually tracking. layered filters are: temp-folder filter → `isInWindow` → lineage collapse → client `sortedSessions`.
 
 ---
 
@@ -396,7 +520,8 @@ backend / observer work (independent of the design queue):
 - **`vendor/abtop/`** — token-counter and discovery patterns. especially:
   - `collector/claude.rs:1323-1343` (token counter, consulted earlier)
   - `collector/claude.rs:1029-1041` (`find_live_session_id`, the shape that inspired our lineage collapse)
-- **`public/assets/bar-frost.svg`** — single source of truth for the bar-plot frosting cap; loaded via CSS `mask-image`. edit the file to change the silhouette.
+- **`public/assets/frosting-new.svg`** — current bar-plot frosting cap silhouette; loaded via CSS `mask-image`. swap to `bar-frost.svg` or `bar-frost-v2.svg` by editing the `mask` URL in `.bar-frost`.
+- **`/Users/oronans/workspace/cutcake`** — reference site we ported `brandJumpRoll` from. `app.js:618-635` is the original animation timeline.
 
 ---
 
@@ -405,7 +530,7 @@ backend / observer work (independent of the design queue):
 - **never co-author commits.** all commits in user's name only.
 - **after commits, check** if `CLAUDE.md` / `README.md` need updating (we have neither yet).
 - **diagnostics scripts** go in `diagnostics/` (gitignored unless committed deliberately).
-- **no console.log in committed code.** observer.ts logs intentionally — that's stdout, not console.log. `[chat] send {...}` in index.html is the send-button stub and gets removed when chat-agent wire-up lands.
+- **no console.log in committed code.** observer.ts + chat-agent.ts logs are intentional — that's stdout, not console.log. client `console.warn` lines exist for `/chat/send` failure paths, kept on purpose.
 - **voice in code/copy:** lowercase prose, terminal flavor, dry-with-a-wink. variable names camelCase.
 - **bun PATH:** `export PATH="$HOME/.bun/bin:$PATH"` in any new shell.
 
