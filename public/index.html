@@ -39,6 +39,8 @@
       --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     }
     * { box-sizing: border-box; }
+    /* the UA [hidden] rule loses to any explicit `display:` on a class — force it. */
+    [hidden] { display: none !important; }
     html, body { margin: 0; padding: 0; }
     body {
       font-family: var(--sans);
@@ -303,17 +305,10 @@
       margin: 0 0 12px;
     }
 
-    /* detail empty — cake duo, replaces the dashed outline */
+    /* detail empty — italic prompt, no illustration */
     .detail-empty {
       padding: 64px 24px;
       text-align: center;
-    }
-    .detail-empty img {
-      width: 100%;
-      max-width: 360px;
-      height: auto;
-      margin: 0 auto 16px;
-      display: block;
     }
     .detail-empty p {
       color: var(--fg-soft);
@@ -626,6 +621,56 @@
     }
     .session-head .source .src-glyph { color: var(--accent); margin-right: 4px; }
 
+    /* inline glance — agent-message bar + added/removed bars on each session card.
+       latest-turn summary; the chevron in the detail header toggles the full charts band. */
+    .mini-stats {
+      display: inline-flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 16px;
+      pointer-events: none;
+    }
+    .mini-stats .mini-bar {
+      width: 4px;
+      min-height: 2px;
+      border-radius: 2px 2px 0 0;
+      align-self: flex-end;
+      transition: height 0.45s var(--ease-out);
+    }
+    .mini-stats .mb-output  { background: var(--plum); }
+    .mini-stats .mb-added   { background: var(--diff-green); }
+    .mini-stats .mb-removed { background: var(--diff-red); }
+    .mini-stats .mini-sep {
+      width: 1px;
+      height: 10px;
+      background: var(--border);
+      align-self: flex-end;
+      margin: 0 2px 1px;
+    }
+
+    .charts-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      height: 22px;
+      padding: 0 8px;
+      margin-left: auto;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--fg-soft);
+      cursor: pointer;
+      transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+    }
+    .charts-toggle:hover { background: var(--chip-tint); color: var(--accent); border-color: var(--accent-soft); }
+    .charts-toggle .chev { transition: transform 0.2s var(--ease-out); display: block; }
+    .charts-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
+    .charts-toggle[aria-expanded="true"] { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+
     .untouched-line {
       font-family: var(--mono);
       font-size: 11px;
@@ -646,19 +691,122 @@
     .charts-band > * { min-width: 0; }
     #d-chart { grid-column: 1; }
     #d-code-chart { grid-column: 2; }
+    /* when only one of the two charts has content, give it the full row instead
+       of leaving an empty half-column slot. */
+    .charts-band.single-chart { grid-template-columns: 1fr; }
+    .charts-band.single-chart > * { grid-column: 1; }
     @media (max-width: 880px) {
       .charts-band { grid-template-columns: 1fr; }
       #d-chart, #d-code-chart { grid-column: 1; }
     }
 
-    /* conversation strip — three messages: prev-agent → you → agent */
+    /* conversation panel — last user/agent exchange, panel-style like the chart cards
+       and chat-input. messages render as whatsapp-style chat bubbles: user on the
+       right (accent tint), agent on the left (paper tint). when the latest signal
+       is from the user, a typing indicator stands in for the not-yet-arrived agent
+       reply and the chat-input below is hidden. */
     .conversation {
+      background: linear-gradient(180deg, oklch(98% 0.014 350) 0%, var(--surface) 100%);
+      border: 1px solid var(--accent-soft);
+      border-radius: var(--r-panel);
+      padding: 14px 16px 16px;
+      margin: 0 0 20px;
+    }
+    .conv-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      min-width: 0;
+    }
+    .conv-head-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .conv-head-icon svg { width: 16px; height: 16px; }
+    .conv-head-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      flex: 1 1 auto;
+    }
+    .conv-head-time {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-muted);
+      flex-shrink: 0;
+    }
+    .conv-stream {
       display: flex;
       flex-direction: column;
-      gap: 18px;
-      padding: 4px 2px 16px;
-      margin: 8px 0 16px;
-      border-bottom: 1px solid var(--border);
+      gap: 10px;
+    }
+    .conv-msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 78%;
+    }
+    .conv-msg.from-agent { align-self: flex-start; align-items: flex-start; }
+    .conv-msg.from-you   { align-self: flex-end;   align-items: flex-end; }
+    .conv-msg-meta {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+      margin: 0 6px 3px;
+    }
+    .conv-msg.from-you .conv-msg-meta { color: var(--accent); }
+    .conv-bubble {
+      position: relative;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+    .conv-msg.from-agent .conv-bubble {
+      background: oklch(98% 0.014 340);
+      border-radius: 14px 14px 14px 4px;
+    }
+    .conv-msg.from-you .conv-bubble {
+      background: var(--accent-soft);
+      border-color: oklch(92% 0.07 340);
+      color: var(--fg);
+      border-radius: 14px 14px 4px 14px;
+      white-space: pre-wrap;
+    }
+    /* typing indicator — three dots inside an agent-style bubble. */
+    .typing-dots {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px 0;
+    }
+    .typing-dots span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--fg-muted);
+      animation: conv-typing 1.2s infinite ease-in-out;
+    }
+    .typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes conv-typing {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .typing-dots span { animation: none; opacity: 0.6; }
     }
     .conv-turn { display: flex; flex-direction: column; gap: 4px; }
     .conv-role {
@@ -681,7 +829,7 @@
       color: var(--fg-soft);
       font-style: italic;
       font-size: 13px;
-      padding: 24px 0;
+      padding: 16px 0 4px;
     }
 
     /* markdown body for agent messages — claude-session-style formatting */
@@ -747,7 +895,7 @@
       right: 0;
       bottom: 0;
       height: 70px;
-      background: linear-gradient(to bottom, transparent, var(--bg) 90%);
+      background: linear-gradient(to bottom, transparent, oklch(98% 0.014 340) 90%);
       pointer-events: none;
     }
     .conv-body.is-expanded { max-height: none; }
@@ -997,18 +1145,20 @@
 
     <section class="detail-pane" id="detail-pane">
       <div class="detail-empty" id="detail-empty">
-        <img src="/assets/empty-state-cake-duo.webp" alt="" />
         <p>select a session</p>
       </div>
       <article class="detail-content" id="detail-content" hidden>
         <div class="session-head">
           <h2 id="d-name">—</h2>
           <p class="source"><span class="src-glyph">◆</span><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
+          <button class="charts-toggle" id="d-charts-toggle" type="button" aria-expanded="false" aria-controls="d-charts-band" title="show charts">
+            <svg class="chev" viewBox="0 0 12 8" width="10" height="7" aria-hidden="true"><path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
 
         <p class="untouched-line" id="d-untouched" hidden>untouched for <span id="d-untouched-mins">—</span></p>
 
-        <div class="charts-band">
+        <div class="charts-band" id="d-charts-band" hidden>
           <div id="d-chart"></div>
           <div id="d-code-chart"></div>
         </div>
@@ -1036,6 +1186,8 @@
     const dUntouchedMins = document.getElementById("d-untouched-mins");
     const dChart = document.getElementById("d-chart");
     const dCodeChart = document.getElementById("d-code-chart");
+    const dChartsToggle = document.getElementById("d-charts-toggle");
+    const dChartsBand = document.getElementById("d-charts-band");
     const dConversation = document.getElementById("d-conversation");
     const dChatThread = document.getElementById("d-chat-thread");
     const dChatInput = document.getElementById("d-chat-input");
@@ -1079,8 +1231,8 @@
     const AMBIENT_MS = 5 * 60 * 1000;   // all sessions idle this long → quiet collapse
 
     // assets
-    const MASCOT_ACTIVE = "/assets/cake-icon.svg";
-    const MASCOT_IDLE = "/assets/mascot-var-2.svg";
+    const MASCOT_ACTIVE = "/assets/mascot-uni-2.svg";
+    const MASCOT_IDLE = "/assets/mascot-uni-1.svg";
 
     // motion helpers — magicui-style ports.
     // blurFadeIn = the BlurFade pattern: opacity 0 + blur(8px) + small y offset → reveal.
@@ -1285,6 +1437,7 @@
     // chart icons — small inline svgs sitting in a tinted bubble in the card head
     const ICON_COMPLEXITY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12 L5 8 L8 10 L11 5 L14 8"/></svg>';
     const ICON_CODE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4 L2 8 L5 12 M11 4 L14 8 L11 12 M9.5 3.5 L6.5 12.5"/></svg>';
+    const ICON_AGENT = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5 a2 2 0 0 1 2 -2 h6 a2 2 0 0 1 2 2 v4 a2 2 0 0 1 -2 2 H7 l-3 2.5 V11 a2 2 0 0 1 -1 -2 z"/></svg>';
     // dripping-icing cap — shape lives in /assets/frosting-new.svg, applied here
     // only to bars taller than this threshold (% of yMax) so short bars don't get
     // crushed by their own frosting silhouette.
@@ -1351,6 +1504,8 @@
         const matches = document.querySelectorAll(cfg.selectorAll);
         for (const el of matches) {
           if (cfg.valid && !cfg.valid(el)) continue;
+          // skip hidden / display:none elements (e.g. charts-band collapsed)
+          if (el.offsetParent === null) continue;
           candidates.push({ el, size: cfg.size, anchor: cfg.anchor });
         }
       }
@@ -1379,6 +1534,51 @@
     const BAR_FROST = '<span class="bar-frost" aria-hidden="true"></span>';
     // charts cap at the last N turns — keeps bars wide and the panel uncluttered.
     const CHART_TURNS = 5;
+
+    // per-session expanded state for the full charts band. default collapsed —
+    // the .mini-stats inline glance covers the always-on summary.
+    const chartsBandExpanded = new Set();
+    function applyChartsBandExpanded(sessionId) {
+      const open = chartsBandExpanded.has(sessionId);
+      dChartsBand.hidden = !open;
+      dChartsToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      dChartsToggle.title = open ? "hide charts" : "show charts";
+    }
+    function miniStatsHtmlForSession(sess) {
+      const turns = deriveTurns(sess.events || []);
+      if (turns.length === 0) return "";
+      const last = turns[turns.length - 1];
+      const recent = turns.slice(-CHART_TURNS);
+      const outputMax = Math.max(20, ...recent.map(t => wordCount(t.agentText) + (t.toolUses || 0) * 30));
+      const codeMax = Math.max(10, ...recent.map(t => Math.max(t.linesAdded || 0, t.linesRemoved || 0)));
+      const outputW = wordCount(last.agentText);
+      const outputVal = outputW + (last.toolUses || 0) * 30;
+      const added = last.linesAdded || 0;
+      const removed = last.linesRemoved || 0;
+      const pct = (v, max) => Math.max(8, Math.min(100, Math.round((v / max) * 100)));
+      const hasCode = added > 0 || removed > 0;
+      const outTip = "agent: " + outputW + "w" + (last.toolUses ? " · " + last.toolUses + "t" : "");
+      const codeTip = "+" + added + " / -" + removed + " lines";
+      const bars =
+        '<span class="mini-bar mb-output" style="height: ' + pct(outputVal, outputMax) + '%" title="' + escapeHtml(outTip) + '"></span>' +
+        (hasCode
+          ? '<span class="mini-sep"></span>' +
+            '<span class="mini-bar mb-added" style="height: ' + pct(added, codeMax) + '%" title="' + escapeHtml(codeTip) + '"></span>' +
+            '<span class="mini-bar mb-removed" style="height: ' + pct(removed, codeMax) + '%" title="' + escapeHtml(codeTip) + '"></span>'
+          : "");
+      return '<span class="mini-stats">' + bars + '</span>';
+    }
+    if (dChartsToggle) {
+      dChartsToggle.addEventListener("click", () => {
+        const sid = selectedSessionId();
+        if (!sid) return;
+        if (chartsBandExpanded.has(sid)) chartsBandExpanded.delete(sid);
+        else chartsBandExpanded.add(sid);
+        applyChartsBandExpanded(sid);
+        // re-mount the cake perch — the visible candidate set just changed.
+        placeCakePerch(sid, { animate: false });
+      });
+    }
 
     function complexityChart(turns, count) {
       const last = count ? turns.slice(-count) : turns.slice();
@@ -1564,10 +1764,13 @@
       const footParts = [sourceStr, tagsStr, elapsedHtml].filter(Boolean);
       const footHtml = footParts.join(' <span class="sep">·</span> ');
 
+      const miniStats = miniStatsHtmlForSession(sess);
+
       let html =
         '<div class="card-head">' +
           '<h3>' + escapeHtml(sessionName(sess)) + '</h3>' +
           '<div class="card-meta">' +
+            miniStats +
             (modelLabel ? '<span class="model-tag">' + escapeHtml(modelLabel) + '</span>' : '') +
           '</div>' +
         '</div>' +
@@ -1860,6 +2063,18 @@
       dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, CHART_TURNS) : "";
       dCodeChart.innerHTML = renderCodeChartHtml(turns, CHART_TURNS);
 
+      const hasComplexity = !!dChart.innerHTML;
+      const hasCode = !!dCodeChart.innerHTML;
+      const hasCharts = hasComplexity || hasCode;
+      // hide whichever slot is empty so the surviving chart can claim full width
+      // via the .single-chart grid override.
+      dChart.hidden = !hasComplexity;
+      dCodeChart.hidden = !hasCode;
+      dChartsBand.classList.toggle("single-chart", hasCharts && !(hasComplexity && hasCode));
+      dChartsToggle.hidden = !hasCharts;
+      if (!hasCharts) chartsBandExpanded.delete(sessionId);
+      applyChartsBandExpanded(sessionId);
+
       const lastViewed = getLastViewed(sessionId);
       const untouchedMs = lastViewed ? (Date.now() - lastViewed) : 0;
       if (lastViewed && untouchedMs >= 5 * 60 * 1000) {
@@ -1871,7 +2086,12 @@
 
       renderConversation(sess, turns);
       renderChatThread(sess);
-      renderChatInput(sess, latestFlag);
+      // hide the chat-input while we're waiting for the upstream agent to reply —
+      // the conversation panel above already shows the typing indicator.
+      const lastTurn = turns.length ? turns[turns.length - 1] : null;
+      const waitingForAgent = !!(lastTurn && lastTurn.userText && !lastTurn.agentText);
+      dChatInput.hidden = waitingForAgent;
+      if (!waitingForAgent) renderChatInput(sess, latestFlag);
 
       // the cake perch is re-mounted every refresh tick (chart/chat-input
       // innerHTML wipes wreck DOM nodes inside them every 5s). animate only on
@@ -1943,49 +2163,68 @@
 
     function renderConversation(sess, turns) {
       const sessionId = sess.info?.sessionId || "";
-      if (turns.length === 0) {
-        dConversation.innerHTML = '<p class="conv-empty">no turns yet</p>';
+      const lastTurn = turns.length ? turns[turns.length - 1] : null;
+      const hasUser = !!(lastTurn && lastTurn.userText);
+      const hasAgent = !!(lastTurn && lastTurn.agentText);
+      // waiting = user spoke this turn, agent hasn't replied yet. drives the
+      // typing indicator + chat-input hide below.
+      const waitingForAgent = hasUser && !hasAgent;
+
+      const headTitle = waitingForAgent ? "waiting for agent…" : "latest exchange";
+      const ageMs = lastTurn ? Date.now() - (lastTurn.endTs || lastTurn.startTs || 0) : 0;
+      const ageLabel = !lastTurn ? "" : (ageMs < 5000 ? "just now" : fmtAge(ageMs) + " ago");
+
+      const headHtml =
+        '<div class="conv-head">' +
+          '<span class="conv-head-icon">' + ICON_AGENT + '</span>' +
+          '<span class="conv-head-title">' + escapeHtml(headTitle) + '</span>' +
+          (ageLabel ? '<span class="conv-head-time">' + escapeHtml(ageLabel) + '</span>' : '') +
+        '</div>';
+
+      if (!lastTurn) {
+        dConversation.innerHTML = headHtml + '<p class="conv-empty">no turns yet</p>';
         convoLastSession = sessionId;
         convoLastTurnCount = 0;
         return;
       }
-      // strict three-message strip: prev-agent → you → agent.
-      // older turns are intentionally not shown — the chat input below is the
-      // surface for the current ask. agent blocks render as markdown and
-      // height-truncate at 240px with a fade + show-full toggle.
-      const last = turns[turns.length - 1];
-      const prev = turns.length >= 2 ? turns[turns.length - 2] : null;
-      const entries = [];
-      if (prev && prev.agentText) entries.push({ role: "agent", text: prev.agentText, turnId: prev.id, latest: false });
-      if (last.userText) entries.push({ role: "you", text: last.userText, turnId: last.id, latest: false });
-      if (last.agentText) entries.push({ role: "agent", text: last.agentText, turnId: last.id, latest: true });
 
-      const html = entries.map((e, i) => {
-        const turnCls = "conv-turn" + (e.latest ? " latest" : "");
-        const roleCls = "conv-role" + (e.role === "you" ? " you" : "");
-        if (e.role === "agent") {
-          const expandKey = sessionId + "::" + e.turnId + "::" + (e.latest ? "L" : "P");
-          const expanded = expandedBodies.has(expandKey);
-          const bodyCls = "conv-body" + (expanded ? " is-expanded" : "");
-          return (
-            '<div class="' + turnCls + '">' +
-              '<div class="' + roleCls + '">' + e.role + '</div>' +
-              '<div class="' + bodyCls + '" data-expand-key="' + escapeHtml(expandKey) + '" data-conv-idx="' + i + '">' +
-                renderAgentBody(e.text) +
-              '</div>' +
-              '<button class="conv-toggle hidden" data-conv-idx="' + i + '">show full</button>' +
-            '</div>'
-          );
-        }
-        return (
-          '<div class="' + turnCls + '">' +
-            '<div class="' + roleCls + '">' + e.role + '</div>' +
-            '<div class="conv-text">' + escapeHtml(e.text) + '</div>' +
+      const parts = [headHtml, '<div class="conv-stream">'];
+      if (hasUser) {
+        parts.push(
+          '<div class="conv-msg from-you">' +
+            '<span class="conv-msg-meta">you</span>' +
+            '<div class="conv-bubble">' + escapeHtml(lastTurn.userText) + '</div>' +
           '</div>'
         );
-      }).join("");
+      }
+      if (hasAgent) {
+        const expandKey = sessionId + "::" + lastTurn.id + "::L";
+        const expanded = expandedBodies.has(expandKey);
+        const bodyCls = "conv-body" + (expanded ? " is-expanded" : "");
+        parts.push(
+          '<div class="conv-msg from-agent">' +
+            '<span class="conv-msg-meta">agent</span>' +
+            '<div class="conv-bubble">' +
+              '<div class="' + bodyCls + '" data-expand-key="' + escapeHtml(expandKey) + '" data-conv-idx="0">' +
+                renderAgentBody(lastTurn.agentText) +
+              '</div>' +
+              '<button class="conv-toggle hidden" data-conv-idx="0">show full</button>' +
+            '</div>' +
+          '</div>'
+        );
+      } else if (waitingForAgent) {
+        parts.push(
+          '<div class="conv-msg from-agent">' +
+            '<span class="conv-msg-meta">agent</span>' +
+            '<div class="conv-bubble">' +
+              '<span class="typing-dots" aria-label="agent is typing"><span></span><span></span><span></span></span>' +
+            '</div>' +
+          '</div>'
+        );
+      }
+      parts.push('</div>');
 
-      dConversation.innerHTML = html;
+      dConversation.innerHTML = parts.join("");
 
       // measure each conv-body — if the rendered content overflows the cap,
       // mark it as truncated (turns on the fade) and reveal the toggle.
