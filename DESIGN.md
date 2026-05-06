@@ -396,7 +396,7 @@ a single mascot mounts in the detail pane on every session-open, picking a deter
 - `.session-head h2` — 30px, anchored at `head-right`.
 - `.chat-input` — 36px, anchored at `input-top-right`.
 
-**variants:** two svgs picked from a hash so different sessions get different mascot faces — `mascot-var-3-1.svg`, `mascot-var-3-2.svg`. `transform-origin: 50% 100%` and a hashed `--cake-tilt` (a few degrees) keep each one slightly off-axis without looking glitched. the sidebar selected-card mascot pulls from a separate two-svg pair (`cake-icon.svg` for live, `mascot-var-2.svg` for idle); the wandering pool and the sidebar pool are intentionally distinct.
+**variants:** three svgs picked from a hash so different sessions get different mascot faces — `mascot-var-2.svg`, `mascot-var-3-1.svg`, `mascot-var-3-2.svg`. `transform-origin: 50% 100%` and a hashed `--cake-tilt` (a few degrees) keep each one slightly off-axis without looking glitched. the sidebar selected-card mascot pulls from a separate two-svg pair (`cake-icon.svg` for live, `mascot-var-2.svg` for idle).
 
 **motion:** mounts silently with no entrance gsap (the prior cake fades out softly on session change before the new one mounts). re-mounted on every 5s refresh tick (chart and chat-input innerHTML wipes destroy DOM nodes inside them) without animation, so the cake stays visually pinned.
 
