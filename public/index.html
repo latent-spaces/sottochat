@@ -362,16 +362,18 @@
       border-color: var(--accent);
       background: var(--accent-soft);
       opacity: 1;
-      padding-right: 64px;             /* room for the mascot peek */
+      /* mascot overlays the card via z-index — no padding reserve, so the
+         model tag + other items keep their natural positions. */
     }
     .card-mascot {
       position: absolute;
-      right: -4px;
-      bottom: -8px;
-      width: 61px;   /* 80% of the prior 76px */
-      height: 61px;
+      right: -2px;
+      bottom: 1px;
+      width: 36px;
+      height: 36px;
       pointer-events: none;
       object-fit: contain;
+      z-index: 2;      /* float over the card's text content */
     }
     .card-head {
       display: flex;
@@ -2150,6 +2152,39 @@
       });
     }
     brandJumpRoll();
+
+    // sidebar card mascot hover: jump + front-flip + bouncy landing. distinct
+    // from the top-nav brand-jump-roll: rotates around X (front flip / coin
+    // spin) instead of around Z (planar spin), pops a slight scale pulse, and
+    // lands with back.out(2.4) for extra boing. delegated via mouseover so
+    // newly-rendered cards (every 5s) get the listener for free.
+    document.addEventListener("mouseover", (ev) => {
+      if (typeof gsap === "undefined" || reduceMotionOn()) return;
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const card = t.closest("#cards .card");
+      if (!card) return;
+      const mascot = card.querySelector(".card-mascot");
+      if (!mascot) return; // only selected cards mount a mascot
+      if (mascot.dataset.flipping === "1") return; // cooldown until current flip ends
+      mascot.dataset.flipping = "1";
+      gsap.timeline({
+        onComplete: () => {
+          gsap.set(mascot, { rotationY: 0, scale: 1, y: 0, opacity: 1 });
+          mascot.dataset.flipping = "0";
+        },
+      })
+        // jump + scale.
+        .to(mascot, { y: -9, scale: 1.07, duration: 0.3, ease: "power2.out" })
+        // opacity eases IN to 45% on its own track — gradual, not snapped.
+        .to(mascot, { opacity: 0.45, duration: 0.4, ease: "power2.inOut" }, "<")
+        // y-axis flip while opacity holds at 0.45.
+        .to(mascot, { rotationY: 360, duration: 0.6, ease: "power2.inOut" }, "<0.05")
+        // landing: drop + settle.
+        .to(mascot, { y: 0, scale: 1, duration: 0.5, ease: "back.out(1.2)" }, "-=0.18")
+        // opacity eases OUT back to 100% over the landing — also gradual.
+        .to(mascot, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, "<");
+    });
 
     function renderChatInput(sess, latestFlag) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
