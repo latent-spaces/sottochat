@@ -30,8 +30,10 @@ const MAX_CHAT_CHUNKS = 200;
 //     (no point opening a second front while the first is unread)
 const AUTO_SEND_COOLDOWN_MS = Number(Bun.env.META_AUTO_SEND_COOLDOWN_MS ?? 5 * 60 * 1000);
 // global on/off for auto-send, runtime-mutable via POST /chat/auto-send.
-// initial value comes from META_AUTO_SEND_ENABLED (default "1" / on).
-let autoSendEnabled = Bun.env.META_AUTO_SEND_ENABLED !== "0";
+// default off — opt in by setting META_AUTO_SEND_ENABLED=1 or by clicking
+// the top-nav toggle. off-by-default keeps a fresh server quiet until the
+// user explicitly turns it on.
+let autoSendEnabled = Bun.env.META_AUTO_SEND_ENABLED === "1";
 // last N closed turns we keep per session, used to seed the auto-fired chat.
 const RECENT_CLOSED_TURNS = 5;
 // only feed the observer turns whose close ts is within the last

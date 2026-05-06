@@ -1652,6 +1652,15 @@
       // FLIP playback: any card that was already in the DOM and has shifted
       // gets animated from its old top to the new one. new cards are skipped
       // (they have no `before` entry — their enter animation handles them).
+      //
+      // bug we hit: refresh runs every 5s, list reorders frequently. the old
+      // version used gsap.from with overwrite: "auto" but no clearProps. when a
+      // new FLIP fired mid-flight, the previous tween's residual translate3d()
+      // stuck on the inline style — cards drifted out of layout, leaving gaps
+      // and ghost overlaps. fix:
+      //   1. killTweensOf on the y/transform channel before starting a new tween
+      //      (overwrite:"auto" alone doesn't always catch transform tweens).
+      //   2. clearProps:"transform" on completion so the inline style resets.
       if (canFlip && flipBefore.size) {
         for (const [id, el] of cardEls) {
           const before = flipBefore.get(id);
@@ -1659,12 +1668,17 @@
           const after = el.getBoundingClientRect().top;
           const delta = before - after;
           if (Math.abs(delta) > 0.5) {
-            gsap.from(el, {
-              y: delta,
-              duration: 0.55,
-              ease: "power3.out",
-              overwrite: "auto",
-            });
+            gsap.killTweensOf(el, "y,transform");
+            gsap.fromTo(
+              el,
+              { y: delta },
+              {
+                y: 0,
+                duration: 0.55,
+                ease: "power3.out",
+                clearProps: "transform",
+              }
+            );
           }
         }
       }
