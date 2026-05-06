@@ -86,6 +86,19 @@
     }
     .sprinkle.round { width: 6px; height: 6px; }
 
+    /* hover-burst sprinkles spawned out of a bar's frosting cap. positioned
+       absolute inside the bar — the bar uses overflow:visible already so they
+       can fly above the rim. removed from DOM after the gsap timeline finishes. */
+    .sprinkle-burst {
+      position: absolute;
+      pointer-events: none;
+      width: 4px;
+      height: 9px;
+      border-radius: 999px;
+      will-change: transform, opacity;
+    }
+    .sprinkle-burst.round { width: 5px; height: 5px; }
+
     /* keep main content above the sprinkle layer */
     main.layout { position: relative; z-index: 1; }
 
@@ -1901,6 +1914,74 @@
       }
     }
     spawnSprinkles();
+
+    // hover-burst: when the cursor enters a frosted bar, fling a handful of
+    // sprinkles out of its frosting cap. delegated via mouseover (mouseenter
+    // doesn't bubble), throttled per bar via dataset timestamp so re-entries
+    // don't stack. only bars that actually carry a .bar-frost cap participate
+    // (short bars below BAR_FROST_MIN_PCT are skipped automatically).
+    const BURST_COLORS = ["#ec4899", "#f9a8d4", "#a855f7", "#fbbf24", "#5dd0c2", "#7c8cf0"];
+    function burstSprinkles(bar) {
+      if (typeof gsap === "undefined" || reduceMotionOn()) return;
+      // radial burst: each sprinkle picks a random angle on the full circle
+      // and radiates outward, no fan/fountain. produces a round pop instead of
+      // an upward spray. one-stage tween — no second-stage fall.
+      // colour palette is dominated by the bar's own color (read from computed
+      // style — same source as the frosting `currentColor`), then sprinkled with
+      // accent contrast picks from BURST_COLORS for variety.
+      const barColor = getComputedStyle(bar).color || "#ec4899";
+      const count = 9;
+      for (let i = 0; i < count; i++) {
+        const s = document.createElement("span");
+        s.className = Math.random() < 0.4 ? "sprinkle-burst round" : "sprinkle-burst";
+        // ~60% bar-color, ~40% accent palette mix-in
+        s.style.background = Math.random() < 0.6
+          ? barColor
+          : BURST_COLORS[Math.floor(Math.random() * BURST_COLORS.length)];
+        // start from the rim — center of the bar's top edge.
+        s.style.left = "50%";
+        s.style.top = "-6px"; // matches the frosting cap rim
+        s.style.opacity = "0";
+        s.style.transform = "translate(-50%, 0) rotate(" + (Math.random() * 360) + "deg)";
+        bar.appendChild(s);
+        // angle distributed roughly uniformly on the full circle (small jitter
+        // around the index slice so the ring doesn't look perfectly geometric).
+        const slice = (Math.PI * 2) / count;
+        const angle = slice * i + (Math.random() - 0.5) * slice * 0.7;
+        const dist = 30 + Math.random() * 22;
+        const dx = Math.cos(angle) * dist;
+        const dy = Math.sin(angle) * dist;
+        const rot = (Math.random() < 0.5 ? -1 : 1) * (180 + Math.random() * 220);
+        const dur = 0.6 + Math.random() * 0.25;
+        gsap.timeline({
+          onComplete: () => s.remove(),
+        })
+          .to(s, { opacity: 1, duration: 0.08, ease: "power1.out" }, 0)
+          .to(
+            s,
+            {
+              x: dx,
+              y: dy,
+              rotation: "+=" + rot,
+              duration: dur,
+              ease: "power2.out",
+            },
+            0
+          )
+          .to(s, { opacity: 0, duration: 0.25, ease: "power1.in" }, "-=0.3");
+      }
+    }
+    document.addEventListener("mouseover", (ev) => {
+      const target = ev.target;
+      if (!(target instanceof Element)) return;
+      const bar = target.closest(".cx-bar");
+      if (!bar) return;
+      if (!bar.querySelector(".bar-frost")) return; // only frosted bars
+      const last = parseInt(bar.dataset.burstTs || "0", 10);
+      if (Date.now() - last < 800) return; // cooldown so re-entries don't stack
+      bar.dataset.burstTs = String(Date.now());
+      burstSprinkles(bar);
+    });
 
     // brand mark hover: jump up + 360° roll + drop (port of cutcake's brandJumpRoll).
     // trigger on the brand area (logo + wordmark) so hovering either fires it.
