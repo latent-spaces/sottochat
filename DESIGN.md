@@ -396,7 +396,7 @@ a single mascot mounts in the detail pane on every session-open, picking a deter
 - `.session-head h2` — 30px, anchored at `head-right`.
 - `.chat-input` — 36px, anchored at `input-top-right`.
 
-**variants:** the same two svgs as the card mascot (`cake-icon.svg`, `mascot-var-2.svg`), picked from a hash so different sessions get different mascot faces. `transform-origin: 50% 100%` and a hashed `--cake-tilt` (a few degrees) keep each one slightly off-axis without looking glitched.
+**variants:** two svgs picked from a hash so different sessions get different mascot faces — `mascot-var-3-1.svg`, `mascot-var-3-2.svg`. `transform-origin: 50% 100%` and a hashed `--cake-tilt` (a few degrees) keep each one slightly off-axis without looking glitched. the sidebar selected-card mascot pulls from a separate two-svg pair (`cake-icon.svg` for live, `mascot-var-2.svg` for idle); the wandering pool and the sidebar pool are intentionally distinct.
 
 **motion:** mounts silently with no entrance gsap (the prior cake fades out softly on session change before the new one mounts). re-mounted on every 5s refresh tick (chart and chat-input innerHTML wipes destroy DOM nodes inside them) without animation, so the cake stays visually pinned.
 
@@ -411,7 +411,7 @@ a single mascot mounts in the detail pane on every session-open, picking a deter
 
 ### Bar frost
 
-- **silhouette:** `frosting-new.svg` (legacy `bar-frost.svg` and alternate `bar-frost-v2.svg` ship as alternates; swap by editing the `mask-image` URL in `.bar-frost`).
+- **silhouette:** `frosting-new.svg`, applied via CSS `mask-image`. swap shapes by editing the file in place; the inline rendering follows automatically.
 - **fill:** `color-mix(in oklab, currentColor 60%, white 40%)` so the icing reads lighter than the bar — icing as a material, not paint.
 - **dimensions:** 36px tall cap, with 20% rim above the bar's top edge and 80% overlap inside the bar. positioned at `left: -50%; right: -50%; top: -7px; width: 200%`.
 - **applied to:** every `.cx-bar` whose height percentage is ≥ `BAR_FROST_MIN_PCT` (25%). short bars don't get a cap — frosting-on-stub looks dwarfed.
