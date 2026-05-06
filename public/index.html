@@ -116,6 +116,9 @@
       height: 32px;
       flex-shrink: 0;
       object-fit: contain;
+      /* gsap brand-jump hovers will scale + spin from this anchor — cake bottom. */
+      transform-origin: 50% 70%;
+      will-change: transform;
     }
     .nav-wordmark {
       font-size: 20px;
@@ -158,6 +161,45 @@
       font-size: 13px;
     }
     .gh-pill .gh-star { color: #f4b942; }
+
+    /* global auto-break-down toggle in the top nav. server-authoritative state,
+       broadcast over ws so all connected clients stay in sync. */
+    .nav-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-pill);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fg);
+      cursor: pointer;
+      transition: border-color 200ms var(--ease-out), background 200ms var(--ease-out);
+    }
+    .nav-toggle:hover { border-color: var(--accent); }
+    .nav-toggle .toggle-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--border-strong);
+      box-shadow: none;
+      transition: background 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+    }
+    .nav-toggle[aria-pressed="true"] {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .nav-toggle[aria-pressed="true"] .toggle-dot {
+      background: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 28%, transparent);
+    }
+    .nav-toggle .toggle-glyph {
+      font-family: var(--mono);
+      font-size: 13px;
+    }
 
     main.layout {
       max-width: 1280px;
@@ -467,22 +509,28 @@
       position: relative;
       overflow: visible;
     }
-    /* dripping-icing cap — silhouette comes from /assets/bar-frost.svg used as
+    /* dripping-icing cap — silhouette comes from /assets/frosting-new.svg used as
        a mask, the fill is the bar's own `currentColor` (so the bar's opacity
        carries through and frost == bar). edit the svg file to change shape;
        the inline rendering follows automatically. */
+    /* the cap is 36px tall; 20% (≈7px) peeks above the bar top, 80% (≈29px) overlaps
+       into the bar — most of the drip silhouette lives inside the bar, just the rim
+       spills over. only added on bars whose height pct passes BAR_FROST_MIN_PCT
+       (see render code) so short bars aren't dwarfed by their own frosting. */
     .bar-frost {
       position: absolute;
-      left: 0;
-      right: 0;
-      top: -11px;
-      width: 100%;
-      height: 12px;
+      left: -50%;
+      right: -50%;
+      top: -7px;
+      width: 200%;
+      height: 36px;
       pointer-events: none;
       display: block;
-      background-color: currentColor;
-      -webkit-mask: url("/assets/bar-frost.svg") no-repeat top / 100% 100%;
-              mask: url("/assets/bar-frost.svg") no-repeat top / 100% 100%;
+      /* lighter than the bar so the icing reads as icing, not paint. */
+      background-color: currentColor; /* fallback */
+      background-color: color-mix(in oklab, currentColor 60%, white 40%);
+      -webkit-mask: url("/assets/frosting-new.svg") no-repeat bottom center / contain;
+              mask: url("/assets/frosting-new.svg") no-repeat bottom center / contain;
     }
     .bar-input { background: var(--accent); color: var(--accent); opacity: 0.55; }
     .bar-output { background: var(--plum); color: var(--plum); opacity: 0.9; }
@@ -779,6 +827,71 @@
       font-style: italic;
     }
 
+    /* chat thread — between conversation and chat input. populated by /chat/send replies. */
+    .chat-thread {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chat-thread:empty { display: none; }
+    .chat-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .chat-row .chat-role {
+      font-family: var(--mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--fg-muted);
+    }
+    .chat-row.you .chat-role { color: var(--accent); }
+    .chat-row.agent .chat-role { color: var(--plum); }
+    .chat-row .chat-auto-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 6px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-radius: 999px;
+      vertical-align: middle;
+    }
+    .chat-row .chat-body {
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--fg);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .chat-row.agent .chat-body {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-input);
+      padding: 10px 12px;
+    }
+    .chat-status {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+      font-style: italic;
+    }
+    .chat-status.thinking::before {
+      content: "•";
+      display: inline-block;
+      margin-right: 6px;
+      color: var(--accent);
+      animation: chat-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes chat-pulse {
+      0%, 100% { opacity: 0.3; }
+      50%      { opacity: 1; }
+    }
+
     code, .mono { font-family: var(--mono); font-size: 13px; }
 
     @media (prefers-reduced-motion: reduce) {
@@ -805,6 +918,11 @@
     </div>
     <div class="nav-right">
       <span class="reconnect-indicator" id="reconnect-indicator" hidden>reconnecting…</span>
+      <button class="nav-toggle" id="autosend-toggle" type="button" aria-pressed="true" aria-label="auto break-down">
+        <span class="toggle-dot" aria-hidden="true"></span>
+        <span class="toggle-glyph">⚡</span>
+        <span class="toggle-label">auto break-down</span>
+      </button>
       <a class="gh-pill" href="https://github.com/oronanschel/cut-the-cake" target="_blank" rel="noreferrer noopener" aria-label="GitHub repo">
         <span class="gh-glyph">★</span>
         <span class="gh-star" id="gh-star">—</span>
@@ -840,6 +958,7 @@
         </div>
 
         <div class="conversation" id="d-conversation"></div>
+        <div class="chat-thread" id="d-chat-thread"></div>
         <div class="chat-input" id="d-chat-input"></div>
       </article>
     </section>
@@ -862,7 +981,41 @@
     const dChart = document.getElementById("d-chart");
     const dCodeChart = document.getElementById("d-code-chart");
     const dConversation = document.getElementById("d-conversation");
+    const dChatThread = document.getElementById("d-chat-thread");
     const dChatInput = document.getElementById("d-chat-input");
+    const autoSendToggle = document.getElementById("autosend-toggle");
+
+    // global state for the auto-break-down toggle. authoritative value comes from
+    // the server's hello payload + autosend:setting ws msgs; the local optimistic
+    // flip on click is just snappier than waiting for the ws round-trip.
+    let autoSendEnabled = true;
+    function paintAutoSend() {
+      if (!autoSendToggle) return;
+      autoSendToggle.setAttribute("aria-pressed", autoSendEnabled ? "true" : "false");
+      const lbl = autoSendToggle.querySelector(".toggle-label");
+      if (lbl) lbl.textContent = autoSendEnabled ? "auto break-down" : "auto break-down · off";
+    }
+    paintAutoSend();
+    if (autoSendToggle) {
+      autoSendToggle.addEventListener("click", async () => {
+        const next = !autoSendEnabled;
+        autoSendEnabled = next; paintAutoSend(); // optimistic
+        try {
+          const res = await fetch("/chat/auto-send", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ enabled: next }),
+          });
+          if (!res.ok) {
+            console.warn("[autosend] toggle failed", res.status);
+            autoSendEnabled = !next; paintAutoSend(); // revert on failure
+          }
+        } catch (err) {
+          console.warn("[autosend] toggle error", err);
+          autoSendEnabled = !next; paintAutoSend();
+        }
+      });
+    }
 
     // state thresholds
     const LIVE_MS = 30 * 1000;          // <30s = live
@@ -1076,7 +1229,10 @@
     // chart icons — small inline svgs sitting in a tinted bubble in the card head
     const ICON_COMPLEXITY = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12 L5 8 L8 10 L11 5 L14 8"/></svg>';
     const ICON_CODE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4 L2 8 L5 12 M11 4 L14 8 L11 12 M9.5 3.5 L6.5 12.5"/></svg>';
-    // dripping-icing cap — shape lives in /assets/bar-frost.svg, applied here
+    // dripping-icing cap — shape lives in /assets/frosting-new.svg, applied here
+    // only to bars taller than this threshold (% of yMax) so short bars don't get
+    // crushed by their own frosting silhouette.
+    const BAR_FROST_MIN_PCT = 25;
     // as a css mask so editing the svg file updates every bar. the span itself
     // carries no markup; the bar's currentColor fills the masked shape.
     const BAR_FROST = '<span class="bar-frost" aria-hidden="true"></span>';
@@ -1118,8 +1274,8 @@
           " · you: " + d.input + "w";
         return (
           '<div class="cx-pair' + (isLast ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
-            '<div class="cx-bar bar-input" style="height: ' + inputH + '%">' + BAR_FROST + '</div>' +
-            '<div class="cx-bar bar-output" style="height: ' + outputH + '%">' + BAR_FROST + '</div>' +
+            '<div class="cx-bar bar-input" style="height: ' + inputH + '%">' + (inputH >= BAR_FROST_MIN_PCT ? BAR_FROST : '') + '</div>' +
+            '<div class="cx-bar bar-output" style="height: ' + outputH + '%">' + (outputH >= BAR_FROST_MIN_PCT ? BAR_FROST : '') + '</div>' +
           '</div>'
         );
       }).join("");
@@ -1168,8 +1324,8 @@
         const tip = "+" + d.added + " / -" + d.removed + " lines";
         return (
           '<div class="cx-pair' + (isLast ? " latest" : "") + '" title="' + escapeHtml(tip) + '">' +
-            '<div class="cx-bar bar-added" style="height: ' + addedH + '%">' + BAR_FROST + '</div>' +
-            '<div class="cx-bar bar-removed" style="height: ' + removedH + '%">' + BAR_FROST + '</div>' +
+            '<div class="cx-bar bar-added" style="height: ' + addedH + '%">' + (addedH >= BAR_FROST_MIN_PCT ? BAR_FROST : '') + '</div>' +
+            '<div class="cx-bar bar-removed" style="height: ' + removedH + '%">' + (removedH >= BAR_FROST_MIN_PCT ? BAR_FROST : '') + '</div>' +
           '</div>'
         );
       }).join("");
@@ -1559,6 +1715,7 @@
       }
 
       renderConversation(sess, turns);
+      renderChatThread(sess);
       renderChatInput(sess, latestFlag);
 
       // when the open session changes (or first opens), blur-fade the detail
@@ -1574,6 +1731,7 @@
           { sel: ".session-head",  pick: r => r.querySelectorAll("#d-name, .source") },
           { sel: ".charts-band",   pick: r => r.querySelectorAll("#d-chart, #d-code-chart") },
           { sel: ".conversation",  pick: r => r.children },
+          { sel: ".chat-thread",   pick: r => r.children },
           { sel: ".chat-input",    pick: r => r.children },
         ];
         let regionIdx = 0;
@@ -1602,7 +1760,10 @@
 
     const DEFAULT_PREFILL = "walk me through what you've done, one piece at a time. pause for my take after each.";
     const chatDrafts = new Map();
-    const chatSent = new Set();
+    // chat thread state — sessionKey → array of {role, text, ts}.
+    // populated by ws "chat:chunk" messages (the server echoes user sends and streams assistant replies).
+    const chatThreadByKey = new Map();
+    const chatStatusByKey = new Map();
     let convoLastSession = null;
     let convoLastTurnCount = 0;
     // remember which conv-bodies the user has expanded so 5s refresh doesn't snap them shut.
@@ -1741,6 +1902,30 @@
     }
     spawnSprinkles();
 
+    // brand mark hover: jump up + 360° roll + drop (port of cutcake's brandJumpRoll).
+    // trigger on the brand area (logo + wordmark) so hovering either fires it.
+    function brandJumpRoll() {
+      if (typeof gsap === "undefined" || reduceMotionOn()) return;
+      const mark = document.querySelector(".top-nav .nav-logo");
+      const trigger = document.querySelector(".top-nav .nav-left");
+      if (!mark || !trigger) return;
+      let playing = false;
+      trigger.addEventListener("mouseenter", () => {
+        if (playing) return;
+        playing = true;
+        gsap.timeline({
+          onComplete: () => {
+            gsap.set(mark, { rotation: 0 });
+            playing = false;
+          },
+        })
+          .to(mark, { y: -16, duration: 0.28, ease: "expo.out" })
+          .to(mark, { rotation: 360, duration: 0.55, ease: "power2.inOut" }, "<0.05")
+          .to(mark, { y: 0, duration: 0.45, ease: "expo.out" }, "-=0.25");
+      });
+    }
+    brandJumpRoll();
+
     function renderChatInput(sess, latestFlag) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       const ctxHtml = latestFlag && latestFlag.insight
@@ -1755,7 +1940,6 @@
 
       const prefill = (latestFlag && latestFlag.prefill) || DEFAULT_PREFILL;
       const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : prefill;
-      const sent = chatSent.has(sessionKey);
 
       dChatInput.innerHTML =
         ctxHtml +
@@ -1771,8 +1955,7 @@
         '<div class="chat-tip">' +
           '<span>tip: ask for smaller steps, rationale, or alternatives</span>' +
           '<span><span class="tip-key">⌘ ↵</span> to send</span>' +
-        '</div>' +
-        (sent ? '<div class="chat-sent">queued (agent not wired yet)</div>' : '');
+        '</div>';
 
       const ta = dChatInput.querySelector('textarea');
       const btn = dChatInput.querySelector('.send-btn');
@@ -1788,14 +1971,65 @@
         });
       }
       if (btn) {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
           const text = (ta && ta.value || "").trim();
           if (!text) return;
-          chatSent.add(sessionKey);
-          console.log("[chat] send", { sessionKey, text });
-          renderChatInput(sess, latestFlag);
+          btn.disabled = true;
+          try {
+            const res = await fetch('/chat/send', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ sessionKey, text }),
+            });
+            if (!res.ok) {
+              const body = await res.text();
+              console.warn('[chat] send failed', res.status, body);
+              btn.disabled = false;
+              return;
+            }
+            // server will broadcast chat:chunk back; we just clear the draft so
+            // the textarea is ready for the next ask.
+            chatDrafts.delete(sessionKey);
+            if (ta) ta.value = '';
+          } catch (err) {
+            console.warn('[chat] send error', err);
+            btn.disabled = false;
+          }
         });
       }
+    }
+
+    function renderChatThread(sess) {
+      const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+      const thread = chatThreadByKey.get(sessionKey) || [];
+      const status = chatStatusByKey.get(sessionKey);
+      if (!thread.length && (!status || status.status === "idle" || status.status === "spawned")) {
+        dChatThread.innerHTML = "";
+        return;
+      }
+      const rowsHtml = thread.map(c => {
+        const role = c.role === "user" ? "you" : "agent";
+        const cls = c.role === "user" ? "chat-row you" : "chat-row agent";
+        const autoBadge = c.role === "user" && c.kind === "auto"
+          ? '<span class="chat-auto-tag" title="auto-sent by observer flag">auto</span>'
+          : '';
+        const body = c.role === "assistant" && typeof marked !== "undefined"
+          ? '<div class="chat-body conv-md">' + marked.parse(c.text || "", { breaks: true, gfm: true }) + '</div>'
+          : '<div class="chat-body">' + escapeHtml(c.text || "") + '</div>';
+        return '<div class="' + cls + '">' +
+                 '<div class="chat-role">' + role + autoBadge + '</div>' +
+                 body +
+               '</div>';
+      }).join("");
+      let statusHtml = "";
+      if (status && status.status === "thinking") {
+        statusHtml = '<div class="chat-status thinking">thinking…</div>';
+      } else if (status && status.status === "respawning") {
+        statusHtml = '<div class="chat-status">reconnecting…</div>';
+      } else if (status && status.status === "error") {
+        statusHtml = '<div class="chat-status">error: ' + escapeHtml(status.message || "agent stopped") + '</div>';
+      }
+      dChatThread.innerHTML = rowsHtml + statusHtml;
     }
 
     function refresh() {
@@ -1826,6 +2060,14 @@
         observerDecisions: Array.isArray(snap.observerDecisions) ? snap.observerDecisions.slice() : [],
         sessionName: snap.sessionName || null,
       });
+      // chat thread + status come alongside the snapshot — restore on hello
+      // so a page reload doesn't wipe a live conversation.
+      if (Array.isArray(snap.chatThread) && snap.chatThread.length) {
+        chatThreadByKey.set(key, snap.chatThread.slice());
+      }
+      if (snap.chatStatus && typeof snap.chatStatus.status === "string") {
+        chatStatusByKey.set(key, { status: snap.chatStatus.status, message: snap.chatStatus.message, ts: snap.chatStatus.ts || 0 });
+      }
     }
 
     function appendEvent(sessionKey, ev) {
@@ -1855,6 +2097,10 @@
       ws.addEventListener("message", e => {
         let msg; try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.kind === "hello") {
+          if (typeof msg.autoSendEnabled === "boolean") {
+            autoSendEnabled = msg.autoSendEnabled;
+            paintAutoSend();
+          }
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
@@ -1880,6 +2126,24 @@
           if (s) {
             if (msg.name) s.sessionName = msg.name;
             refresh();
+          }
+        } else if (msg.kind === "chat:chunk") {
+          if (msg.chunk && typeof msg.chunk.role === "string" && typeof msg.chunk.text === "string") {
+            let arr = chatThreadByKey.get(msg.sessionKey);
+            if (!arr) { arr = []; chatThreadByKey.set(msg.sessionKey, arr); }
+            arr.push({ role: msg.chunk.role, text: msg.chunk.text, ts: msg.chunk.ts || Date.now(), ...(msg.chunk.kind ? { kind: msg.chunk.kind } : {}) });
+            if (arr.length > 200) arr.splice(0, arr.length - 200);
+            refresh();
+          }
+        } else if (msg.kind === "chat:status") {
+          if (typeof msg.status === "string") {
+            chatStatusByKey.set(msg.sessionKey, { status: msg.status, message: msg.message, ts: msg.ts || Date.now() });
+            refresh();
+          }
+        } else if (msg.kind === "autosend:setting") {
+          if (typeof msg.enabled === "boolean") {
+            autoSendEnabled = msg.enabled;
+            paintAutoSend();
           }
         }
       });

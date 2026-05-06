@@ -62,7 +62,8 @@ env vars (all optional):
 
 **revert anchors:**
 - tag `pre-cut-the-cake` → `cc383e9` — last clean state before the strawberry redesign.
-- commit `d27b2ac` — current head: removal of what-happened summary panel + svg send icon + sidebar FLIP + slower cascade.
+- commit `d27b2ac` — pre-strawberry-v' baseline: removal of what-happened summary panel + svg send icon + sidebar FLIP + slower cascade.
+- commit `398a85e` — current head: tailer fs.watch + lineage collapse, per-session palette, bar-frost svg, `chat-agent.ts` draft.
 
 ---
 
@@ -75,19 +76,14 @@ env vars (all optional):
 | A     | rename to chunk-to-chat → cut-the-cake + two-view ui shell             | done            |
 | B     | multi-session inbox (cc + claude.app local-agent-mode)                 | done            |
 | C     | sonnet observer wiring (gate + insights + prefills + names)            | partial · committed (M1 + M1.5 done; sessionSummary removed; profile + resume not) |
-| D     | break-it-down item flow                                                | partial · uncommitted (chat strip + input wired; chat-agent.ts drafted but not connected to send button) |
+| D     | break-it-down item flow                                                | partial · committed (chat strip + input wired; chat-agent.ts drafted but not connected to send button) |
 | E     | userpromptsubmit hook for handoff                                      | not started     |
 | V     | strawberry/dessert visual system + animations                          | done · committed |
-| V'    | per-session colors + sidebar separation + svg frosting                 | done · uncommitted |
+| V'    | per-session colors + sidebar separation + svg frosting                 | done · committed |
 
-**current head:** `d27b2ac` (remove what-happened panel; SVG send icon; sidebar FLIP + slower cascade).
+**current head:** `398a85e` (tailer fs.watch + lineage collapse; per-session palette + bar frosting; chat-agent draft).
 
-**uncommitted in working tree:**
-- `M public/index.html` — per-session palette + sidebar separation + frosting cap (mask-image) + lineage filter + threads-filter removed
-- `M src/server.ts` — `META_INBOX_MINUTES` default 60 → 240
-- `M src/tailer.ts` — recursive `fs.watch` wake-up signal (claude-mem §3 pattern)
-- `?? public/assets/bar-frost.svg` — svg source-of-truth for the bar-plot frosting cap (mask-image)
-- `?? src/chat-agent.ts` — drafted "break it down" companion (one persistent sdk subprocess per session); NOT wired into server.ts yet
+**working tree:** clean. all the items previously listed as uncommitted (tailer fs.watch, `META_INBOX_MINUTES` 240, threads-filter drop, lineage collapse, per-session palette, sidebar separation, bar-frost svg, `src/chat-agent.ts` draft) shipped together in `398a85e`.
 
 ---
 
@@ -343,43 +339,37 @@ if "missing sessions" comes up again: `curl -s localhost:3737/sessions | jq` is 
 - ✅ commit at `d27b2ac`: send button → inline svg (paper-plane → arrow-up, Lucide style).
 - ✅ commit at `d27b2ac`: sidebar FLIP layout for inserts; top-anchor scale (`originY: 0`); update pulse ring 6px→8px / scale 1.015→1.022.
 - ✅ commit at `d27b2ac`: detail open is now a two-tier cascade (`region 0.12s` + `leaf 0.04s` + `duration 0.75s`).
-- ✅ uncommitted: per-session 6-hue palette (djb2 hash), applied to card + detail.
-- ✅ uncommitted: sidebar/detail visual separation (hairline + two-tone gradients).
-- ✅ uncommitted: svg dripping-frosting cap on bar plots (`public/assets/bar-frost.svg` as mask-image source of truth).
-- ✅ uncommitted: tailer recursive `fs.watch` wake-up + lineage collapse (abtop-inspired).
-- ✅ uncommitted: client `threads.length > 0` filter dropped; `META_INBOX_MINUTES` default 60 → 240.
-- ✅ uncommitted: `src/chat-agent.ts` drafted (typechecks, not wired).
+- ✅ commit at `398a85e`: per-session 6-hue palette (djb2 hash), applied to card + detail.
+- ✅ commit at `398a85e`: sidebar/detail visual separation (hairline + two-tone gradients).
+- ✅ commit at `398a85e`: svg dripping-frosting cap on bar plots (`public/assets/bar-frost.svg` as mask-image source of truth).
+- ✅ commit at `398a85e`: tailer recursive `fs.watch` wake-up + lineage collapse (abtop-inspired).
+- ✅ commit at `398a85e`: client `threads.length > 0` filter dropped; `META_INBOX_MINUTES` default 60 → 240.
+- ✅ commit at `398a85e`: `src/chat-agent.ts` drafted (typechecks, not wired).
 - ✅ saved magicui sources to `vendor/magicui/` for future reference (`blur-fade.tsx`, `animated-list.tsx`).
 
 ---
 
 **resume-here queue** (in priority order):
 
-1. **commit the working tree.** logical chunks if splitting:
-   - (a) `src/tailer.ts` recursive fs.watch + `META_INBOX_MINUTES` bump + filter removal + lineage collapse — *session pickup hardening*.
-   - (b) per-session palette + sidebar separation + frosting svg + bar-frost.svg — *visual upgrades*.
-   - (c) `src/chat-agent.ts` drafted (orphan until #2 lands) — could fold into #2 or hold until wired.
-   one commit per chunk feels right — they're independent themes.
+1. **wire send → spawn chat agent.** `src/chat-agent.ts` already implements the host. wire-up checklist in "the chat agent" section above. this is the actual product moment.
 
-2. **wire send → spawn chat agent.** `src/chat-agent.ts` already implements the host. wire-up checklist in "the chat agent" section above. this is the actual product moment.
+2. **sidebar update-pulse signature tuning.** `cardSig` currently includes `lastEventTs`, which jumps on every event. for very chatty sessions the pulse fires constantly. consider gating to `(insight|sessionName)` only, leaving the live-border + opacity for "still active" signal.
 
-3. **sidebar update-pulse signature tuning.** `cardSig` currently includes `lastEventTs`, which jumps on every event. for very chatty sessions the pulse fires constantly. consider gating to `(insight|sessionName)` only, leaving the live-border + opacity for "still active" signal.
+3. **rename observer cwd.** `~/.chunk-to-chat/observer/` → `~/.cut-the-cake/observer/`. cosmetic but consistent.
 
-4. **rename observer cwd.** `~/.chunk-to-chat/observer/` → `~/.cut-the-cake/observer/`. cosmetic but consistent.
+4. **github stars on the gh-pill.** small cdn fetch; cache 10min in localStorage; fall back to `★` glyph + repo name if rate-limited.
 
-5. **github stars on the gh-pill.** small cdn fetch; cache 10min in localStorage; fall back to `★` glyph + repo name if rate-limited.
+5. **rewrite `notes/plan.md` and `notes/claude-mem-patterns.md`** to drop "passive" framing and the old name. doc cleanup.
 
-6. **rewrite `notes/plan.md` and `notes/claude-mem-patterns.md`** to drop "passive" framing and the old name. doc cleanup.
-
-7. **delete orphaned assets.** `public/assets/header-banner-cake-clouds.webp` + `public/assets/send-button-rocket.webp`.
+6. **delete orphaned assets.** `public/assets/header-banner-cake-clouds.webp` + `public/assets/send-button-rocket.webp`.
 
 backend / observer work (independent of the design queue):
 
-8. **observer profile persistence (M2)** — store `session_id` to `~/.cut-the-cake/observer.session`, resume on respawn. preserves accumulated context.
-9. **feedback channel (M3)** — server tracks user interactions, pushes "since last batch the user did X, Y, Z" to the observer periodically. observer adapts gate.
-10. **userpromptsubmit hook (phase E)** — once we have a draft instruction in the chat, a hook script should be able to inject it into the user's main cc session. correct stdout shape per `claude-mem-patterns.md` §21.
-11. **codex schema parser** — `~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl`; uses different `{type, payload}` envelope. straightforward second parser branch in `jsonl.ts`.
-12. **PID → FD session discovery (abtop-style).** would replace lineage-collapse heuristic with authoritative "this jsonl is held open by a live claude process" signal. requires libproc bindings on macOS / `/proc/<pid>/fd` on Linux / sysinfo on Windows. defer until the heuristic visibly fails.
+7. **observer profile persistence (M2)** — store `session_id` to `~/.cut-the-cake/observer.session`, resume on respawn. preserves accumulated context.
+8. **feedback channel (M3)** — server tracks user interactions, pushes "since last batch the user did X, Y, Z" to the observer periodically. observer adapts gate.
+9. **userpromptsubmit hook (phase E)** — once we have a draft instruction in the chat, a hook script should be able to inject it into the user's main cc session. correct stdout shape per `claude-mem-patterns.md` §21.
+10. **codex schema parser** — `~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl`; uses different `{type, payload}` envelope. straightforward second parser branch in `jsonl.ts`.
+11. **PID → FD session discovery (abtop-style).** would replace lineage-collapse heuristic with authoritative "this jsonl is held open by a live claude process" signal. requires libproc bindings on macOS / `/proc/<pid>/fd` on Linux / sysinfo on Windows. defer until the heuristic visibly fails.
 
 ---
 

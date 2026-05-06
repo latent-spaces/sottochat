@@ -1,13 +1,10 @@
-// single long-lived sdk observer. one persistent claude code subprocess
-// (sonnet by default) reads batches of recently-closed turns + recent
-// user interactions, returns gate decisions + 1-sentence insights.
+// two long-lived sdk subprocesses:
+//   - decisions: sonnet-4-6, returns per-turn {open, insight, tags, prefill}
+//   - namer:     haiku-4-5,  returns per-session {sessionName}
+// each keeps prior-batch context so it can adapt as activity shifts.
 //
 // pattern: claude-mem ClaudeProvider — query() from @anthropic-ai/claude-agent-sdk,
 // async-generator prompt feed, sandboxed cwd, all tools disallowed.
-//
-// M1 scope: spawn, batch, log decisions to stdout. no profile persistence,
-// no resume across restarts, no feedback channel, no ui swap. just verify
-// the call works and the prompt produces useful output.
 
 import { execSync } from "node:child_process";
 import { mkdirSync, existsSync } from "node:fs";
@@ -48,7 +45,10 @@ export type SessionNameUpdate = {
 };
 
 export type ObserverOptions = {
-  model?: string;
+  /** model for the per-turn decisions subprocess (sonnet by default). */
+  decisionsModel?: string;
+  /** model for the session-naming subprocess (haiku by default). */
+  namerModel?: string;
   batchMs?: number;
   onDecision?: (d: GateDecision) => void;
   onName?: (s: SessionNameUpdate) => void;
@@ -69,9 +69,12 @@ const DISALLOWED_TOOLS = [
   "TodoWrite",
 ];
 
-const OBSERVER_DIR = join(homedir(), ".chunk-to-chat", "observer");
+// observer cwd kept under the legacy ~/.chunk-to-chat/ dir for now (cosmetic
+// rename in resume queue). namer is fresh, so it lives under the new ~/.cut-the-cake/.
+const DECISIONS_DIR = join(homedir(), ".chunk-to-chat", "observer");
+const NAMER_DIR = join(homedir(), ".cut-the-cake", "namer");
 
-const SYSTEM_INTRO = `You are the observer for chunk-to-chat, a tool that watches Claude Code sessions and surfaces moments worth user review.
+const DECISIONS_INTRO = `You are the observer for cut-the-cake, a tool that watches Claude Code sessions and surfaces moments worth user review.
 
 Your only job: when shown a batch of recently-closed turns, decide for each whether to open a thread (alert the user) and, if so, produce a single-sentence insight.
 
@@ -96,7 +99,18 @@ For every turn you flag open=true, also draft a "prefill": a one-sentence messag
 - no greeting, no fluff
 For open=false turns, prefill must be null.
 
-Additionally, for each distinct session that appears in the batch, produce a "sessionName".
+You see prior batches in your context; use that memory to compare to earlier activity in the same session.
+
+Reply with ONLY a JSON object. No prose, no markdown fences. Schema:
+{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...]}
+
+The decisions array is in the same order as the input batch (one entry per turn).
+
+Tags are short kebab-case labels you invent; we will use them later to learn your patterns. Examples: "loop-suspected", "scope-creep", "test-failures", "style-rewrite".`;
+
+const NAMER_INTRO = `You are the session namer for cut-the-cake, a tool that watches Claude Code sessions.
+
+Your only job: for each distinct session that appears in a batch of recently-closed turns, produce a short rolling display name.
 
 sessionName constraints:
 - 2-3 words, lowercase, no punctuation (e.g. "auth migration", "renderer redesign", "polish queue", "scrape parser")
@@ -104,14 +118,12 @@ sessionName constraints:
 - update as the focus shifts — if the agent pivots from auth to logging mid-session, name with the current focus
 - ≤20 characters total
 
-You see prior batches in your context; use that memory. If you've only seen one turn for a session this run, omit it from names.
+You see prior batches in your context; use that memory to keep names stable when the focus is unchanged, and to update when the focus has clearly shifted. If you've only seen one turn for a session this run, omit it from the response.
 
-Reply with ONLY a JSON object with two arrays. No prose, no markdown fences. Schema:
-{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...], "names": [{"sessionKey": "<from input>", "sessionName": "..."}, ...]}
+Reply with ONLY a JSON object. No prose, no markdown fences. Schema:
+{"names": [{"sessionKey": "<from input>", "sessionName": "..."}, ...]}
 
-The decisions array is in the same order as the input batch (one entry per turn). The names array contains one entry per distinct session you can speak to.
-
-Tags are short kebab-case labels you invent; we will use them later to learn your patterns. Examples: "loop-suspected", "scope-creep", "test-failures", "style-rewrite".`;
+The names array contains one entry per distinct session in the input that you can confidently name.`;
 
 function findClaudeExecutable(): string {
   try {
@@ -153,7 +165,7 @@ export function buildTurnFeed(
   };
 }
 
-function formatBatch(batch: TurnFeed[]): string {
+function formatBatch(batch: TurnFeed[], trailing: string): string {
   const lines: string[] = [`New batch of ${batch.length} closed turn(s):`];
   for (const t of batch) {
     const sName = t.sessionInfo.slug.replace(/^-+/, "").split("-").pop() ?? "?";
@@ -169,42 +181,32 @@ function formatBatch(batch: TurnFeed[]): string {
     if (t.assistantExcerpt) lines.push(`assistant: ${t.assistantExcerpt}`);
   }
   lines.push("");
-  lines.push(
-    `Reply with a JSON object: {"decisions": [...one per turn in input order...], "names": [...one per distinct session you can speak to...]}. No other text.`
-  );
+  lines.push(trailing);
   return lines.join("\n");
 }
 
-type ParsedResponse = {
-  decisions: Array<Omit<GateDecision, "sessionKey">>;
-  names: SessionNameUpdate[];
-};
+function stripFences(text: string): string {
+  return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+}
 
-function tryParseResponse(text: string): ParsedResponse | null {
-  // strip optional markdown fences
-  const stripped = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+function parseDecisionsResponse(text: string): Array<Omit<GateDecision, "sessionKey">> | null {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(stripped);
+    parsed = JSON.parse(stripFences(text));
   } catch {
     return null;
   }
-
-  // accept either {decisions: [...], names: [...]} or the legacy bare array.
-  let decisionsRaw: unknown[];
-  let namesRaw: unknown[] = [];
+  let raw: unknown[];
   if (Array.isArray(parsed)) {
-    decisionsRaw = parsed;
+    raw = parsed;
   } else if (parsed && typeof parsed === "object") {
     const o = parsed as Record<string, unknown>;
-    decisionsRaw = Array.isArray(o.decisions) ? o.decisions : [];
-    namesRaw = Array.isArray(o.names) ? o.names : [];
+    raw = Array.isArray(o.decisions) ? o.decisions : [];
   } else {
     return null;
   }
-
-  const decisions: Array<Omit<GateDecision, "sessionKey">> = [];
-  for (const item of decisionsRaw) {
+  const out: Array<Omit<GateDecision, "sessionKey">> = [];
+  for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const turnId = typeof o.turnId === "string" ? o.turnId : null;
@@ -217,7 +219,7 @@ function tryParseResponse(text: string): ParsedResponse | null {
       : undefined;
     const prefill =
       typeof o.prefill === "string" && o.prefill.trim().length > 0 ? o.prefill.trim() : undefined;
-    decisions.push({
+    out.push({
       turnId,
       open,
       ...(insight ? { insight } : {}),
@@ -225,9 +227,27 @@ function tryParseResponse(text: string): ParsedResponse | null {
       ...(prefill ? { prefill } : {}),
     });
   }
+  return out;
+}
 
-  const names: SessionNameUpdate[] = [];
-  for (const item of namesRaw) {
+function parseNamesResponse(text: string): SessionNameUpdate[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripFences(text));
+  } catch {
+    return null;
+  }
+  let raw: unknown[];
+  if (Array.isArray(parsed)) {
+    raw = parsed;
+  } else if (parsed && typeof parsed === "object") {
+    const o = parsed as Record<string, unknown>;
+    raw = Array.isArray(o.names) ? o.names : [];
+  } else {
+    return null;
+  }
+  const out: SessionNameUpdate[] = [];
+  for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
@@ -236,26 +256,42 @@ function tryParseResponse(text: string): ParsedResponse | null {
         ? o.sessionName.trim().slice(0, 24)
         : null;
     if (!sessionKey || !name) continue;
-    names.push({ sessionKey, name });
+    out.push({ sessionKey, name });
   }
-
-  return { decisions, names };
+  return out;
 }
 
-export function startObserver(opts: ObserverOptions): {
+type SdkLoopOptions = {
+  model: string;
+  cwd: string;
+  label: string;
+  batchMs: number;
+  systemIntro: string;
+  /** built once per tick; trailing line tells the model what shape to reply with. */
+  formatTrailing: string;
+  /** sessionId tag passed on synthetic SDKUserMessages (cosmetic — for the sdk's own session bookkeeping). */
+  sdkSessionId: string;
+  /** called with raw assistant text + the batch that produced it. */
+  onResponse: (text: string, batch: TurnFeed[]) => void;
+};
+
+type SdkLoopHandle = {
   feed: (t: TurnFeed) => void;
   stop: () => void;
-} {
-  const model = opts.model ?? "claude-sonnet-4-6";
-  const batchMs = opts.batchMs ?? 30_000;
+};
+
+function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
   const respawnMs = 5_000;
   const maxConsecutiveFailures = 5;
 
-  if (!existsSync(OBSERVER_DIR)) mkdirSync(OBSERVER_DIR, { recursive: true });
+  if (!existsSync(opts.cwd)) mkdirSync(opts.cwd, { recursive: true });
   const claudePath = findClaudeExecutable();
 
   const queue: TurnFeed[] = [];
-  const inflight = new Map<string, TurnFeed>();
+  // FIFO of batches sent and awaiting their assistant response. one prompt
+  // = one assistant message, in order, so we can shift the head on each
+  // received message to recover which batch it answers.
+  const inflightBatches: TurnFeed[][] = [];
   const pendingMsgs: SDKUserMessage[] = [];
   let stopped = false;
   let firstPrompt = true;
@@ -266,7 +302,7 @@ export function startObserver(opts: ObserverOptions): {
     const msg: SDKUserMessage = {
       type: "user",
       message: { role: "user", content },
-      session_id: "chunk-to-chat-observer",
+      session_id: opts.sdkSessionId,
       parent_tool_use_id: null,
     };
     if (resolvePending) {
@@ -295,24 +331,24 @@ export function startObserver(opts: ObserverOptions): {
   }
 
   // tick: every batchMs, drain queue and push as a prompt.
-  // when nothing closed in this window, queue is empty → no sonnet call.
+  // when nothing closed in this window, queue is empty → no model call.
   // the batch interval is a ceiling on send rate, not a heartbeat.
   const tick = setInterval(() => {
     if (queue.length === 0) return;
     const batch = queue.splice(0, queue.length);
-    for (const t of batch) inflight.set(t.turnId, t);
-    const body = formatBatch(batch);
-    const content = firstPrompt ? `${SYSTEM_INTRO}\n\n---\n\n${body}` : body;
+    inflightBatches.push(batch);
+    const body = formatBatch(batch, opts.formatTrailing);
+    const content = firstPrompt ? `${opts.systemIntro}\n\n---\n\n${body}` : body;
     firstPrompt = false;
     pushPrompt(content);
-    console.log(`[observer] sent batch of ${batch.length} turn(s) to ${model}`);
-  }, batchMs);
+    console.log(`[${opts.label}] sent batch of ${batch.length} turn(s) to ${opts.model}`);
+  }, opts.batchMs);
 
   async function runSdkLoopOnce(): Promise<void> {
-    // fresh state per spawn — drop any in-flight prompts/decisions from
-    // the prior subprocess; the new sdk has no memory of them anyway.
+    // fresh state per spawn — drop in-flight batches/prompts from the
+    // prior subprocess; the new sdk has no memory of them anyway.
     pendingMsgs.length = 0;
-    inflight.clear();
+    inflightBatches.length = 0;
     firstPrompt = true;
     const abort = new AbortController();
     currentAbort = abort;
@@ -321,8 +357,8 @@ export function startObserver(opts: ObserverOptions): {
       const result = query({
         prompt: gen,
         options: {
-          model,
-          cwd: OBSERVER_DIR,
+          model: opts.model,
+          cwd: opts.cwd,
           pathToClaudeCodeExecutable: claudePath,
           disallowedTools: DISALLOWED_TOOLS,
           settingSources: [],
@@ -345,29 +381,13 @@ export function startObserver(opts: ObserverOptions): {
           text = content;
         }
         if (!text.trim()) continue;
-        const parsed = tryParseResponse(text);
-        if (!parsed) {
-          console.log(`[observer] could not parse: ${clip(text, 200)}`);
+        const batch = inflightBatches.shift();
+        if (!batch) {
+          // safety: model spoke without a pending batch (shouldn't happen).
+          console.log(`[${opts.label}] response with no inflight batch — dropping`);
           continue;
         }
-        for (const d of parsed.decisions) {
-          const feed = inflight.get(d.turnId);
-          if (!feed) {
-            console.log(`[observer] unknown turnId in response: ${d.turnId}`);
-            continue;
-          }
-          inflight.delete(d.turnId);
-          const decision: GateDecision = { ...d, sessionKey: feed.sessionKey };
-          opts.onDecision?.(decision);
-          const tag = decision.open ? "OPEN" : "skip";
-          const ins = decision.insight ? ` — ${decision.insight}` : "";
-          const tags = decision.tags?.length ? ` [${decision.tags.join(",")}]` : "";
-          console.log(`[observer] ${tag} ${decision.turnId.slice(0, 8)}${ins}${tags}`);
-        }
-        for (const n of parsed.names) {
-          opts.onName?.(n);
-          console.log(`[observer] name ${n.sessionKey.slice(0, 24)} — [${n.name}]`);
-        }
+        opts.onResponse(text, batch);
       }
     } finally {
       // unblock the generator if it's awaiting (so it can exit cleanly)
@@ -386,7 +406,7 @@ export function startObserver(opts: ObserverOptions): {
     while (!stopped) {
       attempts++;
       if (attempts > 1) {
-        console.log(`[observer] respawning sdk subprocess (attempt ${attempts})`);
+        console.log(`[${opts.label}] respawning sdk subprocess (attempt ${attempts})`);
       }
       try {
         await runSdkLoopOnce();
@@ -396,10 +416,10 @@ export function startObserver(opts: ObserverOptions): {
         consecutiveFailures++;
         const msg = err instanceof Error ? err.message : String(err);
         console.error(
-          `[observer] sdk error (consecutive failures ${consecutiveFailures}/${maxConsecutiveFailures}): ${msg}`
+          `[${opts.label}] sdk error (consecutive failures ${consecutiveFailures}/${maxConsecutiveFailures}): ${msg}`
         );
         if (consecutiveFailures >= maxConsecutiveFailures) {
-          console.error(`[observer] giving up after ${consecutiveFailures} consecutive failures`);
+          console.error(`[${opts.label}] giving up after ${consecutiveFailures} consecutive failures`);
           return;
         }
       }
@@ -423,6 +443,84 @@ export function startObserver(opts: ObserverOptions): {
         r(null);
       }
       currentAbort?.abort();
+    },
+  };
+}
+
+export function startObserver(opts: ObserverOptions): {
+  feed: (t: TurnFeed) => void;
+  stop: () => void;
+} {
+  const decisionsModel = opts.decisionsModel ?? "claude-sonnet-4-6";
+  const namerModel = opts.namerModel ?? "claude-haiku-4-5";
+  const batchMs = opts.batchMs ?? 30_000;
+
+  const decisions = startSdkLoop({
+    model: decisionsModel,
+    cwd: DECISIONS_DIR,
+    label: "observer",
+    batchMs,
+    systemIntro: DECISIONS_INTRO,
+    formatTrailing: `Reply with a JSON object: {"decisions": [...one per turn in input order...]}. No other text.`,
+    sdkSessionId: "chunk-to-chat-observer",
+    onResponse(text, batch) {
+      const parsed = parseDecisionsResponse(text);
+      if (!parsed) {
+        console.log(`[observer] could not parse: ${clip(text, 200)}`);
+        return;
+      }
+      const byTurn = new Map<string, TurnFeed>();
+      for (const t of batch) byTurn.set(t.turnId, t);
+      for (const d of parsed) {
+        const feed = byTurn.get(d.turnId);
+        if (!feed) {
+          console.log(`[observer] unknown turnId in response: ${d.turnId}`);
+          continue;
+        }
+        const decision: GateDecision = { ...d, sessionKey: feed.sessionKey };
+        opts.onDecision?.(decision);
+        const tag = decision.open ? "OPEN" : "skip";
+        const ins = decision.insight ? ` — ${decision.insight}` : "";
+        const tags = decision.tags?.length ? ` [${decision.tags.join(",")}]` : "";
+        console.log(`[observer] ${tag} ${decision.turnId.slice(0, 8)}${ins}${tags}`);
+      }
+    },
+  });
+
+  const namer = startSdkLoop({
+    model: namerModel,
+    cwd: NAMER_DIR,
+    label: "namer",
+    batchMs,
+    systemIntro: NAMER_INTRO,
+    formatTrailing: `Reply with a JSON object: {"names": [...one per distinct session you can confidently name...]}. No other text.`,
+    sdkSessionId: "cut-the-cake-namer",
+    onResponse(text, batch) {
+      const parsed = parseNamesResponse(text);
+      if (!parsed) {
+        console.log(`[namer] could not parse: ${clip(text, 200)}`);
+        return;
+      }
+      const validKeys = new Set(batch.map((t) => t.sessionKey));
+      for (const n of parsed) {
+        if (!validKeys.has(n.sessionKey)) {
+          console.log(`[namer] unknown sessionKey in response: ${n.sessionKey.slice(0, 24)}`);
+          continue;
+        }
+        opts.onName?.(n);
+        console.log(`[namer] name ${n.sessionKey.slice(0, 24)} — [${n.name}]`);
+      }
+    },
+  });
+
+  return {
+    feed(t) {
+      decisions.feed(t);
+      namer.feed(t);
+    },
+    stop() {
+      decisions.stop();
+      namer.stop();
     },
   };
 }

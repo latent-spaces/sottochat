@@ -29,3 +29,6 @@ vendor/
 
 # logs
 *.log
+
+# exploratory / diagnostic artifacts (screenshots, scratch scripts)
+diagnostics/

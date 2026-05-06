@@ -16,6 +16,9 @@ export type ChatChunk = {
   role: "user" | "assistant";
   text: string;
   ts: number;
+  /** "auto" tags messages auto-sent by the server in response to an observer open=true
+   *  flag (used by the UI to badge them). default: "user". assistant chunks omit this. */
+  kind?: "auto" | "user";
 };
 
 export type ChatStatus =
@@ -75,13 +78,22 @@ function sandboxFor(sessionKey: string): string {
   return join(CHAT_ROOT, hash);
 }
 
+export type ChatSendOptions = {
+  /** prepended to the first prompt of a session as context (alongside SYSTEM_INTRO).
+   *  ignored on follow-up sends. used by the server to pre-seed auto-fired chats
+   *  with the observer's insight + recent turn excerpts. */
+  seed?: string;
+  /** tag for the echoed user chunk. "auto" = server-fired, "user" = typed. */
+  userKind?: "auto" | "user";
+};
+
 type AgentHandle = {
-  push: (text: string) => void;
+  push: (text: string, seed?: string) => void;
   stop: () => void;
 };
 
 export function startChatHost(opts: ChatAgentOptions): {
-  send: (sessionKey: string, text: string) => void;
+  send: (sessionKey: string, text: string, sendOpts?: ChatSendOptions) => void;
   stop: (sessionKey?: string) => void;
 } {
   const model = opts.model ?? "claude-sonnet-4-6";
@@ -115,8 +127,16 @@ export function startChatHost(opts: ChatAgentOptions): {
       }
     }
 
-    function push(text: string) {
-      const content = firstPrompt ? `${SYSTEM_INTRO}\n\n---\n\n${text}` : text;
+    function push(text: string, seed?: string) {
+      let content: string;
+      if (firstPrompt) {
+        const seedBlock = seed && seed.trim()
+          ? `${SYSTEM_INTRO}\n\n---\nSession context:\n${seed.trim()}\n---\n\n`
+          : `${SYSTEM_INTRO}\n\n---\n\n`;
+        content = `${seedBlock}${text}`;
+      } else {
+        content = text;
+      }
       firstPrompt = false;
       pushRaw(content);
       opts.onStatus?.({ sessionKey, status: "thinking" });
@@ -224,12 +244,13 @@ export function startChatHost(opts: ChatAgentOptions): {
   }
 
   return {
-    send(sessionKey, text) {
+    send(sessionKey, text, sendOpts) {
       const trimmed = (text || "").trim();
       if (!trimmed) return;
       const h = ensureAgent(sessionKey);
-      opts.onChunk?.({ sessionKey, role: "user", text: trimmed, ts: Date.now() });
-      h.push(trimmed);
+      const kind: "auto" | "user" = sendOpts?.userKind ?? "user";
+      opts.onChunk?.({ sessionKey, role: "user", text: trimmed, ts: Date.now(), kind });
+      h.push(trimmed, sendOpts?.seed);
     },
     stop(sessionKey) {
       if (sessionKey) {
