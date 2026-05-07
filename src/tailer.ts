@@ -17,7 +17,11 @@
 //   - claude.app local-agent-mode:
 //       ~/Library/Application Support/Claude/local-agent-mode-sessions/**
 //       both audit.jsonl and nested .claude/projects/.../<uuid>.jsonl
-// codex sessions use a different schema and are not yet wired.
+//   - codex cli:        ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+//
+// codex rollouts use a totally different schema (see codex-jsonl.ts) and
+// require a stateful parser — the FileState carries an optional CodexParseState
+// for codex-source files that the tailer threads through parseCodexRecord.
 
 import { open, readdir, stat } from "node:fs/promises";
 import { existsSync, watch as fsWatch, type FSWatcher } from "node:fs";
@@ -25,6 +29,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { Dirent } from "node:fs";
 import { parseRecord, type MetaEvent } from "./jsonl";
+import { createCodexParseState, parseCodexRecord, type CodexParseState } from "./codex-jsonl";
 
 export type SessionInfo = {
   sessionId: string;
@@ -56,6 +61,8 @@ type FileState = {
   partial: string;
   seenUuids: Set<string>;
   announced: boolean;
+  /** present only for source === "codex" — the codex parser is stateful. */
+  codexState: CodexParseState | null;
 };
 
 const HOME = homedir();
@@ -64,6 +71,7 @@ const CLAUDE_APP_LAM = join(
   HOME,
   "Library/Application Support/Claude/local-agent-mode-sessions"
 );
+const CODEX_SESSIONS = join(HOME, ".codex/sessions");
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -149,12 +157,39 @@ function claudeAppTarget(): WatchTarget {
   };
 }
 
+// codex rollout layout: ~/.codex/sessions/YYYY/MM/DD/rollout-<ISO>-<uuid>.jsonl.
+// the trailing UUID matches session_meta.payload.id, so we can read it from the
+// filename for an immediate sessionId without parsing the file. slug is a
+// date-based placeholder until session_meta is parsed and codex-jsonl mutates
+// state.cwdSlug — the tailer lifts info.slug in the read loop once that lands.
+function codexTarget(): WatchTarget {
+  return {
+    name: "codex",
+    watchRoot: CODEX_SESSIONS,
+    async discover() {
+      return await listJsonlRecursive(CODEX_SESSIONS, 4);
+    },
+    describe(path) {
+      const parts = path.split("/");
+      const filename = parts[parts.length - 1] ?? "";
+      const m = filename.match(UUID_RE);
+      const sessionId = m ? m[0] : filename.replace(/\.jsonl$/, "");
+      // placeholder slug from the date dir (YYYY/MM/DD) so the inbox card has
+      // *something* to show before session_meta lands.
+      const dateParts = parts.slice(-4, -1);
+      const slug = "codex-" + dateParts.join("-");
+      return { slug, sessionId };
+    },
+  };
+}
+
 export function startTailer(opts: TailerOptions): { stop: () => void } {
   const pollMs = opts.pollMs ?? 500;
   const recentMs = opts.recentMs ?? 60 * 60 * 1000;
   const targets: WatchTarget[] = [
     ccTarget(opts.projectSlug),
     claudeAppTarget(),
+    codexTarget(),
   ];
 
   const files = new Map<string, FileState>();
@@ -180,6 +215,7 @@ export function startTailer(opts: TailerOptions): { stop: () => void } {
         partial: "",
         seenUuids: new Set(),
         announced: false,
+        codexState: target.name === "codex" ? createCodexParseState() : null,
       };
       files.set(path, state);
     }
@@ -212,12 +248,23 @@ export function startTailer(opts: TailerOptions): { stop: () => void } {
         } catch {
           continue;
         }
+        // claude records carry a uuid we dedup against; codex rollouts have
+        // no per-record uuid and rely on the offset-based reader to skip
+        // already-seen lines.
         const recUuid = (raw as { uuid?: unknown })?.uuid;
         if (typeof recUuid === "string") {
           if (state.seenUuids.has(recUuid)) continue;
           state.seenUuids.add(recUuid);
         }
-        const parsed = parseRecord(raw);
+        const parsed = state.codexState
+          ? parseCodexRecord(raw, state.codexState)
+          : parseRecord(raw);
+        // codex's session_meta sets cwdSlug as a side-effect (it doesn't emit
+        // a MetaEvent itself). lift the placeholder slug to the real one once
+        // it arrives so subsequent onEvent calls carry the right info.
+        if (state.codexState?.cwdSlug && state.info.slug !== state.codexState.cwdSlug) {
+          state.info.slug = state.codexState.cwdSlug;
+        }
         if (parsed.length === 0) continue;
         if (!state.announced) {
           state.announced = true;
