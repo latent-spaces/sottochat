@@ -27,6 +27,9 @@ export type TurnFeed = {
   linesRemoved: number;
   userPrompt: string;
   assistantExcerpt: string;
+  // full event list — observer ignores it; scriptifier needs the whole
+  // transcript to script properly. populated by buildTurnFeed.
+  events?: MetaEvent[];
 };
 
 export type GateDecision = {
@@ -135,6 +138,7 @@ export function buildTurnFeed(
     linesRemoved: turn.linesRemoved,
     userPrompt: clip(userPrompt, 800),
     assistantExcerpt: clip(assistantText, 600),
+    events: turn.events,
   };
 }
 
@@ -438,5 +442,3 @@ export function startObserver(opts: ObserverOptions): {
   };
 }
 
-// suppress unused-imports lint noise
-void (null as unknown as MetaEvent);

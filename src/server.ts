@@ -4,6 +4,8 @@ import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
 import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver } from "./observer";
+import { startScriptifier, type ScriptBeat } from "./scriptifier";
+import { generateTts, ttsAudioPath, type WordTiming } from "./tts";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
 
@@ -20,6 +22,13 @@ const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED !== "0";
 const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-4-6";
 const CHAT_MODEL = Bun.env.META_CHAT_MODEL ?? "claude-sonnet-4-6";
 const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
+// scriptifier: parallel sonnet subprocess that turns each closed turn into a
+// karaoke-style script for the video pane. shorter batch ceiling than the
+// observer (we want video to populate fast, not on a 30s heartbeat).
+const SCRIPTIFIER_ENABLED = Bun.env.META_SCRIPTIFIER_ENABLED !== "0";
+const SCRIPTIFIER_MODEL = Bun.env.META_SCRIPTIFIER_MODEL ?? "claude-sonnet-4-6";
+const SCRIPTIFIER_BATCH_MS = Number(Bun.env.META_SCRIPTIFIER_BATCH_MS ?? 2_000);
+const TTS_VOICE = Bun.env.META_TTS_VOICE ?? "af_heart";
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
 // when the observer flags a turn open=true with a prefill, the server fires
@@ -65,6 +74,20 @@ type ObserverInsight = {
   ts: number;
 };
 
+// per-turn karaoke script + tts payload. lifecycle:
+//   drafting → (model emits beats) → rendering → (tts done) → ready
+//                                  → (tts fails) → error
+type ScriptPayload = {
+  turnId: string;
+  beats: ScriptBeat[];
+  audioUrl?: string;       // /tts/<hash>.wav — set once tts is ready
+  durationS?: number;
+  words?: WordTiming[];
+  status: "drafting" | "rendering" | "ready" | "error";
+  errorMessage?: string;
+  ts: number;
+};
+
 type SessionState = {
   info: SessionInfo;
   events: MetaEvent[];
@@ -78,6 +101,7 @@ type SessionState = {
   observerDecisions: ObserverInsight[];
   observerByTurn: Map<string, number>;
   recentClosedTurns: Turn[];        // ring buffer (RECENT_CLOSED_TURNS) used to seed auto-fired chats
+  scripts: Map<string, ScriptPayload>;  // turnId → karaoke script + tts state
 };
 
 const sessions = new Map<string, SessionState>();
@@ -119,6 +143,7 @@ function getOrCreate(info: SessionInfo): SessionState {
       observerDecisions: [],
       observerByTurn: new Map(),
       recentClosedTurns: [],
+      scripts: new Map(),
     };
     sessions.set(k, s);
   } else {
@@ -163,6 +188,7 @@ function snapshot(s: SessionState) {
     contextTokens: s.contextTokens,
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
+    scripts: Object.fromEntries(s.scripts),
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
@@ -295,6 +321,19 @@ const server = Bun.serve({
         return new Response("not found", { status: 404 });
       }
       const file = Bun.file(`public${url.pathname}`);
+      if (await file.exists()) return new Response(file);
+      return new Response("not found", { status: 404 });
+    }
+
+    // /tts/<hash>.wav — serves cached tts audio from ~/.cut-the-cake/tts-cache/.
+    // hash is hex-only by construction (sha256), so the regex doubles as a
+    // path-traversal guard: anything else 404s before we touch the filesystem.
+    if (url.pathname.startsWith("/tts/") && req.method === "GET") {
+      const hash = url.pathname.slice(5).replace(/\.wav$/, "");
+      if (!/^[a-f0-9]{8,128}$/.test(hash)) {
+        return new Response("not found", { status: 404 });
+      }
+      const file = Bun.file(ttsAudioPath(hash));
       if (await file.exists()) return new Response(file);
       return new Response("not found", { status: 404 });
     }
@@ -513,12 +552,78 @@ if (observer) {
     `[observer] enabled · decisions=${OBSERVER_MODEL} · batch=${OBSERVER_BATCH_MS}ms`
   );
 }
+
+// scriptifier: parallel sonnet subprocess that converts each closed turn into
+// a karaoke-style script. tts is kicked off in the background as soon as the
+// beats land — clients see beats first (status: rendering), then audio +
+// timings once tts finishes (status: ready).
+const scriptifier = SCRIPTIFIER_ENABLED
+  ? startScriptifier({
+      model: SCRIPTIFIER_MODEL,
+      batchMs: SCRIPTIFIER_BATCH_MS,
+      async onScript(r) {
+        const s = sessions.get(r.sessionKey);
+        if (!s) return;
+        const payload: ScriptPayload = {
+          turnId: r.turnId,
+          beats: r.beats,
+          status: "rendering",
+          ts: Date.now(),
+        };
+        s.scripts.set(r.turnId, payload);
+        if (isVisible(s)) {
+          broadcast({
+            kind: "script:beats",
+            sessionKey: r.sessionKey,
+            script: payload,
+          });
+        }
+        // background tts: full script → wav + per-word timings. errors don't
+        // crash the loop — we surface them on the payload and broadcast.
+        const fullText = r.beats.map((b) => b.text).join(" ");
+        try {
+          const tts = await generateTts({ text: fullText, voice: TTS_VOICE });
+          payload.audioUrl = `/tts/${tts.hash}.wav`;
+          payload.durationS = tts.durationS;
+          payload.words = tts.words;
+          payload.status = "ready";
+          payload.ts = Date.now();
+          if (isVisible(s)) {
+            broadcast({
+              kind: "script:ready",
+              sessionKey: r.sessionKey,
+              script: payload,
+            });
+          }
+        } catch (err) {
+          payload.status = "error";
+          payload.errorMessage = err instanceof Error ? err.message : String(err);
+          payload.ts = Date.now();
+          console.error(`[scriptifier] tts failed for ${r.turnId.slice(0, 8)}: ${payload.errorMessage}`);
+          if (isVisible(s)) {
+            broadcast({
+              kind: "script:error",
+              sessionKey: r.sessionKey,
+              turnId: r.turnId,
+              message: payload.errorMessage,
+            });
+          }
+        }
+      },
+    })
+  : null;
+if (scriptifier) {
+  console.log(
+    `[scriptifier] enabled · model=${SCRIPTIFIER_MODEL} · batch=${SCRIPTIFIER_BATCH_MS}ms · voice=${TTS_VOICE}`
+  );
+}
 // graceful shutdown — give abort signals a moment to terminate sdk subprocesses
 // before the server process exits, otherwise claude subprocesses can be orphaned.
 {
   const onSignal = (sig: string) => {
-    console.log(`[server] received ${sig} — stopping observer + chat host + registry`);
+    console.log(`[server] received ${sig} — stopping observer + scriptifier + chat host + registry`);
     observer?.stop();
+    scriptifier?.stop();
     chatHost.stop();
     registry.stop();
     setTimeout(() => process.exit(0), 500);
@@ -556,7 +661,8 @@ startTailer({
     // infinite mirror).
     const isObserverSelf =
       info.slug.includes("chunk-to-chat-observer") ||
-      info.slug.includes("cut-the-cake-chat");
+      info.slug.includes("cut-the-cake-chat") ||
+      info.slug.includes("cut-the-cake-scriptifier");
     const s = getOrCreate(info);
     const wasVisible = isVisible(s);
     s.events.push(ev);
@@ -589,13 +695,12 @@ startTailer({
         s.recentClosedTurns.splice(0, s.recentClosedTurns.length - RECENT_CLOSED_TURNS);
       }
       maybeOpenThread(s, result.closed);
-      if (
-        observer &&
-        !isObserverSelf &&
-        isVisible(s) &&
-        Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS
-      ) {
+      const fresh = Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS;
+      if (observer && !isObserverSelf && isVisible(s) && fresh) {
         observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
+      }
+      if (scriptifier && !isObserverSelf && isVisible(s) && fresh) {
+        scriptifier.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
       }
     }
   },

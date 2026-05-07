@@ -26,6 +26,7 @@ vendor/
 
 # local overrides
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # logs
 *.log

@@ -743,6 +743,236 @@
       #d-chart, #d-code-chart { grid-column: 1; }
     }
 
+    /* video-pane — karaoke playback of the latest scriptifier turn. lives between
+       the charts-band and the conversation strip and offers an alternative way
+       to consume the same turn. soft pink wash on top so it reads as its own
+       surface. all motion respects prefers-reduced-motion. */
+    .video-pane {
+      background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 8%, var(--surface)) 0%, var(--surface) 60%);
+      border: 1px solid color-mix(in oklab, var(--accent) 20%, transparent);
+      border-radius: var(--r-panel);
+      padding: 16px 20px;
+      margin: 0 0 20px;
+    }
+    .video-pane-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .video-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .video-status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      color: var(--fg-muted);
+      text-transform: lowercase;
+      margin-left: auto;
+    }
+    .video-status-pill .vsp-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .video-status-pill.rendering .vsp-dot {
+      background: var(--accent);
+      animation: vsp-pulse 1.4s infinite ease-in-out;
+    }
+    .video-status-pill.ready .vsp-dot { background: #10b981; }
+    .video-status-pill.error .vsp-dot { background: #ef4444; }
+    @keyframes vsp-pulse {
+      0%, 100% { opacity: 0.35; transform: scale(0.85); }
+      50%      { opacity: 1;    transform: scale(1.15); }
+    }
+    .video-duration {
+      display: inline-flex;
+      align-items: center;
+      height: 18px;
+      padding: 0 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--fg-soft);
+      letter-spacing: 0.04em;
+    }
+    .video-pane-stage {
+      min-height: 120px;
+      max-height: 320px;
+      padding: 8px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: color-mix(in oklab, var(--accent) 30%, transparent) transparent;
+    }
+    .video-pane-stage::-webkit-scrollbar { width: 6px; }
+    .video-pane-stage::-webkit-scrollbar-thumb {
+      background: color-mix(in oklab, var(--accent) 30%, transparent);
+      border-radius: 3px;
+    }
+    .video-beat {
+      font-size: 16px;
+      line-height: 1.45;
+      color: var(--fg);
+      opacity: 0.35;
+      font-weight: 400;
+      transition: opacity 380ms cubic-bezier(0.22, 1, 0.36, 1),
+                  font-size 380ms cubic-bezier(0.22, 1, 0.36, 1),
+                  font-weight 380ms cubic-bezier(0.22, 1, 0.36, 1),
+                  color 380ms cubic-bezier(0.22, 1, 0.36, 1);
+      word-break: break-word;
+    }
+    .video-beat.past    { opacity: 0.55; }
+    .video-beat.current {
+      opacity: 1;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--fg);
+    }
+    .video-beat.future  { opacity: 0.35; }
+    .video-beat.has-marker {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+    }
+    .vb-word {
+      display: inline-block;
+      padding: 0 1px;
+      border-radius: 3px;
+      transition: background 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                  color 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .vb-word.played {
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+    }
+    .vb-word.active {
+      background: color-mix(in oklab, var(--accent) 28%, transparent);
+      padding: 0 2px;
+      border-radius: 3px;
+      font-weight: 600;
+    }
+    .vb-word.emph {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .video-marker {
+      display: inline-flex;
+      align-items: center;
+      height: 22px;
+      padding: 0 10px;
+      margin-right: 8px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-radius: 11px;
+      flex-shrink: 0;
+    }
+    .video-marker.INSIGHT     { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-marker.BE_CAREFUL  { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-marker.STEP        { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-marker.NOTE        { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-pane-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid color-mix(in oklab, var(--accent) 14%, transparent);
+    }
+    .video-play-btn {
+      flex: 0 0 auto;
+      width: 44px;
+      height: 44px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--r-input);
+      cursor: pointer;
+      box-shadow: 0 6px 20px -10px rgba(236, 72, 153, 0.55);
+      transition: background 0.15s var(--ease-out), transform 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .video-play-btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px -12px rgba(236, 72, 153, 0.65);
+    }
+    .video-play-btn:disabled {
+      background: var(--border-strong);
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+    .video-play-btn svg {
+      width: 18px;
+      height: 18px;
+      color: #fff;
+      pointer-events: none;
+    }
+    .video-scrub {
+      flex: 1 1 auto;
+      position: relative;
+      height: 4px;
+      background: color-mix(in oklab, var(--accent) 14%, transparent);
+      border-radius: 999px;
+      cursor: pointer;
+      transition: height 160ms var(--ease-out);
+    }
+    .video-scrub:hover { height: 6px; }
+    .video-scrub-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width 80ms linear;
+    }
+    .video-time {
+      flex: 0 0 auto;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-soft);
+      letter-spacing: 0.04em;
+      min-width: 80px;
+      text-align: right;
+    }
+    .video-attribution {
+      margin-top: 8px;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--fg-muted);
+      font-style: italic;
+      text-align: right;
+      letter-spacing: 0.04em;
+    }
+    .video-error-msg {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #b91c1c;
+      padding: 6px 0;
+    }
+
     /* conversation panel — last user/agent exchange, panel-style like the chart cards
        and chat-input. messages render as whatsapp-style chat bubbles: user on the
        right (accent tint), agent on the left (paper tint). when the latest signal
@@ -1227,6 +1457,8 @@
           <div id="d-code-chart"></div>
         </div>
 
+        <div class="video-pane" id="d-video-pane" hidden></div>
+
         <div class="conversation" id="d-conversation"></div>
         <div class="chat-thread" id="d-chat-thread"></div>
         <div class="chat-input" id="d-chat-input"></div>
@@ -1253,6 +1485,7 @@
     const dChartsToggle = document.getElementById("d-charts-toggle");
     const dChartsBand = document.getElementById("d-charts-band");
     const dConversation = document.getElementById("d-conversation");
+    const dVideoPane = document.getElementById("d-video-pane");
     const dChatThread = document.getElementById("d-chat-thread");
     const dChatInput = document.getElementById("d-chat-input");
     const autoSendToggle = document.getElementById("autosend-toggle");
@@ -2393,6 +2626,7 @@
         dUntouched.hidden = true;
       }
 
+      renderVideoPane(sess);
       renderConversation(sess, turns);
       renderChatThread(sess);
       // hide the chat-input while we're waiting for the upstream agent to reply —
@@ -2420,6 +2654,7 @@
         const plan = [
           { sel: ".session-head",  pick: r => r.querySelectorAll("#d-name, .source") },
           { sel: ".charts-band",   pick: r => r.querySelectorAll("#d-chart, #d-code-chart") },
+          { sel: ".video-pane",    pick: r => r.children },
           { sel: ".conversation",  pick: r => r.children },
           { sel: ".chat-thread",   pick: r => r.children },
           { sel: ".chat-input",    pick: r => r.children },
@@ -2453,6 +2688,17 @@
     // chat thread state — sessionKey → array of {role, text, ts}.
     // populated by ws "chat:chunk" messages (the server echoes user sends and streams assistant replies).
     const chatThreadByKey = new Map();
+    // scripts state — sessionKey → Map<turnId, ScriptPayload>. populated by
+    // hello/session:upsert snapshots and the script:beats / script:ready /
+    // script:error ws msgs.
+    const scriptsByKey = new Map();
+    // per-session: which script is currently visible in the video-pane (turnId).
+    // default = latest by ts. user-driven changes (older-script picker) go here.
+    const activeScriptByKey = new Map();
+    // karaoke runtime — keyed by sessionKey. holds the audio element ref, the
+    // rAF id, beat boundaries, last-painted indices, etc. so we don't double-mount
+    // audio elements on re-render.
+    const videoRuntime = new Map();
     // sessionKeys whose chat-thread the user has explicitly expanded. default
     // is collapsed: only the last RECENT_VISIBLE chunks render, with a "show
     // N earlier" toggle. send (manual or quick-pill) resets to collapsed so a
@@ -3207,6 +3453,431 @@
       }
     }
 
+    // ---------- video-pane (karaoke) ----------
+    // utility: split a beat's text into word tokens. uses /\s+/ — matches the
+    // way we count "words per beat" for the boundary mapping. punctuation stays
+    // attached to its neighboring word (good enough for highlight purposes).
+    function vbTokenize(text) {
+      return String(text || "").trim().split(/\s+/).filter(Boolean);
+    }
+    function vbFmtTime(s) {
+      if (!isFinite(s) || s < 0) s = 0;
+      const m = Math.floor(s / 60);
+      const sec = Math.floor(s % 60);
+      return m + ":" + (sec < 10 ? "0" : "") + sec;
+    }
+    // pause every other session's audio so only the current session's runtime
+    // can play. preserves the runtime entries (so user toggling back resumes).
+    function pauseOtherVideoRuntimes(currentKey) {
+      for (const [k, rt] of videoRuntime.entries()) {
+        if (k === currentKey) continue;
+        if (rt && rt.audio && !rt.audio.paused) {
+          try { rt.audio.pause(); } catch {}
+        }
+        if (rt && rt.rafId) {
+          cancelAnimationFrame(rt.rafId);
+          rt.rafId = 0;
+        }
+      }
+    }
+
+    function renderVideoPane(sess) {
+      const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+      pauseOtherVideoRuntimes(sessionKey);
+      const m = scriptsByKey.get(sessionKey);
+      if (!m || m.size === 0) {
+        dVideoPane.hidden = true;
+        dVideoPane.innerHTML = "";
+        return;
+      }
+      // pick the active script — user override (older-script picker is hour 3)
+      // falls back to latest by ts.
+      let script = null;
+      const overrideTurnId = activeScriptByKey.get(sessionKey);
+      if (overrideTurnId && m.has(overrideTurnId)) {
+        script = m.get(overrideTurnId);
+      } else {
+        for (const s of m.values()) {
+          if (!script || (s.ts || 0) > (script.ts || 0)) script = s;
+        }
+      }
+      if (!script || !Array.isArray(script.beats) || script.beats.length === 0) {
+        dVideoPane.hidden = true;
+        dVideoPane.innerHTML = "";
+        return;
+      }
+
+      dVideoPane.hidden = false;
+
+      // status pill copy.
+      let statusHtml = "";
+      if (script.status === "drafting") {
+        statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>drafting beats…</span></span>';
+      } else if (script.status === "rendering") {
+        statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>rendering audio…</span></span>';
+      } else if (script.status === "ready") {
+        statusHtml = '<span class="video-status-pill ready"><span class="vsp-dot"></span><span>ready</span></span>';
+      } else if (script.status === "error") {
+        statusHtml = '<span class="video-status-pill error"><span class="vsp-dot"></span><span>audio failed</span></span>';
+      }
+
+      const durStr = (typeof script.durationS === "number" && script.durationS > 0)
+        ? vbFmtTime(script.durationS)
+        : "—:—";
+
+      // build word index → beat index mapping. tokenize each beat to count its
+      // word slots; the mapping uses our token count (resilient to transcribe
+      // tokenization differences). if script.words.length !== sum, log warn but
+      // still render — fall back to even time-distribution if needed.
+      const beats = script.beats;
+      const beatTokens = beats.map(b => vbTokenize(b.text));
+      const beatBoundaries = [];
+      let cursor = 0;
+      for (let i = 0; i < beats.length; i++) {
+        const len = beatTokens[i].length;
+        beatBoundaries.push({ startWordIdx: cursor, endWordIdx: cursor + len, beatIdx: i });
+        cursor += len;
+      }
+      const totalTokenCount = cursor;
+      const words = Array.isArray(script.words) ? script.words : [];
+      if (words.length && words.length !== totalTokenCount) {
+        console.warn("[video] word/beat token count mismatch", { wordCount: words.length, beatTokenCount: totalTokenCount });
+      }
+      // populate startS/endS on each beatBoundary by reading the timings of the
+      // first and last word in the beat. fallback: even split across duration
+      // if word count is off.
+      const fallbackPerBeat = (script.durationS && beats.length > 0)
+        ? script.durationS / beats.length
+        : 0;
+      for (let i = 0; i < beatBoundaries.length; i++) {
+        const bb = beatBoundaries[i];
+        const startW = words[bb.startWordIdx];
+        const endW = words[bb.endWordIdx - 1];
+        if (startW && endW) {
+          bb.startS = startW.startS;
+          bb.endS = endW.endS;
+        } else if (fallbackPerBeat > 0) {
+          bb.startS = i * fallbackPerBeat;
+          bb.endS = (i + 1) * fallbackPerBeat;
+        } else {
+          bb.startS = 0;
+          bb.endS = 0;
+        }
+      }
+
+      // build beat html. words wrap in <span class="vb-word" data-word-idx>;
+      // emphasis words add .emph (compared case-insensitively, stripped of
+      // punctuation on both sides for fuzzier matches).
+      const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const normalize = w => String(w || "").toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+      let globalWordIdx = 0;
+      const beatsHtml = beats.map((b, i) => {
+        const tokens = beatTokens[i];
+        const emphSet = new Set((Array.isArray(b.emphasis) ? b.emphasis : []).map(normalize).filter(Boolean));
+        const wordSpans = tokens.map(tok => {
+          const isEmph = emphSet.size > 0 && emphSet.has(normalize(tok));
+          const cls = "vb-word" + (isEmph ? " emph" : "");
+          const html = '<span class="' + cls + '" data-word-idx="' + globalWordIdx + '">' + escapeHtml(tok) + '</span>';
+          globalWordIdx++;
+          return html;
+        }).join(" ");
+        const markerHtml = b.marker
+          ? '<span class="video-marker ' + escAttr(b.marker) + '">' + escapeHtml(b.marker.toLowerCase().replace(/_/g, " ")) + '</span>'
+          : "";
+        const markerCls = b.marker ? " has-marker" : "";
+        return '<div class="video-beat future' + markerCls + '" data-beat-idx="' + i + '">' +
+                 (b.marker ? markerHtml + '<div class="vb-line">' + wordSpans + '</div>' : wordSpans) +
+               '</div>';
+      }).join("");
+
+      const stageId = "vp-stage-" + cssIdSafe(sessionKey);
+      const ctrlsId = "vp-controls-" + cssIdSafe(sessionKey);
+
+      const errorHtml = (script.status === "error" && script.errorMessage)
+        ? '<div class="video-error-msg">' + escapeHtml(script.errorMessage) + '</div>'
+        : "";
+
+      // controls only meaningful once we have audio. while drafting/rendering
+      // show a disabled play button so the layout doesn't pop in.
+      const hasAudio = script.status === "ready" && !!script.audioUrl;
+      const playDisabled = hasAudio ? "" : " disabled";
+      const controlsHtml = errorHtml +
+        '<div class="video-pane-controls" id="' + ctrlsId + '">' +
+          '<button class="video-play-btn" type="button" aria-label="play"' + playDisabled + '>' +
+            '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' +
+          '</button>' +
+          '<div class="video-scrub" role="slider" aria-label="seek"><div class="video-scrub-fill"></div></div>' +
+          '<div class="video-time">0:00 / ' + durStr + '</div>' +
+        '</div>';
+
+      dVideoPane.innerHTML =
+        '<div class="video-pane-head">' +
+          '<span class="video-label">video</span>' +
+          statusHtml +
+          '<span class="video-duration">' + durStr + '</span>' +
+        '</div>' +
+        '<div class="video-pane-stage" id="' + stageId + '">' + beatsHtml + '</div>' +
+        controlsHtml +
+        '<div class="video-attribution">narrated by scriptifier · af_heart</div>';
+
+      // mount audio + wire controls. reuse existing runtime if turnId + audioUrl
+      // match (so a refresh-tick doesn't interrupt playback).
+      if (!hasAudio) {
+        // teardown any stale runtime; nothing to play.
+        const existing = videoRuntime.get(sessionKey);
+        if (existing) {
+          if (existing.rafId) cancelAnimationFrame(existing.rafId);
+          if (existing.audio) { try { existing.audio.pause(); } catch {} }
+          videoRuntime.delete(sessionKey);
+        }
+        return;
+      }
+
+      let rt = videoRuntime.get(sessionKey);
+      const stageEl = document.getElementById(stageId);
+      const ctrlsEl = document.getElementById(ctrlsId);
+      const playBtn = ctrlsEl ? ctrlsEl.querySelector(".video-play-btn") : null;
+      const scrubEl = ctrlsEl ? ctrlsEl.querySelector(".video-scrub") : null;
+      const fillEl = ctrlsEl ? ctrlsEl.querySelector(".video-scrub-fill") : null;
+      const timeEl = ctrlsEl ? ctrlsEl.querySelector(".video-time") : null;
+
+      if (rt && rt.turnId === script.turnId && rt.audioUrl === script.audioUrl && rt.audio) {
+        // reuse existing audio el; just rebind dom refs + boundaries.
+        rt.beatBoundaries = beatBoundaries;
+        rt.totalTokenCount = totalTokenCount;
+        rt.words = words;
+        rt.stageEl = stageEl;
+        rt.ctrlsEl = ctrlsEl;
+        rt.playBtn = playBtn;
+        rt.scrubEl = scrubEl;
+        rt.fillEl = fillEl;
+        rt.timeEl = timeEl;
+        rt.beats = beats;
+        rt.lastBeatIdx = -1;
+        rt.lastWordIdx = -1;
+      } else {
+        // cleanup any prior runtime for this key.
+        if (rt) {
+          if (rt.rafId) cancelAnimationFrame(rt.rafId);
+          if (rt.audio) { try { rt.audio.pause(); } catch {} }
+        }
+        const audio = document.createElement("audio");
+        audio.preload = "metadata";
+        audio.src = script.audioUrl;
+        rt = {
+          audio,
+          turnId: script.turnId,
+          audioUrl: script.audioUrl,
+          beatBoundaries,
+          totalTokenCount,
+          words,
+          beats,
+          rafId: 0,
+          stageEl, ctrlsEl, playBtn, scrubEl, fillEl, timeEl,
+          lastBeatIdx: -1,
+          lastWordIdx: -1,
+          duration: script.durationS || 0,
+        };
+        videoRuntime.set(sessionKey, rt);
+
+        audio.addEventListener("loadedmetadata", () => {
+          if (isFinite(audio.duration) && audio.duration > 0) {
+            rt.duration = audio.duration;
+            if (rt.timeEl) rt.timeEl.textContent = "0:00 / " + vbFmtTime(audio.duration);
+          }
+        });
+        audio.addEventListener("play", () => {
+          if (rt.playBtn) rt.playBtn.setAttribute("aria-label", "pause");
+          paintPlayGlyph(rt.playBtn, true);
+          startKaraokeLoop(sessionKey);
+        });
+        audio.addEventListener("pause", () => {
+          if (rt.playBtn) rt.playBtn.setAttribute("aria-label", "play");
+          paintPlayGlyph(rt.playBtn, false);
+          stopKaraokeLoop(sessionKey);
+          paintKaraokeFrame(sessionKey); // settle final state
+        });
+        audio.addEventListener("ended", () => {
+          stopKaraokeLoop(sessionKey);
+          paintKaraokeFrame(sessionKey);
+        });
+      }
+
+      // wire play/pause
+      if (rt.playBtn) {
+        rt.playBtn.onclick = () => {
+          if (!rt.audio) return;
+          if (rt.audio.paused) {
+            rt.audio.play().catch(err => console.warn("[video] play failed", err));
+          } else {
+            rt.audio.pause();
+          }
+        };
+        paintPlayGlyph(rt.playBtn, !rt.audio.paused);
+      }
+      // wire scrub click → seek
+      if (rt.scrubEl) {
+        rt.scrubEl.onclick = (ev) => {
+          if (!rt.audio || !isFinite(rt.duration) || rt.duration <= 0) return;
+          const rect = rt.scrubEl.getBoundingClientRect();
+          const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+          rt.audio.currentTime = ratio * rt.duration;
+          paintKaraokeFrame(sessionKey);
+        };
+      }
+
+      // initial paint reflects current audio.currentTime (may be 0 on first
+      // mount, may be nonzero after a re-render mid-playback).
+      paintKaraokeFrame(sessionKey);
+    }
+
+    // swap the play-btn glyph between play and pause shapes. uses a single
+    // <svg> child so we just rewrite its innerHTML.
+    function paintPlayGlyph(btn, playing) {
+      if (!btn) return;
+      const svg = btn.querySelector("svg");
+      if (!svg) return;
+      svg.innerHTML = playing
+        ? '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'
+        : '<path d="M8 5v14l11-7z"/>';
+    }
+
+    function startKaraokeLoop(sessionKey) {
+      const rt = videoRuntime.get(sessionKey);
+      if (!rt || rt.rafId) return;
+      const tick = () => {
+        rt.rafId = 0;
+        if (!rt.audio || rt.audio.paused) return;
+        paintKaraokeFrame(sessionKey);
+        rt.rafId = requestAnimationFrame(tick);
+      };
+      rt.rafId = requestAnimationFrame(tick);
+    }
+    function stopKaraokeLoop(sessionKey) {
+      const rt = videoRuntime.get(sessionKey);
+      if (!rt) return;
+      if (rt.rafId) {
+        cancelAnimationFrame(rt.rafId);
+        rt.rafId = 0;
+      }
+    }
+    // single repaint of the karaoke state at audio.currentTime. updates word
+    // classes within the active beat, beat-level past/current/future classes,
+    // scrub fill, and time label. only smooth-scrolls when the active beat
+    // changes (debounced via rt.lastBeatIdx).
+    function paintKaraokeFrame(sessionKey) {
+      const rt = videoRuntime.get(sessionKey);
+      if (!rt || !rt.audio || !rt.stageEl) return;
+      const t = rt.audio.currentTime || 0;
+      const dur = (isFinite(rt.duration) && rt.duration > 0)
+        ? rt.duration
+        : (isFinite(rt.audio.duration) ? rt.audio.duration : 0);
+      // find current word index — linear scan is fine for typical 20–80 words.
+      let wordIdx = -1;
+      const ws = rt.words || [];
+      for (let i = 0; i < ws.length; i++) {
+        const w = ws[i];
+        if (t < w.startS) { wordIdx = i - 1; break; }
+        if (t >= w.startS && t < w.endS) { wordIdx = i; break; }
+        if (i === ws.length - 1 && t >= w.endS) { wordIdx = ws.length - 1; }
+      }
+      // find current beat index from boundaries.
+      let beatIdx = -1;
+      const bbs = rt.beatBoundaries || [];
+      if (wordIdx >= 0) {
+        for (let i = 0; i < bbs.length; i++) {
+          if (wordIdx >= bbs[i].startWordIdx && wordIdx < bbs[i].endWordIdx) { beatIdx = i; break; }
+        }
+      } else if (ws.length === 0 && bbs.length > 0 && dur > 0) {
+        // fallback: even-time distribution when word timings are missing.
+        for (let i = 0; i < bbs.length; i++) {
+          if (t >= bbs[i].startS && t < bbs[i].endS) { beatIdx = i; break; }
+        }
+      }
+      if (beatIdx < 0) beatIdx = 0;
+
+      // paint beats — only touch classes that need to change. (full reset is
+      // cheap at our beat counts but we use targeted updates to avoid
+      // restarting css transitions every frame.)
+      const beatEls = rt.stageEl.querySelectorAll(".video-beat");
+      for (let i = 0; i < beatEls.length; i++) {
+        const el = beatEls[i];
+        const wantState = i < beatIdx ? "past" : (i === beatIdx ? "current" : "future");
+        const has = el.classList.contains("past") ? "past"
+                  : (el.classList.contains("current") ? "current" : "future");
+        if (has !== wantState) {
+          el.classList.remove("past", "current", "future");
+          el.classList.add(wantState);
+        }
+      }
+
+      // paint words within the current beat. clear played/active on all words
+      // outside the current beat range; inside, mark earlier words .played and
+      // the wordIdx-th .active.
+      const allWordEls = rt.stageEl.querySelectorAll(".vb-word");
+      const cur = bbs[beatIdx] || { startWordIdx: 0, endWordIdx: 0 };
+      for (let i = 0; i < allWordEls.length; i++) {
+        const el = allWordEls[i];
+        const isInCurrent = i >= cur.startWordIdx && i < cur.endWordIdx;
+        let want = "";
+        if (i < wordIdx) want = "played";
+        else if (i === wordIdx) want = "active";
+        // outside the current beat we don't show played/active highlights;
+        // beat-level dim styling carries the past/future signal.
+        if (!isInCurrent) want = "";
+        const hasPlayed = el.classList.contains("played");
+        const hasActive = el.classList.contains("active");
+        if (want === "played") {
+          if (!hasPlayed) el.classList.add("played");
+          if (hasActive) el.classList.remove("active");
+        } else if (want === "active") {
+          if (!hasActive) el.classList.add("active");
+          if (hasPlayed) el.classList.remove("played");
+        } else {
+          if (hasPlayed) el.classList.remove("played");
+          if (hasActive) el.classList.remove("active");
+        }
+      }
+
+      // beat-change side effects: scroll into view + marker pulse.
+      if (beatIdx !== rt.lastBeatIdx) {
+        rt.lastBeatIdx = beatIdx;
+        const beatEl = beatEls[beatIdx];
+        if (beatEl) {
+          if (reduceMotionOn()) {
+            beatEl.scrollIntoView({ block: "center" });
+          } else {
+            beatEl.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+          // marker pulse — only when reduced-motion is OFF and gsap available.
+          const markerEl = beatEl.querySelector(".video-marker");
+          if (markerEl && typeof gsap !== "undefined" && !reduceMotionOn()) {
+            gsap.fromTo(markerEl,
+              { scale: 1.0 },
+              { scale: 1.08, duration: 0.14, ease: "back.out(2)", yoyo: true, repeat: 1, transformOrigin: "center" }
+            );
+          }
+        }
+      }
+      rt.lastWordIdx = wordIdx;
+
+      // scrub fill + time label.
+      if (rt.fillEl && dur > 0) {
+        const pct = Math.max(0, Math.min(100, (t / dur) * 100));
+        rt.fillEl.style.width = pct + "%";
+      }
+      if (rt.timeEl) {
+        const dStr = dur > 0 ? vbFmtTime(dur) : "—:—";
+        rt.timeEl.textContent = vbFmtTime(t) + " / " + dStr;
+      }
+    }
+
+    // make a session key safe for use in an html id (sessions are keyed on
+    // "source:absolute/path", which contains characters css selectors hate).
+    function cssIdSafe(s) {
+      return String(s).replace(/[^a-zA-Z0-9_-]/g, "_");
+    }
+
     function refresh() {
       renderInbox();
       renderDetail();
@@ -3242,6 +3913,16 @@
       }
       if (snap.chatStatus && typeof snap.chatStatus.status === "string") {
         chatStatusByKey.set(key, { status: snap.chatStatus.status, message: snap.chatStatus.message, ts: snap.chatStatus.ts || 0 });
+      }
+      // hydrate scriptifier scripts — the server's snapshot() includes a
+      // `scripts` map keyed by turnId. merge into our local map so a reload
+      // doesn't lose recently-narrated turns.
+      if (snap.scripts && typeof snap.scripts === "object") {
+        const m = scriptsByKey.get(key) || new Map();
+        for (const [turnId, script] of Object.entries(snap.scripts)) {
+          m.set(turnId, script);
+        }
+        scriptsByKey.set(key, m);
       }
     }
 
@@ -3333,6 +4014,21 @@
           if (typeof msg.enabled === "boolean") {
             autoSendEnabled = msg.enabled;
             paintAutoSend();
+          }
+        } else if (msg.kind === "script:beats" || msg.kind === "script:ready") {
+          if (!msg.script || typeof msg.script.turnId !== "string") return;
+          let m = scriptsByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); scriptsByKey.set(msg.sessionKey, m); }
+          m.set(msg.script.turnId, msg.script);
+          refresh();
+        } else if (msg.kind === "script:error") {
+          const m = scriptsByKey.get(msg.sessionKey);
+          if (!m) return;
+          const existing = m.get(msg.turnId);
+          if (existing) {
+            existing.status = "error";
+            existing.errorMessage = msg.message;
+            refresh();
           }
         }
       });
