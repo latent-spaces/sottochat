@@ -4,7 +4,7 @@ import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
 import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver } from "./observer";
-import { startScriptifier, SCRIPT_STYLES, type ScriptBeat, type ScriptStyle } from "./scriptifier";
+import { startScriptifier, SCRIPT_STYLES, MARKER_VOCABS, type ScriptBeat, type ScriptStyle, type MarkerVocab } from "./scriptifier";
 import { generateTts, ttsAudioPath, type WordTiming } from "./tts";
 import { exportToMp4, exportMp4Path } from "./hyperframes-export";
 import { startChatHost, type ChatChunk } from "./chat-agent";
@@ -56,6 +56,15 @@ let activeScriptStyle: ScriptStyle = (() => {
   const env = Bun.env.META_SCRIPT_STYLE as ScriptStyle | undefined;
   if (env && SCRIPT_STYLES.includes(env)) return env;
   return "default";
+})();
+// active marker vocabulary. "design" = INSIGHT/BE_CAREFUL/STEP/NOTE (default,
+// matches the original prompts). "story" = PUNCHLINE/GOTCHA/PIVOT/ASIDE — same
+// semantic intent but a more story-shaped vocabulary. swappable at runtime via
+// POST /debug/marker-vocab. like activeScriptStyle, only affects future turns.
+let activeMarkerVocab: MarkerVocab = (() => {
+  const env = Bun.env.META_MARKER_VOCAB as MarkerVocab | undefined;
+  if (env && MARKER_VOCABS.includes(env)) return env;
+  return "design";
 })();
 // last N closed turns we keep per session, used to seed the auto-fired chat.
 const RECENT_CLOSED_TURNS = 5;
@@ -890,6 +899,30 @@ const server = Bun.serve({
       return Response.json({ ok: true, style: activeScriptStyle });
     }
 
+    // POST /debug/marker-vocab — swap the marker vocabulary for FUTURE turns.
+    // body: { vocab: "design" | "story" }. broadcasts markervocab:setting so
+    // open clients re-paint pickers + label maps.
+    if (url.pathname === "/debug/marker-vocab" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const vocab = o.vocab;
+      if (typeof vocab !== "string" || !MARKER_VOCABS.includes(vocab as MarkerVocab)) {
+        return Response.json(
+          { error: `vocab must be one of ${MARKER_VOCABS.join(", ")}` },
+          { status: 400 }
+        );
+      }
+      activeMarkerVocab = vocab as MarkerVocab;
+      console.log(`[scriptifier] runtime marker-vocab → ${activeMarkerVocab}`);
+      broadcast({ kind: "markervocab:setting", vocab: activeMarkerVocab });
+      return Response.json({ ok: true, vocab: activeMarkerVocab });
+    }
+
     return new Response("not found", { status: 404 });
   },
   websocket: {
@@ -901,6 +934,7 @@ const server = Bun.serve({
           sessions: recentSessions(),
           autoSendEnabled,
           scriptStyle: activeScriptStyle,
+          markerVocab: activeMarkerVocab,
         })
       );
     },
@@ -1122,7 +1156,7 @@ startTailer({
         observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
       }
       if (scriptifier && !isObserverSelf && isVisible(s) && fresh) {
-        scriptifier.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed), activeScriptStyle);
+        scriptifier.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed), activeScriptStyle, activeMarkerVocab);
       }
     }
   },

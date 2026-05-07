@@ -19,7 +19,15 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { TurnFeed } from "./observer";
 import type { MetaEvent } from "./jsonl";
 
-export type ScriptMarker = "INSIGHT" | "BE_CAREFUL" | "STEP" | "NOTE";
+// markers come in two parallel vocabularies, controlled by MarkerVocab below.
+// "design" = the original four (INSIGHT / BE_CAREFUL / STEP / NOTE) — category
+// labels, design-doc shaped. "story" = a parallel set with story-arc names
+// (PUNCHLINE / GOTCHA / PIVOT / ASIDE) — same semantics, different vibe. the
+// type union allows either set so beats, parsers, and downstream renderers can
+// accept whichever the active vocab emitted without branching.
+export type ScriptMarker =
+  | "INSIGHT" | "BE_CAREFUL" | "STEP" | "NOTE"
+  | "PUNCHLINE" | "GOTCHA" | "PIVOT" | "ASIDE";
 
 export type ScriptBeat = {
   text: string;
@@ -65,17 +73,82 @@ const SCRIPTIFIER_DIR = join(homedir(), ".cut-the-cake", "scriptifier");
 export type ScriptStyle = "default" | "cinematic" | "tldr" | "deep-dive" | "comedic" | "noir" | "kids";
 export const SCRIPT_STYLES: ScriptStyle[] = ["default", "cinematic", "tldr", "deep-dive", "comedic", "noir", "kids"];
 
-// shared tail for every preset: marker definitions + emphasis rules + the
-// strict JSON output shape. extracting it here keeps drift between presets
-// minimal — only the per-style prefix (length, voice, beat-count target)
-// changes between the four prompts.
-const COMMON_TAIL = `Markers (use sparingly):
+// marker vocabulary preset — orthogonal to ScriptStyle. shapes the marker
+// definitions injected into every per-style prompt; the JSON output schema is
+// identical across vocabs (parser accepts either set's tokens). swapping vocab
+// affects FUTURE turns only — existing scripts keep their original marker set.
+// "design" preserves the original behaviour; "story" swaps to PUNCHLINE /
+// GOTCHA / PIVOT / ASIDE — story-arc names rather than category labels.
+export type MarkerVocab = "design" | "story";
+export const MARKER_VOCABS: MarkerVocab[] = ["design", "story"];
+
+// per-vocab marker definitions. one of these is concatenated between the
+// per-style preamble and RESPONSE_TAIL at prompt-assembly time. the JSON
+// output schema (RESPONSE_TAIL) is identical across both — only the names
+// + flavour text change, and the parser accepts either set's tokens.
+const MARKER_VOCAB_DESIGN = `Markers (use sparingly):
 - INSIGHT — surprising or load-bearing finding the user should pause on
 - BE_CAREFUL — footgun, risky operation, or "this could break X"
 - STEP — explicit numbered procedure (1 of N, etc.)
-- NOTE — small aside or clarification
+- NOTE — small aside or clarification`;
 
-Reply with ONLY the JSON object: {"scripts":[{"turnId","beats":[{"text","marker","emphasis"}]}]}. No prose, no markdown fences.`;
+const MARKER_VOCAB_STORY = `Markers (use sparingly):
+- PUNCHLINE — the beat that pays off the turn's story; the moment that earns the listen
+- GOTCHA — surprise or footgun that should make the reader sit up
+- PIVOT — architectural turn, decision point, course correction
+- ASIDE — kind aside, tangential context, side note`;
+
+const MARKER_VOCAB_TEXT: Record<MarkerVocab, string> = {
+  design: MARKER_VOCAB_DESIGN,
+  story: MARKER_VOCAB_STORY,
+};
+
+// shared response-shape tail. defines the strict JSON output schema; lives
+// after the marker-vocab block at prompt-assembly time.
+const RESPONSE_TAIL = `Reply with ONLY the JSON object: {"scripts":[{"turnId","beats":[{"text","marker","emphasis"}]}]}. No prose, no markdown fences.`;
+
+function buildCommonTail(vocab: MarkerVocab): string {
+  return `${MARKER_VOCAB_TEXT[vocab]}\n\n${RESPONSE_TAIL}`;
+}
+
+// the per-style preamble constants below interpolate `${COMMON_TAIL}` at
+// module-load time. that bakes the design-vocab marker definitions into the
+// preamble strings. for the design vocab buildSystemIntro() returns the
+// preamble unchanged; for the story vocab it swaps the design marker block
+// for the story one via string replacement on the (stable) MARKER_VOCAB_DESIGN
+// substring. this keeps the per-style preamble constants statically readable
+// while supporting vocab swap at dispatch time.
+const COMMON_TAIL = buildCommonTail("design");
+
+// pairwise mapping for in-prose marker mentions inside the per-style preambles
+// (e.g. deep-dive's "INSIGHT for non-obvious findings; BE_CAREFUL for real
+// footguns…"). when vocab=story we rename those individual tokens too so the
+// flavour text is consistent with the marker-definitions block. order matters:
+// the MARKER_VOCAB_DESIGN block-replace runs first, so these token-replaces
+// only see the prose mentions outside the block.
+const MARKER_RENAME: Record<MarkerVocab, Record<string, string>> = {
+  design: {},
+  story: {
+    INSIGHT: "PUNCHLINE",
+    BE_CAREFUL: "GOTCHA",
+    STEP: "PIVOT",
+    NOTE: "ASIDE",
+  },
+};
+
+function buildSystemIntro(style: ScriptStyle, vocab: MarkerVocab): string {
+  const preamble = STYLE_INTRO[style];
+  if (vocab === "design") return preamble;
+  // replace the marker-definitions block first (it contains the original
+  // tokens; doing token-replaces first would clobber the block-replace).
+  let out = preamble.replace(MARKER_VOCAB_DESIGN, MARKER_VOCAB_TEXT[vocab]);
+  // then rename any remaining in-prose mentions. word-boundary regex so we
+  // don't touch substrings (BE_CAREFUL is its own word, not nested).
+  for (const [from, to] of Object.entries(MARKER_RENAME[vocab])) {
+    out = out.replace(new RegExp(`\\b${from}\\b`, "g"), to);
+  }
+  return out;
+}
 
 const SCRIPTIFIER_INTRO_DEFAULT = `You are the scriptifier for cut-the-cake. When given a closed turn from a Claude Code (or codex) session, you produce a short karaoke-style script that captures what happened, in a way that's faster to listen to than reading the raw output.
 
@@ -277,7 +350,13 @@ function stripFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
-const VALID_MARKERS = new Set<ScriptMarker>(["INSIGHT", "BE_CAREFUL", "STEP", "NOTE"]);
+// accepts both vocabularies' tokens (design + story). the active vocab steers
+// which set the model is asked to emit — but when vocab is swapped mid-flight,
+// or the model improvises, we tolerate either set rather than dropping beats.
+const VALID_MARKERS = new Set<ScriptMarker>([
+  "INSIGHT", "BE_CAREFUL", "STEP", "NOTE",
+  "PUNCHLINE", "GOTCHA", "PIVOT", "ASIDE",
+]);
 
 type ParsedScript = { turnId: string; beats: ScriptBeat[] };
 
@@ -547,31 +626,34 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
 }
 
 export function startScriptifier(opts: ScriptifierOptions): {
-  feed: (t: TurnFeed, style?: ScriptStyle) => void;
+  feed: (t: TurnFeed, style?: ScriptStyle, vocab?: MarkerVocab) => void;
   stop: () => void;
 } {
   const model = opts.model ?? "claude-sonnet-4-6";
   const batchMs = opts.batchMs ?? 2_000;
 
-  // one sdk subprocess per style. spawned lazily on first feed for that style
-  // so an unused preset never costs anything; once spawned, the subprocess
-  // stays alive (long-lived prompt-cache friendly, like the original single
-  // loop). each subprocess uses its own cwd so it doesn't share session state.
-  const loops = new Map<ScriptStyle, SdkLoopHandle>();
+  // one sdk subprocess per (style, vocab) combination. spawned lazily on first
+  // feed for that combination so unused presets never cost anything; once
+  // spawned, the subprocess stays alive (long-lived prompt-cache friendly).
+  // each subprocess uses its own cwd under <style>--<vocab>/ so it doesn't
+  // share session state across vocab swaps.
+  type LoopKey = `${ScriptStyle}--${MarkerVocab}`;
+  const loops = new Map<LoopKey, SdkLoopHandle>();
 
-  function loopFor(style: ScriptStyle): SdkLoopHandle {
-    const existing = loops.get(style);
+  function loopFor(style: ScriptStyle, vocab: MarkerVocab): SdkLoopHandle {
+    const key: LoopKey = `${style}--${vocab}`;
+    const existing = loops.get(key);
     if (existing) return existing;
 
-    const styleDir = join(SCRIPTIFIER_DIR, style);
+    const styleDir = join(SCRIPTIFIER_DIR, `${style}--${vocab}`);
     const handle = startSdkLoop({
       model,
       cwd: styleDir,
-      label: `style=${style}`,
+      label: `style=${style} vocab=${vocab}`,
       batchMs,
-      systemIntro: STYLE_INTRO[style],
+      systemIntro: buildSystemIntro(style, vocab),
       formatTrailing: TRAILING,
-      sdkSessionId: `cut-the-cake-scriptifier-${style}`,
+      sdkSessionId: `cut-the-cake-scriptifier-${style}-${vocab}`,
       onResponse(text, batch) {
         const parsed = parseScriptsResponse(text);
         if (!parsed) {
@@ -595,20 +677,21 @@ export function startScriptifier(opts: ScriptifierOptions): {
           opts.onScript?.(result);
           const markerCount = s.beats.filter((b) => b.marker).length;
           console.log(
-            `[scriptifier] ${s.turnId.slice(0, 8)} · style=${style} · ${s.beats.length} beats · ${markerCount} markers`
+            `[scriptifier] ${s.turnId.slice(0, 8)} · style=${style} · vocab=${vocab} · ${s.beats.length} beats · ${markerCount} markers`
           );
         }
       },
     });
-    loops.set(style, handle);
-    console.log(`[scriptifier] spawned subprocess for style=${style} (cwd=${styleDir})`);
+    loops.set(key, handle);
+    console.log(`[scriptifier] spawned subprocess for style=${style} vocab=${vocab} (cwd=${styleDir})`);
     return handle;
   }
 
   return {
-    feed(t, style) {
+    feed(t, style, vocab) {
       const s = style && SCRIPT_STYLES.includes(style) ? style : "default";
-      loopFor(s).feed(t);
+      const v = vocab && MARKER_VOCABS.includes(vocab) ? vocab : "design";
+      loopFor(s, v).feed(t);
     },
     stop() {
       for (const [, h] of loops) h.stop();

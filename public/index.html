@@ -885,10 +885,14 @@
       border-radius: 11px;
       flex-shrink: 0;
     }
-    .video-marker.INSIGHT     { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
-    .video-marker.BE_CAREFUL  { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
-    .video-marker.STEP        { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
-    .video-marker.NOTE        { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-marker.INSIGHT,
+    .video-marker.PUNCHLINE   { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-marker.BE_CAREFUL,
+    .video-marker.GOTCHA      { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-marker.STEP,
+    .video-marker.PIVOT       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-marker.NOTE,
+    .video-marker.ASIDE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
 
     /* marker-style picker — three small toggles in the video-pane-head row.
        hidden if the active script has no markers. mono uppercase, current style
@@ -1061,10 +1065,14 @@
       line-height: 1.3;
       font-weight: 500;
     }
-    .video-banner.INSIGHT     { background: #fde68a; color: #78350f; }
-    .video-banner.BE_CAREFUL  { background: #fed7aa; color: #7c2d12; }
-    .video-banner.STEP        { background: #dbeafe; color: #1e3a8a; }
-    .video-banner.NOTE        { background: var(--bg); color: var(--fg-muted); border-bottom: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-banner.INSIGHT,
+    .video-banner.PUNCHLINE   { background: #fde68a; color: #78350f; }
+    .video-banner.BE_CAREFUL,
+    .video-banner.GOTCHA      { background: #fed7aa; color: #7c2d12; }
+    .video-banner.STEP,
+    .video-banner.PIVOT       { background: #dbeafe; color: #1e3a8a; }
+    .video-banner.NOTE,
+    .video-banner.ASIDE       { background: var(--bg); color: var(--fg-muted); border-bottom: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
 
     /* style 3: corner — small glyph + label in the video-pane-head while the
        current beat is marked. tints the active-word highlight via --marker-tint
@@ -1084,10 +1092,14 @@
       flex-shrink: 0;
     }
     .video-marker-corner svg { width: 12px; height: 12px; flex-shrink: 0; }
-    .video-marker-corner.INSIGHT    { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
-    .video-marker-corner.BE_CAREFUL { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
-    .video-marker-corner.STEP       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
-    .video-marker-corner.NOTE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-marker-corner.INSIGHT,
+    .video-marker-corner.PUNCHLINE  { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-marker-corner.BE_CAREFUL,
+    .video-marker-corner.GOTCHA     { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-marker-corner.STEP,
+    .video-marker-corner.PIVOT      { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-marker-corner.NOTE,
+    .video-marker-corner.ASIDE      { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
 
     /* style 4: stamp — round rubber-stamp svg lands inline before the beat
        text. lives inside .video-beat.has-marker-stamp; the beat element flips
@@ -1163,10 +1175,14 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .video-ticker.INSIGHT     { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
-    .video-ticker.BE_CAREFUL  { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
-    .video-ticker.STEP        { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
-    .video-ticker.NOTE        { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-ticker.INSIGHT,
+    .video-ticker.PUNCHLINE   { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-ticker.BE_CAREFUL,
+    .video-ticker.GOTCHA      { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-ticker.STEP,
+    .video-ticker.PIVOT       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-ticker.NOTE,
+    .video-ticker.ASIDE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
 
     /* style 6: halo — soft pulsing box-shadow on the active marked beat.
        no inline marker treatment; the colour comes from the per-marker class
@@ -3220,6 +3236,77 @@
       }
     }
 
+    // marker-vocabulary preference. parallel to scriptStyle but orthogonal:
+    // controls which set of marker tokens the scriptifier prompt asks for and
+    // — until the server-side dispatch is wired — which token names the client
+    // displays for inbound markers. "design" = INSIGHT/BE_CAREFUL/STEP/NOTE
+    // (current behaviour, current default). "story" = PUNCHLINE/GOTCHA/PIVOT
+    // /ASIDE (story-arc names). authoritative value will live on the server
+    // (snapshot.markerVocab + markervocab:setting ws msgs); for now the client
+    // seeds optimistically from localStorage and absorbs hello/ws updates if
+    // they arrive. POST to /debug/marker-vocab is fire-and-forget — failures
+    // are tolerated so the UI swap still happens locally.
+    const VIDEO_MARKER_VOCAB_KEY = "cutCakeMarkerVocab";
+    const VIDEO_MARKER_VOCABS = ["design", "story"];
+    // per-vocab display labels for the in-flight marker tokens. when vocab
+    // is "design" we render the model's emitted token verbatim. when vocab
+    // is "story" we translate any design-vocab tokens that arrive (e.g. from
+    // a server still on the old dispatch) to their story-vocab equivalent.
+    const MARKER_DISPLAY = {
+      design: { INSIGHT: "INSIGHT", BE_CAREFUL: "BE_CAREFUL", STEP: "STEP", NOTE: "NOTE",
+                PUNCHLINE: "PUNCHLINE", GOTCHA: "GOTCHA", PIVOT: "PIVOT", ASIDE: "ASIDE" },
+      story:  { INSIGHT: "PUNCHLINE", BE_CAREFUL: "GOTCHA", STEP: "PIVOT", NOTE: "ASIDE",
+                PUNCHLINE: "PUNCHLINE", GOTCHA: "GOTCHA", PIVOT: "PIVOT", ASIDE: "ASIDE" },
+    };
+    let markerVocab = (function () {
+      try {
+        const stored = localStorage.getItem(VIDEO_MARKER_VOCAB_KEY);
+        if (stored && VIDEO_MARKER_VOCABS.includes(stored)) return stored;
+      } catch {}
+      return "design";
+    })();
+    function setMarkerVocabLocal(vocab) {
+      if (!VIDEO_MARKER_VOCABS.includes(vocab)) return false;
+      if (vocab === markerVocab) return true;
+      markerVocab = vocab;
+      try { localStorage.setItem(VIDEO_MARKER_VOCAB_KEY, vocab); } catch {}
+      return true;
+    }
+    // map an inbound marker token to its display label under the active vocab.
+    // the server may emit either set's tokens (the parser accepts both); the
+    // active vocab is just a UI preference for which name to surface.
+    function markerLabelFor(token) {
+      if (!token) return token;
+      const map = MARKER_DISPLAY[markerVocab] || MARKER_DISPLAY.design;
+      return map[token] || token;
+    }
+    async function applyMarkerVocab(vocab) {
+      const prev = markerVocab;
+      if (!setMarkerVocabLocal(vocab)) return;
+      // optimistic repaint of the picker + chips/banners; ws msg will reconfirm
+      // once the server-side dispatch is wired.
+      refresh();
+      try {
+        const res = await fetch("/debug/marker-vocab", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ vocab }),
+        });
+        if (!res.ok) {
+          // server may not yet wire the endpoint — treat as a soft failure.
+          // the local UI swap still applies; the next turn will use whichever
+          // vocab the server happens to be running.
+          if (res.status !== 404) {
+            console.warn("[marker-vocab] post failed", res.status);
+            setMarkerVocabLocal(prev);
+            refresh();
+          }
+        }
+      } catch (err) {
+        console.warn("[marker-vocab] post error", err);
+      }
+    }
+
     // per-session TTS voice preference. authoritative value lives on the server
     // (snapshot.voice + voice:setting ws msgs). the local Map mirrors what we
     // know so the picker paints without a round-trip. unknown sessionKeys fall
@@ -3330,21 +3417,33 @@
         osc.stop(now + 0.13);
       } catch {}
     }
-    // svg glyphs for the corner-style indicator. INSIGHT = lightbulb,
-    // BE_CAREFUL = warning triangle, STEP = numbered chevron, NOTE = small dot.
+    // svg glyphs for the corner-style indicator. each pair (design vocab +
+    // story vocab) shares a glyph since they name the same semantic beat:
+    // INSIGHT/PUNCHLINE = lightbulb, BE_CAREFUL/GOTCHA = warning triangle,
+    // STEP/PIVOT = numbered chevron, NOTE/ASIDE = small dot.
     const MARKER_CORNER_GLYPHS = {
       INSIGHT: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.7.6 1 1.5 1 2.3v1h6v-1c0-.8.3-1.7 1-2.3A7 7 0 0 0 12 2z"/></svg>',
       BE_CAREFUL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.7 3h16.96a2 2 0 0 0 1.7-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
       STEP: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>',
       NOTE: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="3"/></svg>',
     };
+    MARKER_CORNER_GLYPHS.PUNCHLINE = MARKER_CORNER_GLYPHS.INSIGHT;
+    MARKER_CORNER_GLYPHS.GOTCHA    = MARKER_CORNER_GLYPHS.BE_CAREFUL;
+    MARKER_CORNER_GLYPHS.PIVOT     = MARKER_CORNER_GLYPHS.STEP;
+    MARKER_CORNER_GLYPHS.ASIDE     = MARKER_CORNER_GLYPHS.NOTE;
     // marker → solid colour (for the banner background and the corner tint)
     // so JS reads from a single source of truth instead of duplicating CSS.
+    // both vocabularies map to the same colors — a story-vocab PUNCHLINE
+    // beat reads in the same yellow as a design-vocab INSIGHT beat.
     const MARKER_COLORS = {
       INSIGHT:    { bg: "#fde68a", fg: "#78350f" },
       BE_CAREFUL: { bg: "#fed7aa", fg: "#7c2d12" },
       STEP:       { bg: "#dbeafe", fg: "#1e3a8a" },
       NOTE:       { bg: null,      fg: null      }, // dashed paper, no tint
+      PUNCHLINE:  { bg: "#fde68a", fg: "#78350f" },
+      GOTCHA:     { bg: "#fed7aa", fg: "#7c2d12" },
+      PIVOT:      { bg: "#dbeafe", fg: "#1e3a8a" },
+      ASIDE:      { bg: null,      fg: null      },
     };
     // sessionKeys whose chat-thread the user has explicitly expanded. default
     // is collapsed: only the last RECENT_VISIBLE chunks render, with a "show
@@ -4318,8 +4417,12 @@
           return html;
         }).join(" ");
         const showInlinePill = inlinePill && !!b.marker;
+        // marker text is mapped through markerLabelFor() so the active vocab
+        // controls which token name displays — even if the inbound beat carries
+        // the other vocab's token (e.g. server still on design while UI prefers
+        // story). class still uses the raw token so the per-marker CSS hits.
         const markerHtml = showInlinePill
-          ? '<span class="video-marker ' + escAttr(b.marker) + '">' + escapeHtml(b.marker.toLowerCase().replace(/_/g, " ")) + '</span>'
+          ? '<span class="video-marker ' + escAttr(b.marker) + '">' + escapeHtml(markerLabelFor(b.marker).toLowerCase().replace(/_/g, " ")) + '</span>'
           : "";
         const markerCls = showInlinePill ? " has-marker" : "";
         return '<div class="video-beat future' + markerCls + '" data-beat-idx="' + i + '" data-marker="' + (b.marker ? escAttr(b.marker) : '') + '">' +
@@ -4381,6 +4484,19 @@
           )).join('') +
         '</div>';
 
+      // marker-vocab picker — controls which marker vocabulary the scriptifier
+      // is asked for and which token names the client surfaces in chips +
+      // banners. orthogonal to script-style + marker-style (treatments). lives
+      // alongside the marker-style picker; shown unconditionally so the user
+      // can pre-set vocab before the next turn lands.
+      const markerVocabPickerHtml =
+        '<div class="video-marker-picker video-marker-vocab-picker" role="group" aria-label="marker vocab">' +
+          VIDEO_MARKER_VOCABS.map((opt, idx) => (
+            (idx > 0 ? '<span class="vmp-divider" aria-hidden="true"></span>' : '') +
+            '<button type="button" class="vmp-btn" data-marker-vocab="' + opt + '" aria-pressed="' + (opt === markerVocab ? 'true' : 'false') + '">' + opt + '</button>'
+          )).join('') +
+        '</div>';
+
       // voice picker — per-session TTS voice override. compact at rest (current
       // label + chevron); click expands a popover with all three options.
       const voicePickerHtml = buildVoicePickerHtml(sessionKey);
@@ -4392,6 +4508,7 @@
           statusHtml +
           voicePickerHtml +
           scriptStylePickerHtml +
+          markerVocabPickerHtml +
           pickerHtml +
           '<span class="video-duration">' + durStr + '</span>' +
         '</div>' +
@@ -4409,6 +4526,15 @@
         btn.addEventListener("click", () => {
           const next = btn.getAttribute("data-marker-style");
           if (next) applyMarkerStyle(next);
+        });
+      });
+
+      // wire marker-vocab picker click → applyMarkerVocab (POSTs + repaints).
+      const markerVocabBtns = dVideoPane.querySelectorAll(".vmp-btn[data-marker-vocab]");
+      markerVocabBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const next = btn.getAttribute("data-marker-vocab");
+          if (next) applyMarkerVocab(next);
         });
       });
 
@@ -4879,7 +5005,7 @@
       if (prior) prior.remove();
       const banner = document.createElement("div");
       banner.className = "video-banner " + beat.marker;
-      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      const labelText = String(markerLabelFor(beat.marker) || "").toLowerCase().replace(/_/g, " ");
       const labelSpan = document.createElement("div");
       labelSpan.className = "vbn-label";
       labelSpan.textContent = labelText;
@@ -4934,7 +5060,7 @@
       // remove any existing corner so we don't accumulate stale glyphs.
       const prior = head.querySelector(".video-marker-corner");
       if (prior) prior.remove();
-      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      const labelText = String(markerLabelFor(beat.marker) || "").toLowerCase().replace(/_/g, " ");
       const glyph = MARKER_CORNER_GLYPHS[beat.marker] || MARKER_CORNER_GLYPHS.NOTE;
       const corner = document.createElement("span");
       corner.className = "video-marker-corner " + beat.marker;
@@ -4993,7 +5119,7 @@
       const colors = MARKER_COLORS[beat.marker] || { bg: "#fde68a", fg: "#78350f" };
       const bg = colors.bg || "#ffffff";
       const fg = colors.fg || "#1a1a1f";
-      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      const labelText = String(markerLabelFor(beat.marker) || "").toLowerCase().replace(/_/g, " ");
       // round-ish svg stamp: outer ring, dashed inner ring, mono label text.
       // colours come from MARKER_COLORS so the stamp reads as "this marker's
       // tint, dialled up". inline svg keeps it zero-asset.
@@ -5039,7 +5165,7 @@
         track.className = "video-ticker-track";
         rt.stageEl.appendChild(track);
       }
-      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      const labelText = String(markerLabelFor(beat.marker) || "").toLowerCase().replace(/_/g, " ");
       const pill = document.createElement("div");
       pill.className = "video-ticker " + beat.marker;
       pill.innerHTML =
@@ -5271,6 +5397,11 @@
             // server is the source of truth — overwrite the localStorage seed.
             setScriptStyleLocal(msg.scriptStyle);
           }
+          if (typeof msg.markerVocab === "string" && VIDEO_MARKER_VOCABS.includes(msg.markerVocab)) {
+            // server is the source of truth when it ships the field; otherwise
+            // the localStorage seed wins (server may pre-date this addition).
+            setMarkerVocabLocal(msg.markerVocab);
+          }
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
@@ -5313,6 +5444,10 @@
         } else if (msg.kind === "scriptstyle:setting") {
           if (typeof msg.style === "string" && VIDEO_SCRIPT_STYLES.includes(msg.style)) {
             if (setScriptStyleLocal(msg.style)) refresh();
+          }
+        } else if (msg.kind === "markervocab:setting") {
+          if (typeof msg.vocab === "string" && VIDEO_MARKER_VOCABS.includes(msg.vocab)) {
+            if (setMarkerVocabLocal(msg.vocab)) refresh();
           }
         } else if (msg.kind === "voice:setting") {
           if (typeof msg.sessionKey === "string" && typeof msg.voice === "string" && VOICE_IDS.includes(msg.voice)) {
