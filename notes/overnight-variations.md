@@ -72,7 +72,9 @@ still in flight at the time of writing: variation G (frosted play button + sprin
 
 i couldn't drive a browser this run — chrome-devtools-mcp wedged on every list_pages/new_page. the visual layer of every variation has been **code-reviewed** but not **eye-confirmed**. likely small CSS/animation tweaks land in the morning pass.
 
-mp4 render hasn't been triggered end-to-end either (would have used real CPU + a few minutes of clock time). the composition lints clean per the worker's report, but a real render against the cached demo audio would catch any composition-format issues hyperframes' lint can't see.
+## verified end-to-end (after the initial doc was written)
+
+mp4 render path: **works**. triggered an export against the injected demo (turn `demo-movy3b54`); render completed in 22.2s and produced a valid 2 MB / 41.39s mp4. served via `/export/<hash>.mp4` with the hex-only path-traversal guard. hyperframes lint warned (expected — composition has many backgroundColor tweens which lint flags as "non-transform animation") but didn't block. cached at `~/.cut-the-cake/exports/<hash>/` with `index.html`, `narration.wav`, `output.mp4`, `render.log`. cache-hit on subsequent identical exports skips the 22s render entirely.
 
 ## hot priorities for tomorrow morning
 
