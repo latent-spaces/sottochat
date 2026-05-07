@@ -276,6 +276,67 @@ function buildChatSeed(s: SessionState, decision?: ObserverInsight | null): stri
   return lines.join("\n");
 }
 
+// demo fixture used by /debug/inject-script — the same 9-beat / 2-marker
+// script we generated during the e2e test. self-bootstrapping: the first call
+// runs generateTts (15-25s), subsequent calls are instant cache hits. text +
+// beats are kept aligned by hand — keep them in lockstep if either changes.
+const DEMO_BEATS: ScriptBeat[] = [
+  { text: "three sources watched: claude projects, claude.app agent, codex sessions", emphasis: ["three"] },
+  { text: "per-file FileState tracks offset, partial line, and uuid dedupe", emphasis: ["FileState"] },
+  { text: "fs.watch fires in milliseconds; 500ms poll catches anything it missed", emphasis: ["500ms"] },
+  { text: "lines hit parseRecord or parseCodexRecord, emerge as unified MetaEvents", emphasis: ["MetaEvents"] },
+  { text: "event shapes: user_message, assistant_text, tool_use, tool_result, stop" },
+  { text: "turns.ts groups events at user_message boundaries and stop signals", emphasis: ["turns.ts"] },
+  { text: "on turn close, observer and scriptifier both receive the same events" },
+  { text: "both subprocesses fire concurrently — no shared queue between them", marker: "INSIGHT", emphasis: ["concurrently"] },
+  { text: "tailer skips files with mtime beyond 4 hours — they go dormant", marker: "BE_CAREFUL", emphasis: ["4 hours"] },
+];
+const DEMO_VOICE = "af_heart";
+
+async function injectDemoScript(s: SessionState): Promise<{ turnId: string; audioUrl: string } | null> {
+  const turnId = "demo-" + Date.now().toString(36);
+  const text = DEMO_BEATS.map((b) => b.text).join(" ");
+  const payload: ScriptPayload = {
+    turnId,
+    beats: DEMO_BEATS,
+    status: "rendering",
+    ts: Date.now(),
+  };
+  s.scripts.set(turnId, payload);
+  const sessionKey = keyFor(s.info);
+  if (isVisible(s)) {
+    broadcast({ kind: "script:beats", sessionKey, script: payload });
+  }
+  try {
+    const tts = await generateTts({ text, voice: DEMO_VOICE });
+    payload.audioUrl = `/tts/${tts.hash}.wav`;
+    payload.durationS = tts.durationS;
+    payload.words = tts.words;
+    payload.status = "ready";
+    payload.ts = Date.now();
+    if (isVisible(s)) {
+      broadcast({ kind: "script:ready", sessionKey, script: payload });
+    }
+    console.log(
+      `[debug] inject-script · ${s.info.slug} · ${DEMO_BEATS.length} beats · audio=${payload.audioUrl}`
+    );
+    return { turnId, audioUrl: payload.audioUrl! };
+  } catch (err) {
+    payload.status = "error";
+    payload.errorMessage = err instanceof Error ? err.message : String(err);
+    payload.ts = Date.now();
+    if (isVisible(s)) {
+      broadcast({
+        kind: "script:error",
+        sessionKey,
+        turnId,
+        message: payload.errorMessage,
+      });
+    }
+    return null;
+  }
+}
+
 // fired from onDecision when the observer flags open=true with a prefill.
 // guards against spamming chatty sessions: per-session cooldown + skip if the
 // chat thread already has activity within that window.
@@ -336,6 +397,47 @@ const server = Bun.serve({
       const file = Bun.file(ttsAudioPath(hash));
       if (await file.exists()) return new Response(file);
       return new Response("not found", { status: 404 });
+    }
+
+    // /debug/inject-script — inject a fully-formed demo ScriptPayload onto a
+    // visible session so the video-pane UI can be inspected without waiting
+    // for a real turn to close. dev affordance, gated behind META_DEBUG=1.
+    // body: {sessionKey?: string} — defaults to the most-recently-active visible
+    // session. uses the cached cafebabe fixture from the e2e test (9 beats, 2
+    // markers, 41.4s wav, 98 word timings) — beats + audio + timings all match.
+    if (url.pathname === "/debug/inject-script" && req.method === "POST") {
+      if (Bun.env.META_DEBUG !== "1") {
+        return Response.json({ error: "META_DEBUG=1 required" }, { status: 403 });
+      }
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        body = {};
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      let sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      if (!sessionKey) {
+        // pick the most-recently-active visible session
+        const visible = Array.from(sessions.values()).filter(isVisible);
+        visible.sort((a, b) => b.lastEventTs - a.lastEventTs);
+        if (!visible.length) {
+          return Response.json({ error: "no visible sessions" }, { status: 404 });
+        }
+        sessionKey = keyFor(visible[0]!.info);
+      }
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
+        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
+      }
+      const result = await injectDemoScript(sess);
+      if (!result) {
+        return Response.json({
+          error:
+            "demo fixture missing — run the e2e test once first or set META_DEBUG=1 then close any turn",
+        }, { status: 503 });
+      }
+      return Response.json({ ok: true, sessionKey, turnId: result.turnId, audioUrl: result.audioUrl });
     }
 
     if (url.pathname === "/state" && req.method === "GET") {
