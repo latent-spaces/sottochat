@@ -13,6 +13,7 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "hyperframes": "^0.5.3",
     "typescript": "^5.5.0"
   }
 }

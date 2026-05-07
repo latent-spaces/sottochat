@@ -15,7 +15,7 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename, rmdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -165,15 +165,26 @@ async function generateOnce(text: string, voice: string, hash: string): Promise<
   );
   console.log(`[tts] tts done ${hash.slice(0, 8)} in ${((Date.now() - ttsStart) / 1000).toFixed(2)}s`);
 
-  // transcribe drops a transcript.json next to the wav per the smoke test —
-  // rename it to <hash>.words.json so concurrent jobs don't stomp each other.
+  // transcribe drops a transcript.json in the cwd. run each job in a per-hash
+  // temp subdir so concurrent transcribes can't collide on that filename — the
+  // cli takes an absolute wav path, so no copy/symlink is needed.
   const transcribeStart = Date.now();
-  await run("npx", ["hyperframes", "transcribe", `${hash}.wav`], CACHE_DIR);
-  const defaultTranscript = join(CACHE_DIR, "transcript.json");
-  if (!existsSync(defaultTranscript)) {
-    throw new Error(`hyperframes transcribe did not produce ${defaultTranscript}`);
+  const jobDir = join(CACHE_DIR, `.tmp-${hash}`);
+  mkdirSync(jobDir, { recursive: true });
+  try {
+    await run("npx", ["hyperframes", "transcribe", wavPath], jobDir);
+    const jobTranscript = join(jobDir, "transcript.json");
+    if (!existsSync(jobTranscript)) {
+      throw new Error(`hyperframes transcribe did not produce ${jobTranscript}`);
+    }
+    await rename(jobTranscript, wordsPath);
+  } finally {
+    try {
+      await rmdir(jobDir);
+    } catch {
+      // best-effort — leave behind on failure rather than masking the real error
+    }
   }
-  await rename(defaultTranscript, wordsPath);
   console.log(
     `[tts] transcribe done ${hash.slice(0, 8)} in ${((Date.now() - transcribeStart) / 1000).toFixed(2)}s`
   );

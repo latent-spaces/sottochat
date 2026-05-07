@@ -31,6 +31,9 @@ const SCRIPTIFIER_BATCH_MS = Number(Bun.env.META_SCRIPTIFIER_BATCH_MS ?? 2_000);
 const TTS_VOICE = Bun.env.META_TTS_VOICE ?? "af_heart";
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
+// per-session ring buffer for ScriptPayloads — keeps a meaningful history
+// without ballooning state. oldest by closedTs is pruned when a new one lands.
+const MAX_SCRIPTS_PER_SESSION = 12;
 // when the observer flags a turn open=true with a prefill, the server fires
 // that prefill into the chat agent automatically — no waiting on user input.
 // these guards keep auto-fires from spamming a chatty session:
@@ -85,7 +88,8 @@ type ScriptPayload = {
   words?: WordTiming[];
   status: "drafting" | "rendering" | "ready" | "error";
   errorMessage?: string;
-  ts: number;
+  ts: number;             // last ui mutation — used for status pill freshness
+  closedTs: number;       // turn end ts at scriptifier-feed time — used for active-script ordering
 };
 
 type SessionState = {
@@ -112,6 +116,16 @@ const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
 // per-session cooldown for observer-driven auto-sends; see AUTO_SEND_COOLDOWN_MS.
 const lastAutoSendTs = new Map<string, number>();
+
+// drop oldest scripts (by closedTs) when a session's ring exceeds the cap.
+function pruneScripts(s: SessionState) {
+  if (s.scripts.size <= MAX_SCRIPTS_PER_SESSION) return;
+  const entries = Array.from(s.scripts.entries()).sort(
+    (a, b) => (a[1].closedTs || 0) - (b[1].closedTs || 0)
+  );
+  const drop = entries.length - MAX_SCRIPTS_PER_SESSION;
+  for (let i = 0; i < drop; i++) s.scripts.delete(entries[i]![0]);
+}
 
 function pushChatChunk(c: ChatChunk) {
   let arr = chatThreads.get(c.sessionKey);
@@ -296,13 +310,16 @@ const DEMO_VOICE = "af_heart";
 async function injectDemoScript(s: SessionState): Promise<{ turnId: string; audioUrl: string } | null> {
   const turnId = "demo-" + Date.now().toString(36);
   const text = DEMO_BEATS.map((b) => b.text).join(" ");
+  const now = Date.now();
   const payload: ScriptPayload = {
     turnId,
     beats: DEMO_BEATS,
     status: "rendering",
-    ts: Date.now(),
+    ts: now,
+    closedTs: now,
   };
   s.scripts.set(turnId, payload);
+  pruneScripts(s);
   const sessionKey = keyFor(s.info);
   if (isVisible(s)) {
     broadcast({ kind: "script:beats", sessionKey, script: payload });
@@ -387,14 +404,15 @@ const server = Bun.serve({
     }
 
     // /tts/<hash>.wav — serves cached tts audio from ~/.cut-the-cake/tts-cache/.
-    // hash is hex-only by construction (sha256), so the regex doubles as a
-    // path-traversal guard: anything else 404s before we touch the filesystem.
+    // hash is sha256 (exactly 64 hex), and the .wav extension is required —
+    // doubles as a path-traversal guard before we touch the filesystem.
     if (url.pathname.startsWith("/tts/") && req.method === "GET") {
-      const hash = url.pathname.slice(5).replace(/\.wav$/, "");
-      if (!/^[a-f0-9]{8,128}$/.test(hash)) {
+      const tail = url.pathname.slice(5);
+      const m = tail.match(/^([a-f0-9]{64})\.wav$/);
+      if (!m) {
         return new Response("not found", { status: 404 });
       }
-      const file = Bun.file(ttsAudioPath(hash));
+      const file = Bun.file(ttsAudioPath(m[1]!));
       if (await file.exists()) return new Response(file);
       return new Response("not found", { status: 404 });
     }
@@ -402,29 +420,37 @@ const server = Bun.serve({
     // /debug/inject-script — inject a fully-formed demo ScriptPayload onto a
     // visible session so the video-pane UI can be inspected without waiting
     // for a real turn to close. dev affordance, gated behind META_DEBUG=1.
-    // body: {sessionKey?: string} — defaults to the most-recently-active visible
-    // session. uses the cached cafebabe fixture from the e2e test (9 beats, 2
-    // markers, 41.4s wav, 98 word timings) — beats + audio + timings all match.
+    // body: {sessionKey: string} required. csrf-guarded via Origin check.
+    // uses the cached fixture from the e2e test (9 beats, 2 markers,
+    // 41.4s wav, 98 word timings) — beats + audio + timings all match.
     if (url.pathname === "/debug/inject-script" && req.method === "POST") {
       if (Bun.env.META_DEBUG !== "1") {
         return Response.json({ error: "META_DEBUG=1 required" }, { status: 403 });
+      }
+      // csrf guard: a cross-site form post would carry an Origin header set by
+      // the browser. block anything that's not localhost. same-origin fetch and
+      // direct curl (no Origin) still work.
+      const origin = req.headers.get("origin");
+      if (origin) {
+        try {
+          const oh = new URL(origin).hostname;
+          if (oh !== "localhost" && oh !== "127.0.0.1" && oh !== "::1") {
+            return Response.json({ error: "forbidden origin" }, { status: 403 });
+          }
+        } catch {
+          return Response.json({ error: "forbidden origin" }, { status: 403 });
+        }
       }
       let body: unknown;
       try {
         body = await req.json();
       } catch {
-        body = {};
+        return Response.json({ error: "invalid json" }, { status: 400 });
       }
       const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      let sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
       if (!sessionKey) {
-        // pick the most-recently-active visible session
-        const visible = Array.from(sessions.values()).filter(isVisible);
-        visible.sort((a, b) => b.lastEventTs - a.lastEventTs);
-        if (!visible.length) {
-          return Response.json({ error: "no visible sessions" }, { status: 404 });
-        }
-        sessionKey = keyFor(visible[0]!.info);
+        return Response.json({ error: "sessionKey required" }, { status: 400 });
       }
       const sess = sessions.get(sessionKey);
       if (!sess) {
@@ -671,8 +697,10 @@ const scriptifier = SCRIPTIFIER_ENABLED
           beats: r.beats,
           status: "rendering",
           ts: Date.now(),
+          closedTs: r.closedTs,
         };
         s.scripts.set(r.turnId, payload);
+        pruneScripts(s);
         if (isVisible(s)) {
           broadcast({
             kind: "script:beats",

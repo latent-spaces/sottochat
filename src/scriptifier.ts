@@ -31,6 +31,7 @@ export type ScriptResult = {
   sessionKey: string;
   turnId: string;
   beats: ScriptBeat[];
+  closedTs: number;
 };
 
 export type ScriptifierOptions = {
@@ -400,6 +401,7 @@ export function startScriptifier(opts: ScriptifierOptions): {
           sessionKey: feed.sessionKey,
           turnId: s.turnId,
           beats: s.beats,
+          closedTs: feed.closedTs,
         };
         opts.onScript?.(result);
         const markerCount = s.beats.filter((b) => b.marker).length;

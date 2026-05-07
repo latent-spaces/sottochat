@@ -2197,7 +2197,8 @@
       const slug = sess?.info?.slug || '';
       return slug.includes('cut-the-cake-chat') ||
              slug.includes('chunk-to-chat-observer') ||
-             slug.includes('cut-the-cake-observer');
+             slug.includes('cut-the-cake-observer') ||
+             slug.includes('cut-the-cake-scriptifier');
     }
 
     function sortedSessions() {
@@ -3491,14 +3492,16 @@
         return;
       }
       // pick the active script — user override (older-script picker is hour 3)
-      // falls back to latest by ts.
+      // falls back to latest by closedTs (turn close-time, stable). older
+      // payloads without closedTs fall back to ts so we don't drop them.
       let script = null;
       const overrideTurnId = activeScriptByKey.get(sessionKey);
       if (overrideTurnId && m.has(overrideTurnId)) {
         script = m.get(overrideTurnId);
       } else {
+        const ord = (s) => (typeof s.closedTs === "number" ? s.closedTs : (s.ts || 0));
         for (const s of m.values()) {
-          if (!script || (s.ts || 0) > (script.ts || 0)) script = s;
+          if (!script || ord(s) > ord(script)) script = s;
         }
       }
       if (!script || !Array.isArray(script.beats) || script.beats.length === 0) {

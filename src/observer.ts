@@ -441,4 +441,3 @@ export function startObserver(opts: ObserverOptions): {
     },
   };
 }
-
