@@ -935,6 +935,28 @@
       background: var(--border);
       flex: 0 0 auto;
     }
+    /* marker-tour button: cycles through every marker treatment so the user
+       can see the full design space without clicking. softly outlined when
+       idle, fully accented while active (the cycle is running). */
+    .vmp-tour-btn {
+      border: 1px dashed color-mix(in oklab, var(--accent) 50%, transparent);
+      border-radius: 4px;
+      padding: 0 8px;
+    }
+    .vmp-tour-btn[data-marker-tour="1"] {
+      color: var(--accent);
+      background: color-mix(in oklab, var(--accent) 18%, transparent);
+      border-color: var(--accent);
+      font-weight: 600;
+      animation: vmpTourPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes vmpTourPulse {
+      0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 30%, transparent); }
+      50%      { box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 0%, transparent); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .vmp-tour-btn[data-marker-tour="1"] { animation: none; }
+    }
 
     /* voice picker — per-session TTS voice override. lives in the head row at
        the leftmost picker slot (voice → script-style → markers reads L→R, since
@@ -3315,6 +3337,39 @@
       refresh();
     }
 
+    // marker-tour: cycles through every treatment (pill → banner → corner → …)
+    // every TOUR_INTERVAL_MS so the user can see all six treatments without
+    // clicking each picker by hand. activated via the "tour" button next to
+    // the marker-style picker. saves the user's prior style so we restore on
+    // stop. simulated marker hits at every interval keep things animated even
+    // when not actively playing.
+    const TOUR_INTERVAL_MS = 4000;
+    let markerTourActive = false;
+    let markerTourTimer = 0;
+    let markerTourPriorStyle = null;
+    let markerTourIdx = 0;
+    function applyMarkerTour(on) {
+      if (on === markerTourActive) return;
+      if (on) {
+        markerTourPriorStyle = markerStyle;
+        markerTourIdx = Math.max(0, VIDEO_MARKER_STYLES.indexOf(markerStyle));
+        markerTourActive = true;
+        markerTourTimer = setInterval(() => {
+          markerTourIdx = (markerTourIdx + 1) % VIDEO_MARKER_STYLES.length;
+          applyMarkerStyle(VIDEO_MARKER_STYLES[markerTourIdx]);
+        }, TOUR_INTERVAL_MS);
+      } else {
+        if (markerTourTimer) clearInterval(markerTourTimer);
+        markerTourTimer = 0;
+        markerTourActive = false;
+        if (markerTourPriorStyle && VIDEO_MARKER_STYLES.includes(markerTourPriorStyle)) {
+          applyMarkerStyle(markerTourPriorStyle);
+        }
+        markerTourPriorStyle = null;
+      }
+      refresh();
+    }
+
     // scriptifier prompt-preset preference. controls which system prompt the
     // server sends to the scriptifier subprocess for the NEXT closed turn.
     // affects future scripts only — existing beats/audio aren't re-rendered.
@@ -4617,12 +4672,19 @@
       // duration pill). hidden if the active script has no markers — the
       // setting is irrelevant for a marker-less script.
       const hasAnyMarker = beats.some(b => !!b.marker);
+      const tourBtnHtml = hasAnyMarker
+        ? '<button type="button" class="vmp-btn vmp-tour-btn" data-marker-tour="' + (markerTourActive ? '1' : '0') + '" title="cycle through every marker treatment while the karaoke plays">' +
+            (markerTourActive ? 'stop tour' : 'tour') +
+          '</button>'
+        : '';
       const pickerHtml = hasAnyMarker
         ? '<div class="video-marker-picker" role="group" aria-label="marker style">' +
             VIDEO_MARKER_STYLES.map((opt, idx) => (
               (idx > 0 ? '<span class="vmp-divider" aria-hidden="true"></span>' : '') +
               '<button type="button" class="vmp-btn" data-marker-style="' + opt + '" aria-pressed="' + (opt === markerStyle ? 'true' : 'false') + '">' + opt + '</button>'
             )).join('') +
+            '<span class="vmp-divider" aria-hidden="true"></span>' +
+            tourBtnHtml +
           '</div>'
         : '';
 
@@ -4680,9 +4742,19 @@
       pickerBtns.forEach(btn => {
         btn.addEventListener("click", () => {
           const next = btn.getAttribute("data-marker-style");
-          if (next) applyMarkerStyle(next);
+          if (next) {
+            // if the user picks a marker manually, end any active tour first
+            if (markerTourActive) applyMarkerTour(false);
+            applyMarkerStyle(next);
+          }
         });
       });
+
+      // wire tour button → applyMarkerTour. cycles every TOUR_INTERVAL_MS.
+      const tourBtn = dVideoPane.querySelector(".vmp-tour-btn");
+      if (tourBtn) {
+        tourBtn.addEventListener("click", () => applyMarkerTour(!markerTourActive));
+      }
 
       // wire marker-vocab picker click → applyMarkerVocab (POSTs + repaints).
       const markerVocabBtns = dVideoPane.querySelectorAll(".vmp-btn[data-marker-vocab]");
