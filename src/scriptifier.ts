@@ -157,6 +157,23 @@ const TRAILING = `Reply with a JSON object: {"scripts": [...one per turn...]}. N
 // blocks per turn we stay well under any sane context window.
 const BLOCK_CLIP = 2000;
 
+// defensive caps on model output. the scriptifier prompt is trust-based — the
+// model could (or a prompt-injected log could coerce it to) emit unbounded
+// beats / emphasis words / scripts. the caps below cut malformed or hostile
+// payloads down to safe ceilings; legitimate turns sit well inside every
+// budget so this should never bite normal traffic.
+const MAX_BEATS_PER_SCRIPT = 30;
+const MAX_BEAT_TEXT_LEN = 240;
+const MAX_EMPHASIS_PER_BEAT = 5;
+const MAX_EMPHASIS_LEN = 40;
+const MAX_SCRIPTS_PER_BATCH = 10;
+
+// defensive caps on the prompt body we send to the scriptifier. heavy
+// tool-use turns can produce hundreds of events; sample first/last when over.
+// the final body cap is a hard guard in case per-event clipping wasn't enough.
+const MAX_EVENTS_IN_PROMPT = 60;
+const MAX_PROMPT_BODY_LEN = 12000;
+
 function findClaudeExecutable(): string {
   try {
     const p = execSync("which claude", { encoding: "utf8" }).trim().split("\n")[0]?.trim();
@@ -172,10 +189,31 @@ function clip(s: string, n: number): string {
 }
 
 // turn the event list into a compact transcript. order is preserved so the
-// model sees the natural assistant ↔ tool ↔ tool_result interleave.
-function formatTurnEvents(events: MetaEvent[]): string[] {
+// model sees the natural assistant ↔ tool ↔ tool_result interleave. when a
+// turn has more than MAX_EVENTS_IN_PROMPT events, sample first/last halves
+// with a separator marker — common case is heavy tool-use turns producing
+// hundreds of events.
+function formatTurnEvents(events: MetaEvent[], turnId?: string): string[] {
+  let working = events;
+  if (events.length > MAX_EVENTS_IN_PROMPT) {
+    const half = Math.floor(MAX_EVENTS_IN_PROMPT / 2);
+    const head = events.slice(0, half);
+    const tail = events.slice(events.length - half);
+    const dropped = events.length - head.length - tail.length;
+    console.log(
+      `[scriptifier] turn events sampled (turnId=${turnId ?? "?"}, was ${events.length}, kept ${head.length}+${tail.length}, dropped ${dropped} from middle)`
+    );
+    working = [...head, ...tail];
+  }
   const out: string[] = [];
-  for (const ev of events) {
+  let injectedSeparator = false;
+  const headLen = events.length > MAX_EVENTS_IN_PROMPT ? Math.floor(MAX_EVENTS_IN_PROMPT / 2) : working.length;
+  for (let i = 0; i < working.length; i++) {
+    if (events.length > MAX_EVENTS_IN_PROMPT && i === headLen && !injectedSeparator) {
+      out.push(`... (${events.length - MAX_EVENTS_IN_PROMPT} events omitted) ...`);
+      injectedSeparator = true;
+    }
+    const ev = working[i]!;
     if (ev.kind === "user_message") {
       out.push(`USER: ${clip(ev.text, BLOCK_CLIP)}`);
     } else if (ev.kind === "assistant_text") {
@@ -208,7 +246,7 @@ function formatBatch(batch: TurnFeed[], trailing: string): string {
     );
     lines.push("---");
     if (t.events && t.events.length) {
-      for (const block of formatTurnEvents(t.events)) lines.push(block);
+      for (const block of formatTurnEvents(t.events, t.turnId)) lines.push(block);
     } else {
       // observer-style fallback if events somehow weren't attached.
       if (t.userPrompt) lines.push(`USER: ${t.userPrompt}`);
@@ -217,7 +255,22 @@ function formatBatch(batch: TurnFeed[], trailing: string): string {
   }
   lines.push("");
   lines.push(trailing);
-  return lines.join("\n");
+  const body = lines.join("\n");
+  // hard guard: even after per-event clips + event-count sampling, the
+  // assembled body might still blow past safe limits. preserve the head
+  // (intro/metrics + first user_message) and tail (latest assistant_text +
+  // trailing instructions) and drop the middle.
+  if (body.length > MAX_PROMPT_BODY_LEN) {
+    const half = Math.floor(MAX_PROMPT_BODY_LEN / 2) - 32;
+    const head = body.slice(0, half);
+    const tail = body.slice(body.length - half);
+    const dropped = body.length - head.length - tail.length;
+    console.log(
+      `[scriptifier] prompt body truncated (was ${body.length} chars, now ~${MAX_PROMPT_BODY_LEN}, dropped ${dropped} from middle)`
+    );
+    return `${head}\n... (${dropped} chars omitted) ...\n${tail}`;
+  }
+  return body;
 }
 
 function stripFences(text: string): string {
@@ -245,29 +298,75 @@ function parseScriptsResponse(text: string): ParsedScript[] | null {
     return null;
   }
   const out: ParsedScript[] = [];
+  const seenTurnIds = new Set<string>();
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const turnId = typeof o.turnId === "string" ? o.turnId : null;
     if (!turnId) continue;
+    if (seenTurnIds.has(turnId)) {
+      console.log(`[scriptifier] dropped duplicate script for turnId=${turnId} (first-wins dedupe)`);
+      continue;
+    }
     if (!Array.isArray(o.beats)) continue;
+    const rawBeats = o.beats;
+    let beatsToProcess = rawBeats;
+    if (rawBeats.length > MAX_BEATS_PER_SCRIPT) {
+      console.log(
+        `[scriptifier] script truncated to ${MAX_BEATS_PER_SCRIPT} beats (turnId=${turnId}, was ${rawBeats.length})`
+      );
+      beatsToProcess = rawBeats.slice(0, MAX_BEATS_PER_SCRIPT);
+    }
     const beats: ScriptBeat[] = [];
-    for (const b of o.beats) {
+    for (const b of beatsToProcess) {
       if (!b || typeof b !== "object") continue;
       const bo = b as Record<string, unknown>;
-      const beatText = typeof bo.text === "string" ? bo.text.trim() : "";
+      let beatText = typeof bo.text === "string" ? bo.text.trim() : "";
       if (!beatText) continue;
+      if (beatText.length > MAX_BEAT_TEXT_LEN) {
+        console.log(
+          `[scriptifier] beat truncated (turnId=${turnId}, was ${beatText.length} chars, now ${MAX_BEAT_TEXT_LEN})`
+        );
+        beatText = `${beatText.slice(0, MAX_BEAT_TEXT_LEN)}…`;
+      }
       const beat: ScriptBeat = { text: beatText };
       if (typeof bo.marker === "string" && VALID_MARKERS.has(bo.marker as ScriptMarker)) {
         beat.marker = bo.marker as ScriptMarker;
       }
       if (Array.isArray(bo.emphasis)) {
-        const em = bo.emphasis.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        let em = bo.emphasis.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        // drop any single emphasis string that's clearly garbage / injection.
+        const beforeLenFilter = em.length;
+        em = em.filter((s) => {
+          if (s.length > MAX_EMPHASIS_LEN) {
+            console.log(`[scriptifier] dropped overlong emphasis "${s.slice(0, 32)}..."`);
+            return false;
+          }
+          return true;
+        });
+        // truncate count after length-filter so we keep as many valid words as possible.
+        if (em.length > MAX_EMPHASIS_PER_BEAT) {
+          console.log(
+            `[scriptifier] emphasis truncated (turnId=${turnId}, was ${beforeLenFilter}, kept first ${MAX_EMPHASIS_PER_BEAT})`
+          );
+          em = em.slice(0, MAX_EMPHASIS_PER_BEAT);
+        }
         if (em.length) beat.emphasis = em;
       }
       beats.push(beat);
     }
-    if (beats.length) out.push({ turnId, beats });
+    if (beats.length) {
+      out.push({ turnId, beats });
+      seenTurnIds.add(turnId);
+      if (out.length >= MAX_SCRIPTS_PER_BATCH) {
+        if (raw.length > MAX_SCRIPTS_PER_BATCH) {
+          console.log(
+            `[scriptifier] batch truncated to ${MAX_SCRIPTS_PER_BATCH} scripts (was ${raw.length})`
+          );
+        }
+        break;
+      }
+    }
   }
   return out;
 }

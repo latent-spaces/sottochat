@@ -129,7 +129,7 @@ env vars (all optional):
 | G''   | surgical URL hash recovery (replaces the over-eager full-page reload)  | done · committed |
 | H     | scriptifier subprocess + tts module + video-pane karaoke renderer (parallel-modality alternative to reading the conversation strip) | done · committed (server e2e verified live; visual layer unverified — chrome-devtools-mcp wedged during the run) |
 
-**current head:** the video-pane commit (scriptifier + tts + client video-pane).
+**current head:** post-overnight-variations. nine commits stacked on top of the initial video-pane build. tour at [notes/overnight-variations.md](overnight-variations.md), creative critique at [notes/creative-review.md](creative-review.md). short version: video-pane now has a 4-axis picker row (voice | script-style | marker-style | export) with 3 voices, 7 scriptifier prompt presets, 6 marker treatments, and a real hyperframes-rendered mp4 export pipeline.
 
 **working tree:** clean. (the legacy `bar-frost.svg`, `bar-frost-v2.svg`, `empty-state-cake-duo.webp`, `header-banner-cake-clouds.webp`, `mascot-uni-23-anim.svg`, `cake-icon.svg`, `mascot-var-2.svg`, `mascot-var-3-{1,2}.svg`, `send-button-rocket.webp` files referenced in older state.md revisions have all been removed; the asset dir is now: `frosting-new.svg`, `logo-cake-slice.webp`, `mascot-uni-{1,2,3}.svg`.)
 
