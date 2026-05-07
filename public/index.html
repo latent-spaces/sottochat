@@ -327,6 +327,33 @@
       margin: 0;
     }
 
+    /* inbox separator — divides user-driven sessions (top) from sdk
+       subprocesses we spawned ourselves (bottom: chat-agent, observer,
+       namer). centered hairline label, mono, muted. sits inline in the
+       cards-list flow so the FLIP layout snapshot still works. */
+    .inbox-separator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 4px 6px;
+      color: var(--fg-muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .inbox-separator::before,
+    .inbox-separator::after {
+      content: "";
+      flex: 1 1 auto;
+      height: 0;
+      border-top: 1px dashed var(--border);
+    }
+    .inbox-separator-label {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+
     /* sidebar inbox */
     .cards { display: grid; gap: 8px; }
     .empty-inbox {
@@ -1745,6 +1772,21 @@
     // resolution since bun has no native libproc binding.
     const LINEAGE_FRESH_MS = 60 * 1000;
 
+    // sessions whose cwd lives under our own sandbox dirs — these are the
+    // sdk subprocesses the server itself spawns (chat-agent under
+    // ~/.cut-the-cake/chat/<hash>/, namer under ~/.cut-the-cake/namer/,
+    // observer under ~/.chunk-to-chat/observer/ on the legacy path). they're
+    // real cc sessions from the tailer's POV, but they aren't user-driven
+    // work — render them grouped under a divider at the bottom of the inbox
+    // so the user-driven cards are never interleaved with our own machinery.
+    function isInternalSession(sess) {
+      const slug = sess?.info?.slug || '';
+      return slug.includes('cut-the-cake-chat') ||
+             slug.includes('cut-the-cake-namer') ||
+             slug.includes('chunk-to-chat-observer') ||
+             slug.includes('cut-the-cake-observer');
+    }
+
     function sortedSessions() {
       const all = Array.from(sessionsByKey.values())
         .sort((a, b) => (b.lastEventTs || 0) - (a.lastEventTs || 0));
@@ -1970,10 +2012,26 @@
         }
       }
 
+      // partition: user-driven cards on top, server-spawned sdk subprocesses
+      // (observer + namer + chat agents) below a divider. inside each group
+      // the original lastEventTs sort is preserved.
+      const realList = list.filter(s => !isInternalSession(s));
+      const internalList = list.filter(s => isInternalSession(s));
+      const orderedList = realList.concat(internalList);
+      const internalCount = internalList.length;
+
       // upsert + reorder
       let anchor = null;        // last placed card; new cards insert after it
       let staggerIdx = 0;       // stagger this tick's new cards (e.g. on first hello)
-      for (const sess of list) {
+      const SEPARATOR_ID = "__internal-separator__";
+      let separatorEl = document.getElementById(SEPARATOR_ID);
+      if (internalCount === 0 && separatorEl) {
+        separatorEl.remove();
+        separatorEl = null;
+      }
+      let separatorPlaced = false;
+      for (let i = 0; i < orderedList.length; i++) {
+        const sess = orderedList[i];
         const id = sess.info.sessionId;
         const opts = { showSource, selected: id === sel };
         let card = cardEls.get(id);
@@ -1985,6 +2043,22 @@
         } else {
           updateCard(card, sess, opts);
         }
+
+        // first internal card → drop in the separator just before it.
+        if (!separatorPlaced && internalCount > 0 && i === realList.length) {
+          if (!separatorEl) {
+            separatorEl = document.createElement("div");
+            separatorEl.id = SEPARATOR_ID;
+            separatorEl.className = "inbox-separator";
+            separatorEl.innerHTML =
+              '<span class="inbox-separator-label">internal · sdk subprocesses</span>';
+          }
+          const sepTarget = anchor ? anchor.nextSibling : cardsEl.firstChild;
+          if (separatorEl !== sepTarget) cardsEl.insertBefore(separatorEl, sepTarget);
+          anchor = separatorEl;
+          separatorPlaced = true;
+        }
+
         // place this card right after the previous one (or at the start)
         const target = anchor ? anchor.nextSibling : cardsEl.firstChild;
         if (card !== target) cardsEl.insertBefore(card, target);
@@ -2712,15 +2786,23 @@
       return true;
     }
 
-    // when the *upstream* cc session emits a new assistant message, just
-    // reload the whole page. heavy-handed but bulletproof: keeps the browser
-    // perfectly in sync with server state (correct sids after /clear, fresh
-    // chat-thread collapse state, no stale ws caches). debounced 1s so a
-    // burst of assistant_text events from one turn collapses into one reload.
-    let reloadTimer = null;
-    function scheduleUpstreamReload() {
-      if (reloadTimer) clearTimeout(reloadTimer);
-      reloadTimer = setTimeout(() => { location.reload(); }, 1000);
+    // recover from a stale URL hash: if `#session/<sid>` points at a sid the
+    // server no longer has (e.g. after a server restart, or after the user
+    // navigates from a bookmark to a session that's since been pruned), drop
+    // the hash silently. earlier we tried reloading on every upstream agent
+    // message but that nuked in-progress chat-agent threads on every cc
+    // reply — the chat-agent state is server-side, but the textarea draft +
+    // expand state are browser-side, and a reload mid-typing is brutal.
+    function maybeRecoverStaleHash() {
+      const sid = selectedSessionId();
+      if (!sid) return;
+      const known = new Set();
+      for (const s of sessionsByKey.values()) {
+        if (s?.info?.sessionId) known.add(s.info.sessionId);
+      }
+      if (!known.has(sid)) {
+        history.replaceState(null, "", location.pathname + location.search);
+      }
     }
 
     function connect() {
@@ -2736,19 +2818,13 @@
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
+          maybeRecoverStaleHash();
           refresh();
         } else if (msg.kind === "session:upsert") {
           upsertSession(msg.session);
           refresh();
         } else if (msg.kind === "event") {
           if (appendEvent(msg.sessionKey, msg.event)) refresh();
-          // assistant_text = a new agent message landed in the upstream cc
-          // session. trigger the debounced reload regardless of which session
-          // is currently selected — a fresh load keeps URL hashes pointing
-          // at sids that still exist on the server.
-          if (msg.event && msg.event.kind === "assistant_text") {
-            scheduleUpstreamReload();
-          }
         } else if (msg.kind === "thread:new") {
           if (appendThread(msg.sessionKey, msg.thread)) refresh();
         } else if (msg.kind === "observer:decision") {
