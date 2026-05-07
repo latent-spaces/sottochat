@@ -1653,6 +1653,115 @@
       dChartsToggle.setAttribute("aria-expanded", open ? "true" : "false");
       dChartsToggle.title = open ? "hide charts" : "show charts";
     }
+    // first-look intro: the very first time charts have anything to show for a
+    // session, we open the band so the user discovers it exists, then collapse
+    // it with an animation back to the .mini-stats glance. flag is persisted in
+    // localStorage so refreshes don't replay it.
+    function chartsIntroducedKey(sessionId) { return "charts-introduced:" + sessionId; }
+    function chartsIntroducedHas(sessionId) {
+      try { return localStorage.getItem(chartsIntroducedKey(sessionId)) === "1"; }
+      catch { return false; }
+    }
+    function chartsIntroducedSet(sessionId) {
+      try { localStorage.setItem(chartsIntroducedKey(sessionId), "1"); } catch {}
+    }
+    // entrance: bars grow up from the floor with a forward stagger; band
+    // itself rises + scales unless the renderDetail blur-fade cascade is
+    // already animating the chart-cards (the `opening` case). also clears any
+    // inline styles a previously-killed collapse tween left behind.
+    function animateExpandChartsBand(sessionId, opening) {
+      if (typeof gsap === "undefined" || reduceMotionOn()) return;
+      if (selectedSessionId() !== sessionId) return;
+      if (!dChartsBand || dChartsBand.hidden) return;
+      gsap.set(dChartsBand, { clearProps: "height,marginBottom,opacity,overflow,transform,filter" });
+      const cards = dChartsBand.querySelectorAll(".chart-card");
+      cards.forEach((c) => gsap.set(c, { clearProps: "transform,opacity,filter" }));
+      const bars = dChartsBand.querySelectorAll(".cx-bar");
+      if (!opening) {
+        gsap.fromTo(dChartsBand,
+          { opacity: 0, y: -10, scale: 0.97 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: "power2.out", clearProps: "transform,opacity" }
+        );
+      }
+      if (bars.length) {
+        gsap.set(bars, { transformOrigin: "50% 100%" });
+        gsap.fromTo(bars,
+          { scaleY: 0 },
+          {
+            scaleY: 1,
+            duration: 0.6,
+            ease: "back.out(1.4)",
+            stagger: { each: 0.03, from: "start" },
+            delay: opening ? 0.18 : 0.08,
+            clearProps: "transform",
+          }
+        );
+      }
+    }
+    // collapse: bars deflate end-to-start, chart-cards shrink + blur, then the
+    // band's measured height + margin fold to zero, then a small toggle pulse
+    // hands the user's eye to the place the charts now live. callers flip
+    // `chartsBandExpanded` BEFORE calling so a re-click mid-animation can
+    // reverse direction — the onComplete just calls applyChartsBandExpanded
+    // which honors whatever the current intent is at that point.
+    function animateCollapseChartsBand(sessionId) {
+      if (!dChartsBand) return;
+      if (selectedSessionId() !== sessionId) {
+        applyChartsBandExpanded(sessionId);
+        return;
+      }
+      if (dChartsBand.hidden) return; // already collapsed visually
+      if (typeof gsap === "undefined" || reduceMotionOn()) {
+        applyChartsBandExpanded(sessionId);
+        placeCakePerch(sessionId, { animate: false });
+        return;
+      }
+      const cards = Array.from(dChartsBand.querySelectorAll(".chart-card"));
+      const bars = Array.from(dChartsBand.querySelectorAll(".cx-bar"));
+      const startHeight = dChartsBand.offsetHeight;
+      const startMargin = parseFloat(getComputedStyle(dChartsBand).marginBottom) || 0;
+      const tl = gsap.timeline({
+        onComplete: () => {
+          gsap.set(dChartsBand, { clearProps: "height,marginBottom,opacity,overflow,transform,filter" });
+          bars.forEach((b) => gsap.set(b, { clearProps: "transform" }));
+          cards.forEach((c) => gsap.set(c, { clearProps: "transform,opacity,filter" }));
+          applyChartsBandExpanded(sessionId);
+          placeCakePerch(sessionId, { animate: false });
+          if (dChartsToggle) {
+            gsap.fromTo(dChartsToggle,
+              { scale: 1 },
+              { scale: 1.15, duration: 0.16, ease: "power2.out", yoyo: true, repeat: 1, clearProps: "transform" }
+            );
+          }
+        },
+      });
+      // bars deflate end → start so the visual sweeps back toward the toggle.
+      tl.to(bars, {
+        scaleY: 0,
+        transformOrigin: "50% 100%",
+        duration: 0.42,
+        ease: "power2.in",
+        stagger: { each: 0.022, from: "end" },
+      });
+      // chart-cards shrink/blur in parallel with the tail of the bar deflate.
+      tl.to(cards, {
+        scale: 0.95,
+        opacity: 0.25,
+        filter: "blur(2px)",
+        duration: 0.32,
+        ease: "power2.in",
+      }, "-=0.2");
+      // freeze the band at its current pixel height so the height tween has a
+      // concrete starting value, then fold height + margin + opacity to 0.
+      tl.set(dChartsBand, { height: startHeight, marginBottom: startMargin, overflow: "hidden" });
+      tl.to(dChartsBand, {
+        height: 0,
+        marginBottom: 0,
+        opacity: 0,
+        duration: 0.55,
+        ease: "power3.inOut",
+      });
+    }
     function miniStatsHtmlForSession(sess) {
       const turns = deriveTurns(sess.events || []);
       if (turns.length === 0) return "";
@@ -1681,11 +1790,32 @@
       dChartsToggle.addEventListener("click", () => {
         const sid = selectedSessionId();
         if (!sid) return;
-        if (chartsBandExpanded.has(sid)) chartsBandExpanded.delete(sid);
-        else chartsBandExpanded.add(sid);
-        applyChartsBandExpanded(sid);
-        // re-mount the cake perch — the visible candidate set just changed.
-        placeCakePerch(sid, { animate: false });
+        // user clicking the toggle counts as "introduced" — skip the auto-intro
+        // collapse on later renders.
+        chartsIntroducedSet(sid);
+        // kill any in-flight expand/collapse tweens so a re-click mid-animation
+        // reverses direction cleanly.
+        if (typeof gsap !== "undefined") {
+          const bars = dChartsBand.querySelectorAll(".cx-bar");
+          const cards = dChartsBand.querySelectorAll(".chart-card");
+          gsap.killTweensOf([dChartsBand, ...bars, ...cards]);
+        }
+        // flip intent FIRST so a re-click during the animation sees the new
+        // intent and inverts; then run the matching animation. close keeps
+        // hidden=false through the animation; open sets hidden=false up front.
+        if (chartsBandExpanded.has(sid)) {
+          chartsBandExpanded.delete(sid);
+          // mirror the closed state on the toggle's aria/title now even though
+          // the band is still visible during the collapse tween.
+          dChartsToggle.setAttribute("aria-expanded", "false");
+          dChartsToggle.title = "show charts";
+          animateCollapseChartsBand(sid);
+        } else {
+          chartsBandExpanded.add(sid);
+          applyChartsBandExpanded(sid);
+          animateExpandChartsBand(sid, false);
+          placeCakePerch(sid, { animate: false });
+        }
       });
     }
 
@@ -2227,7 +2357,32 @@
       dChartsBand.classList.toggle("single-chart", hasCharts && !(hasComplexity && hasCode));
       dChartsToggle.hidden = !hasCharts;
       if (!hasCharts) chartsBandExpanded.delete(sessionId);
+      // first-look intro: when the band first has anything to show for a fresh
+      // session, open it so the user notices it, then auto-collapse after a
+      // beat. skipped if the user has already opened the band manually — that
+      // also marks them as introduced. flag persists in localStorage so
+      // reloads stay calm.
+      let firingIntro = false;
+      if (hasCharts && !chartsIntroducedHas(sessionId)) {
+        if (!chartsBandExpanded.has(sessionId)) {
+          chartsBandExpanded.add(sessionId);
+          firingIntro = true;
+        }
+        chartsIntroducedSet(sessionId);
+      }
       applyChartsBandExpanded(sessionId);
+      if (firingIntro) {
+        // animate the entrance in the next frame so the band has been unhidden
+        // by applyChartsBandExpanded above; schedule the auto-collapse after
+        // the user has had a beat to see the charts.
+        requestAnimationFrame(() => animateExpandChartsBand(sessionId, opening));
+        setTimeout(() => {
+          if (selectedSessionId() !== sessionId) return;
+          if (!chartsBandExpanded.has(sessionId)) return; // user closed it manually
+          chartsBandExpanded.delete(sessionId);
+          animateCollapseChartsBand(sessionId);
+        }, 2200);
+      }
 
       const lastViewed = getLastViewed(sessionId);
       const untouchedMs = lastViewed ? (Date.now() - lastViewed) : 0;
