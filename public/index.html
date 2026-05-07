@@ -1218,6 +1218,28 @@
       color: #fff;
       pointer-events: none;
     }
+    /* frosting cap for the play button — same mask-trick as .bar-frost.
+       sits ~25% above the rim, ~75% inside; lighter than the button so the
+       icing reads as icing not paint. button is 44px wide, cap is ~24px tall.
+       hidden when the button is disabled (loading/rendering) so the brand
+       flourish only shows up when the script is actually ready to play. */
+    .video-play-btn { position: relative; overflow: visible; }
+    .play-frost {
+      position: absolute;
+      left: -20%;
+      right: -20%;
+      top: -6px;
+      width: 140%;
+      height: 24px;
+      pointer-events: none;
+      display: block;
+      background-color: var(--accent);
+      background-color: color-mix(in oklab, var(--accent) 60%, white 40%);
+      -webkit-mask: url("/assets/frosting-new.svg") no-repeat bottom center / contain;
+              mask: url("/assets/frosting-new.svg") no-repeat bottom center / contain;
+      transition: opacity 160ms var(--ease-out);
+    }
+    .video-play-btn:disabled .play-frost { opacity: 0.3; }
     .video-scrub {
       flex: 1 1 auto;
       position: relative;
@@ -4326,6 +4348,7 @@
       const controlsHtml = errorHtml +
         '<div class="video-pane-controls" id="' + ctrlsId + '">' +
           '<button class="video-play-btn" type="button" aria-label="play"' + playDisabled + '>' +
+            '<span class="play-frost" aria-hidden="true"></span>' +
             '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' +
           '</button>' +
           '<div class="video-scrub" role="slider" aria-label="seek"><div class="video-scrub-fill"></div></div>' +
@@ -4795,6 +4818,39 @@
           } else if (!curMarker) {
             rt.lastHaloBeatIdx = -1;
             clearMarkerHalo(rt);
+          }
+        }
+      }
+      // word-advance flourish — tiny 3-sprinkle pop from the active word's
+      // center. throttled to 320ms so fast stretches don't strobe. uses the
+      // shared spawnFlyer helper (fixed-position, auto-cleanup). reuses
+      // BURST_COLORS — accent + plum + a couple of dessert hues — and skipped
+      // under reduced-motion.
+      if (
+        wordIdx >= 0 && wordIdx !== rt.lastWordIdx &&
+        typeof gsap !== "undefined" && !reduceMotionOn() &&
+        typeof spawnFlyer === "function"
+      ) {
+        const nowTs = Date.now();
+        if (nowTs - (rt.lastWordBurstTs || 0) >= 320) {
+          const wEl = rt.stageEl.querySelector('.vb-word[data-word-idx="' + wordIdx + '"]');
+          if (wEl) {
+            const r = wEl.getBoundingClientRect();
+            const cx = r.left + r.width / 2;
+            const cy = r.top + r.height / 2;
+            for (let i = 0; i < 3; i++) {
+              const angle = (Math.PI * 2 / 3) * i + (Math.random() - 0.5) * 0.6;
+              const dist = 16 + Math.random() * 6;
+              spawnFlyer(cx, cy, {
+                round: Math.random() < 0.5,
+                color: BURST_COLORS[Math.floor(Math.random() * BURST_COLORS.length)],
+                dx: Math.cos(angle) * dist,
+                dy: Math.sin(angle) * dist,
+                rot: (Math.random() < 0.5 ? -1 : 1) * (120 + Math.random() * 180),
+                dur: 0.7 + Math.random() * 0.15,
+              });
+            }
+            rt.lastWordBurstTs = nowTs;
           }
         }
       }
