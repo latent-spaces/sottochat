@@ -932,6 +932,104 @@
       flex: 0 0 auto;
     }
 
+    /* voice picker — per-session TTS voice override. lives in the head row at
+       the leftmost picker slot (voice → script-style → markers reads L→R, since
+       voice and style affect the SCRIPT itself while markers are render-only).
+       compact at rest (just current label + chevron); click expands a popover
+       with all three options. shares .vmp-btn typography with the other pickers
+       but the wrapper is position:relative for the dropdown. */
+    .video-voice-picker {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      margin-left: 8px;
+      flex-shrink: 0;
+    }
+    .video-voice-current {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px;
+      height: 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: color 0.12s var(--ease-out), border-color 0.12s var(--ease-out), background 0.12s var(--ease-out);
+    }
+    .video-voice-current:hover {
+      color: var(--fg);
+      border-color: var(--border-strong);
+    }
+    .video-voice-current[aria-expanded="true"] {
+      color: var(--accent);
+      border-color: color-mix(in oklab, var(--accent) 50%, transparent);
+      background: color-mix(in oklab, var(--accent) 10%, transparent);
+    }
+    .video-voice-current .vvp-chev {
+      width: 8px;
+      height: 8px;
+      opacity: 0.6;
+    }
+    .video-voice-menu {
+      position: absolute;
+      top: calc(100% + 4px);
+      right: 0;
+      z-index: 10;
+      min-width: 130px;
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 8px 28px -12px rgba(0, 0, 0, 0.22);
+    }
+    .video-voice-option {
+      appearance: none;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 8px;
+      background: transparent;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.1s var(--ease-out), color 0.1s var(--ease-out);
+    }
+    .video-voice-option:hover {
+      background: color-mix(in oklab, var(--accent) 10%, transparent);
+    }
+    .video-voice-option[aria-pressed="true"] {
+      background: color-mix(in oklab, var(--accent) 14%, transparent);
+    }
+    .video-voice-option .vvp-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: var(--fg);
+      text-transform: uppercase;
+    }
+    .video-voice-option[aria-pressed="true"] .vvp-label {
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .video-voice-option .vvp-accent {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--fg-muted);
+      letter-spacing: 0.04em;
+    }
+
     /* style 2: banner — full-bleed overlay across the stage when entering a
        marked beat. lives inside .video-pane-stage (position:relative).
        z-index above beat stack but below page-level controls. */
@@ -2879,6 +2977,83 @@
         refresh();
       }
     }
+
+    // per-session TTS voice preference. authoritative value lives on the server
+    // (snapshot.voice + voice:setting ws msgs). the local Map mirrors what we
+    // know so the picker paints without a round-trip. unknown sessionKeys fall
+    // back to DEFAULT_VOICE. the picker swap POSTs to /debug/voice; the next
+    // turn's tts uses the new voice. existing scripts keep their old wav.
+    const DEFAULT_VOICE = "af_heart";
+    const AVAILABLE_VOICES = [
+      { id: "af_heart",   label: "warm",  accent: "en-US ♀" }, // friendly default
+      { id: "am_michael", label: "calm",  accent: "en-US ♂" }, // thoughtful narrator
+      { id: "bf_emma",    label: "crisp", accent: "en-GB ♀" }, // gravitas
+    ];
+    const VOICE_IDS = AVAILABLE_VOICES.map(v => v.id);
+    const voiceBySessionKey = new Map();
+    // sessionKeys whose voice menu is currently open. cleared on outside-click /
+    // selection / refresh. one-at-a-time would also work but a Set is cheap.
+    const openVoiceMenus = new Set();
+    function voiceForSession(sessionKey) {
+      const v = voiceBySessionKey.get(sessionKey);
+      return v && VOICE_IDS.includes(v) ? v : DEFAULT_VOICE;
+    }
+    function voiceMeta(id) {
+      return AVAILABLE_VOICES.find(v => v.id === id) || AVAILABLE_VOICES[0];
+    }
+    async function applyVoice(sessionKey, nextVoice) {
+      if (!sessionKey || !VOICE_IDS.includes(nextVoice)) return;
+      const prev = voiceForSession(sessionKey);
+      if (prev === nextVoice) {
+        openVoiceMenus.delete(sessionKey);
+        refresh();
+        return;
+      }
+      voiceBySessionKey.set(sessionKey, nextVoice);
+      openVoiceMenus.delete(sessionKey);
+      refresh();
+      try {
+        const res = await fetch("/debug/voice", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionKey, voice: nextVoice }),
+        });
+        if (!res.ok) {
+          console.warn("[voice] post failed", res.status);
+          voiceBySessionKey.set(sessionKey, prev);
+          refresh();
+        }
+      } catch (err) {
+        console.warn("[voice] post error", err);
+        voiceBySessionKey.set(sessionKey, prev);
+        refresh();
+      }
+    }
+    function toggleVoiceMenu(sessionKey) {
+      if (openVoiceMenus.has(sessionKey)) {
+        openVoiceMenus.delete(sessionKey);
+      } else {
+        openVoiceMenus.clear();
+        openVoiceMenus.add(sessionKey);
+      }
+      refresh();
+    }
+    // outside-click closes any open voice menu. listen on the document so a
+    // click anywhere off the menu (including elsewhere in the video-pane) shuts it.
+    document.addEventListener("click", (e) => {
+      if (openVoiceMenus.size === 0) return;
+      const t = e.target;
+      if (t && t.closest && t.closest(".video-voice-picker")) return;
+      openVoiceMenus.clear();
+      refresh();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && openVoiceMenus.size > 0) {
+        openVoiceMenus.clear();
+        refresh();
+      }
+    });
+
     // shared cue-audio context for the corner-style entry beep. instantiated
     // lazily on first need so we don't trip the autoplay policy on page load.
     let _markerCueCtx = null;
@@ -3711,13 +3886,96 @@
       }
     }
 
+    // build the voice picker html. shared by the full-pane render (with a
+    // script in flight) and the empty-pane render (no script yet, just the
+    // voice picker so the user can pre-set their preference). animation hookup
+    // is handled by the caller after this gets injected into the DOM.
+    function buildVoicePickerHtml(sessionKey) {
+      const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const currentVoiceId = voiceForSession(sessionKey);
+      const currentVoice = voiceMeta(currentVoiceId);
+      const voiceMenuOpen = openVoiceMenus.has(sessionKey);
+      const voiceMenuHtml = voiceMenuOpen
+        ? '<div class="video-voice-menu" role="menu">' +
+            AVAILABLE_VOICES.map(v => (
+              '<button type="button" class="video-voice-option" role="menuitemradio" ' +
+                'data-voice-id="' + escAttr(v.id) + '" ' +
+                'aria-pressed="' + (v.id === currentVoiceId ? 'true' : 'false') + '">' +
+                '<span class="vvp-label">' + escapeHtml(v.label) + '</span>' +
+                '<span class="vvp-accent">' + escapeHtml(v.accent) + '</span>' +
+              '</button>'
+            )).join('') +
+          '</div>'
+        : '';
+      return '<div class="video-voice-picker">' +
+          '<button type="button" class="video-voice-current" ' +
+              'aria-haspopup="menu" aria-expanded="' + (voiceMenuOpen ? 'true' : 'false') + '" ' +
+              'data-voice-toggle="' + escAttr(sessionKey) + '">' +
+            '<span>' + escapeHtml(currentVoice.label) + '</span>' +
+            '<svg class="vvp-chev" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">' +
+              '<polyline points="1.5 3 4 5.5 6.5 3"/>' +
+            '</svg>' +
+          '</button>' +
+          voiceMenuHtml +
+        '</div>';
+    }
+    function wireVoicePicker(sessionKey) {
+      const voiceToggleBtn = dVideoPane.querySelector(".video-voice-current[data-voice-toggle]");
+      if (voiceToggleBtn) {
+        voiceToggleBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const k = voiceToggleBtn.getAttribute("data-voice-toggle");
+          if (k) toggleVoiceMenu(k);
+        });
+      }
+      const voiceOptionBtns = dVideoPane.querySelectorAll(".video-voice-option[data-voice-id]");
+      voiceOptionBtns.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const next = btn.getAttribute("data-voice-id");
+          if (next) applyVoice(sessionKey, next);
+        });
+      });
+      if (openVoiceMenus.has(sessionKey)) {
+        const menuEl = dVideoPane.querySelector(".video-voice-menu");
+        if (menuEl && typeof gsap !== "undefined" && !reduceMotionOn()) {
+          gsap.fromTo(menuEl,
+            { opacity: 0, y: -4 },
+            { opacity: 1, y: 0, duration: 0.14, ease: "power2.out", clearProps: "y,opacity" }
+          );
+        }
+      }
+    }
+
+    // empty-pane render: no script yet, just show the voice picker so the user
+    // can pre-set their preference. tears down any stale runtime to be safe.
+    function renderVideoPaneEmpty(sessionKey) {
+      const existing = videoRuntime.get(sessionKey);
+      if (existing) {
+        if (existing.rafId) cancelAnimationFrame(existing.rafId);
+        if (existing.audio) { try { existing.audio.pause(); } catch {} }
+        videoRuntime.delete(sessionKey);
+      }
+      dVideoPane.hidden = false;
+      dVideoPane.innerHTML =
+        '<div class="video-pane-head">' +
+          '<span class="video-label">video</span>' +
+          '<span class="video-status-pill"><span class="vsp-dot"></span><span>waiting for first turn…</span></span>' +
+          buildVoicePickerHtml(sessionKey) +
+        '</div>';
+      try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
+      wireVoicePicker(sessionKey);
+    }
+
     function renderVideoPane(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       pauseOtherVideoRuntimes(sessionKey);
       const m = scriptsByKey.get(sessionKey);
       if (!m || m.size === 0) {
-        dVideoPane.hidden = true;
-        dVideoPane.innerHTML = "";
+        // no scripts yet — render a minimal head row with the voice picker
+        // only, so the user can pre-set the per-session voice before the
+        // first turn lands. status pill says "waiting for first turn".
+        renderVideoPaneEmpty(sessionKey);
         return;
       }
       // pick the active script — user override (older-script picker is hour 3)
@@ -3734,8 +3992,7 @@
         }
       }
       if (!script || !Array.isArray(script.beats) || script.beats.length === 0) {
-        dVideoPane.hidden = true;
-        dVideoPane.innerHTML = "";
+        renderVideoPaneEmpty(sessionKey);
         return;
       }
 
@@ -3872,17 +4129,23 @@
           )).join('') +
         '</div>';
 
+      // voice picker — per-session TTS voice override. compact at rest (current
+      // label + chevron); click expands a popover with all three options.
+      const voicePickerHtml = buildVoicePickerHtml(sessionKey);
+      const currentVoiceId = voiceForSession(sessionKey);
+
       dVideoPane.innerHTML =
         '<div class="video-pane-head">' +
           '<span class="video-label">video</span>' +
           statusHtml +
-          pickerHtml +
+          voicePickerHtml +
           scriptStylePickerHtml +
+          pickerHtml +
           '<span class="video-duration">' + durStr + '</span>' +
         '</div>' +
         '<div class="video-pane-stage" id="' + stageId + '">' + beatsHtml + '</div>' +
         controlsHtml +
-        '<div class="video-attribution">narrated by scriptifier · af_heart</div>';
+        '<div class="video-attribution">narrated by scriptifier · ' + escapeHtml(currentVoiceId) + '</div>';
 
       // clear any stale --marker-tint on the pane container; paintKaraokeFrame
       // will re-set it for the corner style when sitting on a marked beat.
@@ -3905,6 +4168,11 @@
           if (next) applyScriptStyle(next);
         });
       });
+
+      // wire voice picker — toggle button opens/closes the popover; option
+      // buttons POST to /debug/voice. menu opens with a 140ms fade+y:-4 unless
+      // prefers-reduced-motion.
+      wireVoicePicker(sessionKey);
 
       // mount audio + wire controls. reuse existing runtime if turnId + audioUrl
       // match (so a refresh-tick doesn't interrupt playback).
@@ -4350,6 +4618,12 @@
         }
         scriptsByKey.set(key, m);
       }
+      // hydrate per-session voice override. snapshot.voice always carries the
+      // resolved voice (override OR server default), so unconditional set is
+      // fine — picker stays in sync with whichever voice the next turn'll use.
+      if (typeof snap.voice === "string" && VOICE_IDS.includes(snap.voice)) {
+        voiceBySessionKey.set(key, snap.voice);
+      }
     }
 
     function appendEvent(sessionKey, ev) {
@@ -4448,6 +4722,14 @@
         } else if (msg.kind === "scriptstyle:setting") {
           if (typeof msg.style === "string" && VIDEO_SCRIPT_STYLES.includes(msg.style)) {
             if (setScriptStyleLocal(msg.style)) refresh();
+          }
+        } else if (msg.kind === "voice:setting") {
+          if (typeof msg.sessionKey === "string" && typeof msg.voice === "string" && VOICE_IDS.includes(msg.voice)) {
+            const prev = voiceBySessionKey.get(msg.sessionKey);
+            if (prev !== msg.voice) {
+              voiceBySessionKey.set(msg.sessionKey, msg.voice);
+              refresh();
+            }
           }
         } else if (msg.kind === "script:beats" || msg.kind === "script:ready") {
           if (!msg.script || typeof msg.script.turnId !== "string") return;

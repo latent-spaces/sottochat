@@ -126,6 +126,17 @@ const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
 // per-session cooldown for observer-driven auto-sends; see AUTO_SEND_COOLDOWN_MS.
 const lastAutoSendTs = new Map<string, number>();
+// per-session TTS voice override. unset entries fall back to TTS_VOICE
+// (the global env-driven default). server-side allowlist defends against
+// injection of arbitrary voice ids — Kokoro will accept anything but only
+// these three are smoke-tested. updates land via POST /debug/voice and
+// affect FUTURE turns only; existing scripts keep their old wav.
+const ALLOWED_VOICES = ["af_heart", "am_michael", "bf_emma"] as const;
+type AllowedVoice = (typeof ALLOWED_VOICES)[number];
+const voicesBySession = new Map<string, string>();
+function voiceFor(sessionKey: string): string {
+  return voicesBySession.get(sessionKey) ?? TTS_VOICE;
+}
 
 // drop oldest scripts (by closedTs) when a session's ring exceeds the cap.
 function pruneScripts(s: SessionState) {
@@ -213,6 +224,7 @@ function snapshot(s: SessionState) {
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
     scripts: Object.fromEntries(s.scripts),
+    voice: voiceFor(k),
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
@@ -335,7 +347,7 @@ async function injectDemoScript(s: SessionState): Promise<{ turnId: string; audi
     broadcast({ kind: "script:beats", sessionKey, script: payload });
   }
   try {
-    const tts = await generateTts({ text, voice: DEMO_VOICE });
+    const tts = await generateTts({ text, voice: voiceFor(keyFor(s.info)) || DEMO_VOICE });
     payload.audioUrl = `/tts/${tts.hash}.wav`;
     payload.durationS = tts.durationS;
     payload.words = tts.words;
@@ -609,6 +621,107 @@ const server = Bun.serve({
       return Response.json({ ok: true, enabled: autoSendEnabled });
     }
 
+    // POST /debug/voice — set per-session TTS voice override.
+    // affects FUTURE turns only; the current ScriptPayload's wav was generated
+    // with the previous voice and is not re-rendered here. body:
+    // { sessionKey: string, voice: "af_heart" | "am_michael" | "bf_emma" }.
+    // not gated behind META_DEBUG (runtime feature, not a debug affordance).
+    if (url.pathname === "/debug/voice" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      const voice = typeof o.voice === "string" ? o.voice : "";
+      if (!sessionKey) {
+        return Response.json({ error: "sessionKey required" }, { status: 400 });
+      }
+      if (!ALLOWED_VOICES.includes(voice as AllowedVoice)) {
+        return Response.json(
+          { error: `voice must be one of ${ALLOWED_VOICES.join(", ")}` },
+          { status: 400 }
+        );
+      }
+      // accept the sessionKey even if the session is not currently in-memory —
+      // a slow tailer might not have populated it yet, and the override should
+      // stick for when it does. cheap to keep around.
+      voicesBySession.set(sessionKey, voice);
+      console.log(`[tts] voice override · ${sessionKey} → ${voice}`);
+      broadcast({ kind: "voice:setting", sessionKey, voice });
+      return Response.json({ ok: true, sessionKey, voice });
+    }
+
+    // POST /debug/regen-script — re-run TTS for an existing ScriptPayload with
+    // the session's CURRENT voice. body: { sessionKey: string, turnId: string }.
+    // intended for the "↻" button next to the voice chip — swap audio without
+    // waiting for the next turn. status flips to "rendering" on entry, back to
+    // "ready" once the new wav lands. failures broadcast script:error and
+    // restore status to whatever it was before. NOTE: the client-side audio
+    // runtime currently keeps a pinned audio element; on regen the
+    // script:ready broadcast replaces audioUrl, but a playing audio element
+    // won't auto-swap. picker-driven UI button is deferred — see picker stretch
+    // notes in the task spec.
+    if (url.pathname === "/debug/regen-script" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      const turnId = typeof o.turnId === "string" ? o.turnId : "";
+      if (!sessionKey || !turnId) {
+        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
+      }
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
+        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
+      }
+      const payload = sess.scripts.get(turnId);
+      if (!payload) {
+        return Response.json({ error: "unknown turnId" }, { status: 404 });
+      }
+      if (!Array.isArray(payload.beats) || payload.beats.length === 0) {
+        return Response.json({ error: "script has no beats" }, { status: 400 });
+      }
+      const text = payload.beats.map((b) => b.text).join(" ");
+      const voice = voiceFor(sessionKey);
+      payload.status = "rendering";
+      payload.ts = Date.now();
+      if (isVisible(sess)) {
+        broadcast({ kind: "script:beats", sessionKey, script: payload });
+      }
+      try {
+        const tts = await generateTts({ text, voice });
+        payload.audioUrl = `/tts/${tts.hash}.wav`;
+        payload.durationS = tts.durationS;
+        payload.words = tts.words;
+        payload.status = "ready";
+        payload.ts = Date.now();
+        if (isVisible(sess)) {
+          broadcast({ kind: "script:ready", sessionKey, script: payload });
+        }
+        return Response.json({ ok: true, audioUrl: payload.audioUrl, voice });
+      } catch (err) {
+        payload.status = "error";
+        payload.errorMessage = err instanceof Error ? err.message : String(err);
+        payload.ts = Date.now();
+        if (isVisible(sess)) {
+          broadcast({
+            kind: "script:error",
+            sessionKey,
+            turnId,
+            message: payload.errorMessage,
+          });
+        }
+        return Response.json({ error: payload.errorMessage }, { status: 500 });
+      }
+    }
+
     // POST /debug/script-style — set the global scriptifier prompt preset.
     // affects FUTURE closed turns only; existing scripts are not re-rendered.
     // body: { style: "default" | "cinematic" | "tldr" | "deep-dive" }
@@ -747,7 +860,7 @@ const scriptifier = SCRIPTIFIER_ENABLED
         // crash the loop — we surface them on the payload and broadcast.
         const fullText = r.beats.map((b) => b.text).join(" ");
         try {
-          const tts = await generateTts({ text: fullText, voice: TTS_VOICE });
+          const tts = await generateTts({ text: fullText, voice: voiceFor(r.sessionKey) });
           payload.audioUrl = `/tts/${tts.hash}.wav`;
           payload.durationS = tts.durationS;
           payload.words = tts.words;
