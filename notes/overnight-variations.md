@@ -22,6 +22,10 @@ or with no sessionKey since the route now requires it explicitly — pick one fr
 4. **marker style** — `pill | banner | corner | stamp | ticker | halo`. how the marker tokens flag visually inside the karaoke. global. URL param `?marker=<style>` works as a shortcut.
 5. **(implicit) mp4 export button** — appears in `.video-pane-controls` once status is ready. click → `rendering 0:NN` ticker → `download mp4 · NNNkb` link.
 
+## tour mode
+
+a "tour" button sits next to the marker-style picker (only when the active script has at least one marker, since the tour cycles marker treatments). click → karaoke proceeds while the marker style swaps every four seconds (`pill → banner → corner → stamp → ticker → halo → pill → …`), so you can see the full design space in one playback. click again to stop and the user's previous style is restored. picking a marker manually mid-tour exits cleanly. while the tour runs, the button glows accent with a soft box-shadow pulse so the active state is obvious; respects `prefers-reduced-motion`.
+
 ## interactivity: bookmarks
 
 each `.video-beat` shows a small ribbon icon in its top-right corner. visible while .current or on hover; full-color (filled) when bookmarked. click toggles. bookmarked beats render as a `.video-bookmarks` chip row above the controls — `📑 #N` (1-based beat index). click a chip seeks the audio to that beat's `startS`. the demo session has beat 7 (the INSIGHT/PUNCHLINE one) pre-bookmarked so you can see the chip on first load.
@@ -78,12 +82,17 @@ e2218d2  notes: mp4 export verified end-to-end (live render, 22.2s, 2MB)
 8d217a8  video-pane: alternative marker vocabulary — design ↔ story (R)
 ```
 
-tag: `overnight-variations-v1` at `010acff`. R + S are post-tag.
+tags: `overnight-variations-v1` at `010acff`, `overnight-final` at `e96cb92` (this run's last commit).
 
 ```
 3e2f448  notes: tour catches up — five pickers + R commit listed
 d52fd52  video-pane: per-turn beat bookmarks (S)
+5abd497  notes: tour catches up — bookmarks (S) + live-verified endpoints
+4b3aa16  video-pane: voice picker gets character taglines (U)
+e96cb92  video-pane: marker-tour button — cycle through all six treatments (V)
 ```
+
+19 commits since `pre-registry-flip`.
 
 ## live-verified endpoints (curled this run)
 
