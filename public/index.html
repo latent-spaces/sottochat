@@ -109,12 +109,22 @@
       position: absolute;
       width: var(--cake-size, 26px);
       height: var(--cake-size, 26px);
-      pointer-events: none;
+      /* hover trigger needs pointer events; the inner img is what visually
+         responds with the jump-roll, so we keep the outer span clickable but
+         the cursor stays default. */
+      pointer-events: auto;
+      cursor: default;
       z-index: 5;
       transform-origin: 50% 100%;
       filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.12));
     }
-    .cake-perch img { width: 100%; height: 100%; display: block; }
+    .cake-perch img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      transform-origin: 50% 100%;
+      will-change: transform;
+    }
     /* anchor variants — left/top/right resolved relative to the target's offset parent. */
     .cake-perch.bar-top {
       left: 50%;
@@ -932,30 +942,31 @@
       border-radius: var(--r-panel);
       padding: 14px 16px;
     }
-    .chat-input .chat-context {
-      font-size: 13px;
-      color: var(--fg);
-      margin: 0 0 10px;
-      line-height: 1.5;
+    /* quick-reply pills — sit above the textarea once the conversation is live.
+       click sends the pill's text through the same /chat/send path. */
+    .chat-quickreplies {
       display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
       gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
     }
-    .chat-input .chat-context.muted { font-style: italic; color: var(--fg-muted); }
-    .chat-input .chat-context .chat-context-label {
+    .quick-pill {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      height: 26px;
+      padding: 0 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
       font-family: var(--mono);
       font-size: 11px;
-      font-weight: 500;
+      letter-spacing: 0.02em;
       color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-right: 6px;
+      cursor: pointer;
+      transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
     }
-    .chat-input .chat-context .chat-context-label::before { content: "⚡"; }
+    .quick-pill:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
+    .quick-pill:disabled { opacity: 0.5; cursor: not-allowed; }
     .chat-input-row {
       display: flex;
       gap: 10px;
@@ -1014,16 +1025,6 @@
       transform: none;
     }
     .chat-input-row .send-btn:disabled svg { opacity: 0.5; }
-    .chat-tip {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      margin-top: 10px;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--fg-muted);
-    }
-    .chat-tip .tip-key { color: var(--accent); }
     .chat-sent {
       margin-top: 8px;
       font-size: 12px;
@@ -1031,27 +1032,33 @@
       font-style: italic;
     }
 
-    /* chat thread — between conversation and chat input. populated by /chat/send replies. */
+    /* chat thread — between conversation and chat input. populated by /chat/send
+       replies. visually mirrors the conversation panel: user on the right with
+       an accent-soft bubble, agent on the left with a paper-soft bubble. when
+       the chat-agent is thinking, a typing bubble stands in for the next reply. */
     .chat-thread {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
+      margin: 0 0 16px;
     }
     .chat-thread:empty { display: none; }
     .chat-row {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      max-width: 78%;
     }
+    .chat-row.you   { align-self: flex-end;   align-items: flex-end; }
+    .chat-row.agent { align-self: flex-start; align-items: flex-start; }
     .chat-row .chat-role {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 9px;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
       color: var(--fg-muted);
+      margin: 0 6px 3px;
     }
     .chat-row.you .chat-role { color: var(--accent); }
-    .chat-row.agent .chat-role { color: var(--plum); }
     .chat-row .chat-auto-tag {
       display: inline-block;
       margin-left: 6px;
@@ -1066,35 +1073,40 @@
       vertical-align: middle;
     }
     .chat-row .chat-body {
+      position: relative;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
       font-size: 14px;
       line-height: 1.55;
       color: var(--fg);
-      white-space: pre-wrap;
       word-break: break-word;
     }
     .chat-row.agent .chat-body {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-input);
-      padding: 10px 12px;
+      background: oklch(98% 0.014 340);
+      border-radius: 14px 14px 14px 4px;
     }
+    .chat-row.you .chat-body {
+      background: var(--accent-soft);
+      border-color: oklch(92% 0.07 340);
+      border-radius: 14px 14px 4px 14px;
+      white-space: pre-wrap;
+    }
+    /* status row — paper-bubble with a typing dots animation while the
+       chat-agent is generating, plain hairline note for respawn / error. */
     .chat-status {
+      align-self: flex-start;
+      max-width: 78%;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px 14px 14px 4px;
+      background: oklch(98% 0.014 340);
       font-family: var(--mono);
       font-size: 11px;
       color: var(--fg-muted);
-      font-style: italic;
     }
-    .chat-status.thinking::before {
-      content: "•";
-      display: inline-block;
-      margin-right: 6px;
-      color: var(--accent);
-      animation: chat-pulse 1.2s ease-in-out infinite;
-    }
-    @keyframes chat-pulse {
-      0%, 100% { opacity: 0.3; }
-      50%      { opacity: 1; }
-    }
+    .chat-status.thinking { color: var(--fg-muted); }
+    .chat-status.respawn,
+    .chat-status.error { font-style: italic; }
 
     code, .mono { font-family: var(--mono); font-size: 13px; }
 
@@ -2139,7 +2151,7 @@
       }
     }
 
-    const DEFAULT_PREFILL = "walk me through what you've done, one piece at a time. pause for my take after each.";
+    const DEFAULT_PREFILL = "walk me through, one piece at a time. pause for my take after each turn";
     const chatDrafts = new Map();
     // chat thread state — sessionKey → array of {role, text, ts}.
     // populated by ws "chat:chunk" messages (the server echoes user sends and streams assistant replies).
@@ -2189,15 +2201,10 @@
       }
 
       const parts = [headHtml, '<div class="conv-stream">'];
-      if (hasUser) {
-        parts.push(
-          '<div class="conv-msg from-you">' +
-            '<span class="conv-msg-meta">you</span>' +
-            '<div class="conv-bubble">' + escapeHtml(lastTurn.userText) + '</div>' +
-          '</div>'
-        );
-      }
       if (hasAgent) {
+        // closed turn — show only the agent reply (with blur/truncation tail).
+        // the user's message belongs to the past; the surface here is the
+        // agent's latest output, ready to be reacted to.
         const expandKey = sessionId + "::" + lastTurn.id + "::L";
         const expanded = expandedBodies.has(expandKey);
         const bodyCls = "conv-body" + (expanded ? " is-expanded" : "");
@@ -2213,7 +2220,13 @@
           '</div>'
         );
       } else if (waitingForAgent) {
+        // user just sent something — show their message on the right and a
+        // typing indicator standing in for the not-yet-arrived agent reply.
         parts.push(
+          '<div class="conv-msg from-you">' +
+            '<span class="conv-msg-meta">you</span>' +
+            '<div class="conv-bubble">' + escapeHtml(lastTurn.userText) + '</div>' +
+          '</div>' +
           '<div class="conv-msg from-agent">' +
             '<span class="conv-msg-meta">agent</span>' +
             '<div class="conv-bubble">' +
@@ -2427,39 +2440,102 @@
         .to(mascot, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, "<");
     });
 
+    // wandering cake-perch hover: same jump-roll the brand-mark does, just
+    // tuned a bit larger. delegated so the perch keeps the listener after
+    // every 5s re-mount inside the detail pane. animates the inner <img>
+    // (the outer span owns positional transforms set in CSS — animating it
+    // would clobber the `translate(-50%) rotate(tilt)` chain).
+    document.addEventListener("mouseover", (ev) => {
+      if (typeof gsap === "undefined" || reduceMotionOn()) return;
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const perch = t.closest("#cake-perch");
+      if (!perch) return;
+      const img = perch.querySelector("img");
+      if (!img) return;
+      if (perch.dataset.spinning === "1") return;
+      perch.dataset.spinning = "1";
+      gsap.timeline({
+        onComplete: () => {
+          gsap.set(img, { rotation: 0, y: 0 });
+          perch.dataset.spinning = "0";
+        },
+      })
+        // identical to the brand jump-roll — y/durations/eases all match
+        // brandJumpRoll() so the cake animates the same way wherever it lives.
+        .to(img, { y: -16, duration: 0.28, ease: "expo.out" })
+        .to(img, { rotation: 360, duration: 0.55, ease: "power2.inOut" }, "<0.05")
+        .to(img, { y: 0, duration: 0.45, ease: "expo.out" }, "-=0.25");
+    });
+
     function renderChatInput(sess, latestFlag) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
-      const ctxHtml = latestFlag && latestFlag.insight
-        ? '<p class="chat-context">' +
-            '<span class="chat-context-label">break it down</span>' +
-            escapeHtml(latestFlag.insight) +
-          '</p>'
-        : '<p class="chat-context muted">' +
-            '<span class="chat-context-label">break it down</span>' +
-            'no observer flag yet — pick this up and edit it.' +
-          '</p>';
-
+      // prefill is a one-shot suggestion for the FIRST send only. once the
+      // chat-thread has any activity, the textarea stays clean — the user is
+      // mid-conversation and shouldn't see the same starter text on every tick.
+      const threadStarted = (chatThreadByKey.get(sessionKey) || []).length > 0;
       const prefill = (latestFlag && latestFlag.prefill) || DEFAULT_PREFILL;
-      const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : prefill;
+      const fallback = threadStarted ? "" : prefill;
+      const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : fallback;
+
+      // quick-reply pills appear once the conversation is live so the user can
+      // nudge it forward without typing the same one-liners ("next" /
+      // "explain more") every time.
+      const quickHtml = threadStarted
+        ? '<div class="chat-quickreplies">' +
+            '<button type="button" class="quick-pill" data-quick="next">next</button>' +
+            '<button type="button" class="quick-pill" data-quick="explain more">explain more</button>' +
+          '</div>'
+        : '';
 
       dChatInput.innerHTML =
-        ctxHtml +
+        quickHtml +
         '<div class="chat-input-row">' +
-          '<textarea rows="2" placeholder="walk me through it…">' + escapeHtml(initial) + '</textarea>' +
+          '<textarea rows="2" placeholder="message…">' + escapeHtml(initial) + '</textarea>' +
           '<button class="send-btn" title="send" aria-label="send">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
               '<line x1="12" y1="19" x2="12" y2="5"/>' +
               '<polyline points="5 12 12 5 19 12"/>' +
             '</svg>' +
           '</button>' +
-        '</div>' +
-        '<div class="chat-tip">' +
-          '<span>tip: ask for smaller steps, rationale, or alternatives</span>' +
-          '<span><span class="tip-key">⌘ ↵</span> to send</span>' +
         '</div>';
 
       const ta = dChatInput.querySelector('textarea');
       const btn = dChatInput.querySelector('.send-btn');
+      const pills = Array.from(dChatInput.querySelectorAll('.quick-pill'));
+
+      // shared send path. caller passes the text directly; for the textarea
+      // path, we read .value here. caller can also pass a control to disable
+      // while the request is in flight (avoids double-click).
+      async function sendChatText(text, ctrl) {
+        const trimmed = (text || "").trim();
+        if (!trimmed) return;
+        if (ctrl) ctrl.disabled = true;
+        pills.forEach(p => { p.disabled = true; });
+        try {
+          const res = await fetch('/chat/send', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sessionKey, text: trimmed }),
+          });
+          if (!res.ok) {
+            const body = await res.text();
+            console.warn('[chat] send failed', res.status, body);
+            if (ctrl) ctrl.disabled = false;
+            pills.forEach(p => { p.disabled = false; });
+            return;
+          }
+          // server broadcasts chat:chunk back — clear the textarea draft so the
+          // next ask starts clean.
+          chatDrafts.delete(sessionKey);
+          if (ta) ta.value = '';
+        } catch (err) {
+          console.warn('[chat] send error', err);
+          if (ctrl) ctrl.disabled = false;
+          pills.forEach(p => { p.disabled = false; });
+        }
+      }
+
       if (ta) {
         ta.addEventListener('input', e => {
           chatDrafts.set(sessionKey, e.target.value);
@@ -2472,32 +2548,11 @@
         });
       }
       if (btn) {
-        btn.addEventListener('click', async () => {
-          const text = (ta && ta.value || "").trim();
-          if (!text) return;
-          btn.disabled = true;
-          try {
-            const res = await fetch('/chat/send', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ sessionKey, text }),
-            });
-            if (!res.ok) {
-              const body = await res.text();
-              console.warn('[chat] send failed', res.status, body);
-              btn.disabled = false;
-              return;
-            }
-            // server will broadcast chat:chunk back; we just clear the draft so
-            // the textarea is ready for the next ask.
-            chatDrafts.delete(sessionKey);
-            if (ta) ta.value = '';
-          } catch (err) {
-            console.warn('[chat] send error', err);
-            btn.disabled = false;
-          }
-        });
+        btn.addEventListener('click', () => sendChatText(ta?.value || '', btn));
       }
+      pills.forEach(p => {
+        p.addEventListener('click', () => sendChatText(p.dataset.quick || '', p));
+      });
     }
 
     function renderChatThread(sess) {
@@ -2524,11 +2579,16 @@
       }).join("");
       let statusHtml = "";
       if (status && status.status === "thinking") {
-        statusHtml = '<div class="chat-status thinking">thinking…</div>';
+        // typing bubble — same paper-tint as agent rows, dots animate (and
+        // freeze under prefers-reduced-motion via the .typing-dots rule).
+        statusHtml =
+          '<div class="chat-status thinking">' +
+            '<span class="typing-dots" aria-label="agent is typing"><span></span><span></span><span></span></span>' +
+          '</div>';
       } else if (status && status.status === "respawning") {
-        statusHtml = '<div class="chat-status">reconnecting…</div>';
+        statusHtml = '<div class="chat-status respawn">reconnecting…</div>';
       } else if (status && status.status === "error") {
-        statusHtml = '<div class="chat-status">error: ' + escapeHtml(status.message || "agent stopped") + '</div>';
+        statusHtml = '<div class="chat-status error">error: ' + escapeHtml(status.message || "agent stopped") + '</div>';
       }
       dChatThread.innerHTML = rowsHtml + statusHtml;
     }

@@ -194,15 +194,17 @@ function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
-// build the seed block for an auto-fired chat: the observer's insight + tags +
-// the last RECENT_CLOSED_TURNS turn excerpts. fed once into the chat-agent so
-// the model has real context for its first reply, without us doing a session fork.
-function buildAutoSendSeed(s: SessionState, decision: ObserverInsight): string {
+// build the seed block for the chat-agent: a one-shot context envelope (session
+// name + observer insight if any + last RECENT_CLOSED_TURNS turn excerpts).
+// fed once into the chat-agent so the model has real context for its first
+// reply, without us doing a session fork. shared by auto-fires and manual sends
+// — the chat-agent ignores `seed` on follow-up prompts in the same session.
+function buildChatSeed(s: SessionState, decision?: ObserverInsight | null): string {
   const k = keyFor(s.info);
   const lines: string[] = [];
   lines.push(`The user just watched session "${s.sessionName ?? s.info.slug}" finish a turn.`);
-  if (decision.insight) lines.push(`Observer flagged: ${decision.insight}`);
-  if (decision.tags?.length) lines.push(`Tags: ${decision.tags.join(", ")}`);
+  if (decision?.insight) lines.push(`Observer flagged: ${decision.insight}`);
+  if (decision?.tags?.length) lines.push(`Tags: ${decision.tags.join(", ")}`);
   if (s.recentClosedTurns.length) {
     lines.push("");
     lines.push(`Recent ${s.recentClosedTurns.length} closed turn(s) (oldest first):`);
@@ -237,7 +239,7 @@ function maybeAutoSendChat(s: SessionState, decision: ObserverInsight) {
     if (now - lastChatTs < AUTO_SEND_COOLDOWN_MS) return;
   }
   lastAutoSendTs.set(key, now);
-  const seed = buildAutoSendSeed(s, decision);
+  const seed = buildChatSeed(s, decision);
   console.log(
     `[auto-send] ${s.sessionName ?? s.info.slug} · prefill="${clip(decision.prefill, 80)}"`
   );
@@ -297,10 +299,16 @@ const server = Bun.serve({
       if (!sessionKey || !text || !text.trim()) {
         return Response.json({ error: "sessionKey and text required" }, { status: 400 });
       }
-      if (!sessions.has(sessionKey)) {
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
         return Response.json({ error: "unknown sessionKey" }, { status: 404 });
       }
-      chatHost.send(sessionKey, text);
+      // pass the same context envelope as auto-sends — the chat-agent uses it
+      // on the first prompt of the subprocess, ignores it on follow-ups. include
+      // the latest open observer insight (if any) so the model knows what was flagged.
+      const latestOpen = [...sess.observerDecisions].reverse().find(d => d.open) ?? null;
+      const seed = buildChatSeed(sess, latestOpen);
+      chatHost.send(sessionKey, text, { seed });
       return Response.json({ ok: true });
     }
 
