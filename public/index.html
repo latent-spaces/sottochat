@@ -1043,6 +1043,25 @@
       margin: 0 0 16px;
     }
     .chat-thread:empty { display: none; }
+    /* "show N earlier" toggle that appears at the top of a chat-thread once
+       there are more than two messages. matches .conv-toggle's muted-mono
+       look so it sits as a quiet meta-control above the bubbles. */
+    .chat-history-toggle {
+      align-self: center;
+      padding: 4px 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: var(--fg-muted);
+      background: none;
+      border: 1px dashed var(--border);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .chat-history-toggle:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
     .chat-row {
       display: flex;
       flex-direction: column;
@@ -2156,6 +2175,12 @@
     // chat thread state — sessionKey → array of {role, text, ts}.
     // populated by ws "chat:chunk" messages (the server echoes user sends and streams assistant replies).
     const chatThreadByKey = new Map();
+    // sessionKeys whose chat-thread the user has explicitly expanded. default
+    // is collapsed: only the last RECENT_VISIBLE chunks render, with a "show
+    // N earlier" toggle. send (manual or quick-pill) resets to collapsed so a
+    // fresh send always lands a clean view of "your last + the response".
+    const RECENT_VISIBLE_CHUNKS = 2;
+    const expandedThreads = new Set();
     const chatStatusByKey = new Map();
     let convoLastSession = null;
     let convoLastTurnCount = 0;
@@ -2526,8 +2551,11 @@
             return;
           }
           // server broadcasts chat:chunk back — clear the textarea draft so the
-          // next ask starts clean.
+          // next ask starts clean. also re-collapse any previously expanded
+          // history for this session so the new user/agent pair is the only
+          // visible exchange.
           chatDrafts.delete(sessionKey);
+          expandedThreads.delete(sessionKey);
           if (ta) ta.value = '';
         } catch (err) {
           console.warn('[chat] send error', err);
@@ -2563,7 +2591,7 @@
         dChatThread.innerHTML = "";
         return;
       }
-      const rowsHtml = thread.map(c => {
+      const renderRow = (c) => {
         const role = c.role === "user" ? "you" : "agent";
         const cls = c.role === "user" ? "chat-row you" : "chat-row agent";
         const autoBadge = c.role === "user" && c.kind === "auto"
@@ -2576,7 +2604,30 @@
                  '<div class="chat-role">' + role + autoBadge + '</div>' +
                  body +
                '</div>';
-      }).join("");
+      };
+
+      // collapse older history. when expanded, the full thread renders; when
+      // collapsed (default), only the last RECENT_VISIBLE_CHUNKS render. send
+      // resets to collapsed so a fresh send always re-anchors on the latest
+      // exchange.
+      const expanded = expandedThreads.has(sessionKey);
+      const visible = thread.length > RECENT_VISIBLE_CHUNKS && !expanded
+        ? thread.slice(-RECENT_VISIBLE_CHUNKS)
+        : thread;
+
+      let toggleHtml = "";
+      if (thread.length > RECENT_VISIBLE_CHUNKS) {
+        const hidden = thread.length - RECENT_VISIBLE_CHUNKS;
+        const label = expanded
+          ? "hide earlier"
+          : "show " + hidden + " earlier message" + (hidden === 1 ? "" : "s");
+        toggleHtml =
+          '<button class="chat-history-toggle" type="button">' +
+            escapeHtml(label) +
+          '</button>';
+      }
+      const visibleHtml = visible.map(renderRow).join("");
+
       let statusHtml = "";
       if (status && status.status === "thinking") {
         // typing bubble — same paper-tint as agent rows, dots animate (and
@@ -2590,7 +2641,16 @@
       } else if (status && status.status === "error") {
         statusHtml = '<div class="chat-status error">error: ' + escapeHtml(status.message || "agent stopped") + '</div>';
       }
-      dChatThread.innerHTML = rowsHtml + statusHtml;
+      dChatThread.innerHTML = toggleHtml + visibleHtml + statusHtml;
+
+      const toggleBtn = dChatThread.querySelector('.chat-history-toggle');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+          if (expandedThreads.has(sessionKey)) expandedThreads.delete(sessionKey);
+          else expandedThreads.add(sessionKey);
+          renderChatThread(sess);
+        });
+      }
     }
 
     function refresh() {
@@ -2652,6 +2712,17 @@
       return true;
     }
 
+    // when the *upstream* cc session emits a new assistant message, just
+    // reload the whole page. heavy-handed but bulletproof: keeps the browser
+    // perfectly in sync with server state (correct sids after /clear, fresh
+    // chat-thread collapse state, no stale ws caches). debounced 1s so a
+    // burst of assistant_text events from one turn collapses into one reload.
+    let reloadTimer = null;
+    function scheduleUpstreamReload() {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => { location.reload(); }, 1000);
+    }
+
     function connect() {
       const ws = new WebSocket("ws://" + location.host + "/ws");
       ws.addEventListener("open", () => { reconnectIndicator.hidden = true; });
@@ -2671,6 +2742,13 @@
           refresh();
         } else if (msg.kind === "event") {
           if (appendEvent(msg.sessionKey, msg.event)) refresh();
+          // assistant_text = a new agent message landed in the upstream cc
+          // session. trigger the debounced reload regardless of which session
+          // is currently selected — a fresh load keeps URL hashes pointing
+          // at sids that still exist on the server.
+          if (msg.event && msg.event.kind === "assistant_text") {
+            scheduleUpstreamReload();
+          }
         } else if (msg.kind === "thread:new") {
           if (appendThread(msg.sessionKey, msg.thread)) refresh();
         } else if (msg.kind === "observer:decision") {
