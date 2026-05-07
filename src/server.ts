@@ -4,6 +4,7 @@ import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./tur
 import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver } from "./observer";
 import { startChatHost, type ChatChunk } from "./chat-agent";
+import { startRegistry, type RegistrySnapshot } from "./registry";
 
 const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
 const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
@@ -36,6 +37,13 @@ const AUTO_SEND_COOLDOWN_MS = Number(Bun.env.META_AUTO_SEND_COOLDOWN_MS ?? 5 * 6
 let autoSendEnabled = Bun.env.META_AUTO_SEND_ENABLED === "1";
 // last N closed turns we keep per session, used to seed the auto-fired chat.
 const RECENT_CLOSED_TURNS = 5;
+// shadow mode for the abtop-style PID-driven discovery (src/registry.ts).
+// when off (default), the registry still runs every 2s and is exposed at
+// /diag/discovery for parity verification — it just doesn't drive the inbox
+// yet. flipping to "1" will replace the legacy mtime-driven tailer view as
+// the source-of-truth for which sessions to show; that lands in a follow-up
+// commit once the diag has been compared against real usage.
+const USE_PROCESS_DISCOVERY = Bun.env.META_USE_PROCESS_DISCOVERY === "1";
 // only feed the observer turns whose close ts is within the last
 // OBSERVER_FRESH_MS — backfill of historical turns at startup is skipped.
 const OBSERVER_FRESH_MS = Number(Bun.env.META_OBSERVER_FRESH_MS ?? 5 * 60 * 1000);
@@ -286,6 +294,81 @@ const server = Bun.serve({
       return Response.json({ sessions: list, recentMs: RECENT_MS });
     }
 
+    // shadow-mode diagnostic: what abtop-style PID-driven discovery sees this
+    // tick. once compared against /sessions, the next commit flips the flag
+    // and starts driving the inbox from this view instead of the tailer.
+    if (url.pathname === "/diag/discovery" && req.method === "GET") {
+      const snap = registry.current();
+      if (!snap) {
+        return Response.json({ ready: false });
+      }
+      return Response.json({
+        ready: true,
+        fetchedAt: snap.fetchedAt,
+        tickCount: snap.tickCount,
+        tookMs: Math.round(snap.tookMs * 10) / 10,
+        sessions: snap.sessions.map((s) => ({
+          agent: s.agent,
+          pid: s.pid,
+          sessionId: s.sessionId,
+          cwd: s.cwd,
+          startedAt: s.startedAt,
+          ...(s.agent === "claude"
+            ? {
+                originalSessionId: s.originalSessionId,
+                repaired: s.sessionId !== s.originalSessionId,
+                isInternal: s.isInternal,
+                status: s.status,
+                name: s.name,
+                version: s.version,
+                entrypoint: s.entrypoint,
+                transcriptPath: s.transcriptPath,
+              }
+            : {
+                rolloutPath: s.rolloutPath,
+                isExec: s.isExec,
+                isRecent: s.isRecent,
+                version: s.version,
+                gitBranch: s.gitBranch,
+              }),
+        })),
+      });
+    }
+
+    // diff: which sids does each view (process-discovery vs legacy tailer)
+    // see that the other doesn't? expected steady-state once the new view
+    // takes over: onlyInTailer = dead-PID ghosts, onlyInDiscovery = empty
+    // (or only contains brand-new sessions whose first event hasn't landed).
+    if (url.pathname === "/diag/discovery-vs-tailer" && req.method === "GET") {
+      const snap = registry.current();
+      const discoverySids = new Set<string>();
+      if (snap) {
+        for (const s of snap.sessions) {
+          if (s.agent === "claude" && !s.isInternal) discoverySids.add(s.sessionId);
+        }
+      }
+      const tailerSids = new Set<string>();
+      const tailerEntries: { sid: string; lastEventTs: number; visible: boolean }[] = [];
+      for (const sess of sessions.values()) {
+        const sid = sess.info.sessionId;
+        tailerSids.add(sid);
+        tailerEntries.push({
+          sid,
+          lastEventTs: sess.lastEventTs,
+          visible: isInWindow(sess) && !isEphemeralHelper(sess.info),
+        });
+      }
+      const onlyInDiscovery = [...discoverySids].filter((s) => !tailerSids.has(s));
+      const onlyInTailer = tailerEntries.filter((e) => !discoverySids.has(e.sid));
+      return Response.json({
+        ready: !!snap,
+        discoveryCount: discoverySids.size,
+        tailerCount: tailerEntries.length,
+        onlyInDiscovery,
+        onlyInTailer,
+      });
+    }
+
     if (url.pathname === "/chat/send" && req.method === "POST") {
       let body: unknown;
       try {
@@ -428,14 +511,29 @@ if (observer) {
 // before the server process exits, otherwise claude subprocesses can be orphaned.
 {
   const onSignal = (sig: string) => {
-    console.log(`[server] received ${sig} — stopping observer + chat host`);
+    console.log(`[server] received ${sig} — stopping observer + chat host + registry`);
     observer?.stop();
     chatHost.stop();
+    registry.stop();
     setTimeout(() => process.exit(0), 500);
   };
   process.on("SIGINT", () => onSignal("SIGINT"));
   process.on("SIGTERM", () => onSignal("SIGTERM"));
 }
+
+// abtop-style PID-driven discovery — runs every 2s in shadow mode regardless
+// of META_USE_PROCESS_DISCOVERY (so /diag/discovery is always live for
+// comparison). when USE_PROCESS_DISCOVERY=1 in a follow-up, this snapshot
+// becomes the source-of-truth for which sessions to surface in the inbox.
+const registry = startRegistry({
+  onSnapshot: (_snap: RegistrySnapshot) => {
+    // intentionally quiet — full snapshots fan out only via /diag/discovery
+    // for now. a future commit will broadcast deltas over ws to drive the UI.
+  },
+});
+console.log(
+  `[registry] enabled · use-as-driver=${USE_PROCESS_DISCOVERY} · diag at /diag/discovery`,
+);
 
 startTailer({
   ...(PROJECT_SLUG ? { projectSlug: PROJECT_SLUG } : {}),
