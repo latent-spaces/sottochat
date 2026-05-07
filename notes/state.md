@@ -21,9 +21,9 @@ the loop:
 5. when the observer flags `open: true` *and* the global auto-break-down toggle is on, the server fires the prefill into the chat-agent automatically — pre-seeded with the observer insight + last 5 turn excerpts. user opens the tab to a primed conversation. follow-ups go through the same sdk subprocess (one per upstream sessionKey).
 6. when auto-break-down is off (the default), the user clicks the send button → POST `/chat/send` does the same thing, just user-initiated.
 
-what's wired: multi-source tailer (recursive fs.watch + per-tick poll, lineage collapse + temp-folder filter) · multi-session inbox · diff-rendered sidebar with magicui-style enter/exit/update pulse + FLIP layout (transform-leak fix) · split observer (sonnet decisions + haiku namer, both with auto-respawn) · chat-agent host (sonnet, one persistent subprocess per upstream sessionKey, tools disabled) · POST `/chat/send` + ws chat:chunk/chat:status broadcasts · auto-send on observer open=true with 5-min cooldown + global toggle (default off) · chat-thread block in detail pane (markdown, "auto" badge for server-fired chunks) · charts above the conversation, panel-styled, capped to last 5 turns · soft pink visual system (full strawberry/dessert redesign, six-hue per-session palette) · sticky frosted nav with github pill + auto-break-down toggle · sidebar/detail visual separation · svg dripping-frosting cap on bar plots (color-mix lightened, only on tall bars) · hover-burst radial sprinkle spray out of frosted bars · brand jump-roll on the cake logo · wandering cake-perch mascot picks a random DOM target on session-open · two svg mascots replacing the legacy webps · sidebar selected-card mascot with hover y-flip + fade in/out.
+what's wired: multi-source tailer (recursive fs.watch + per-tick poll, lineage collapse + temp-folder filter) · **abtop-style PID-driven session discovery in shadow mode** (process-discovery + claude-discovery + codex-discovery + registry; runs every 2s alongside the legacy tailer, exposed at `/diag/discovery` for parity verification, doesn't drive the inbox yet) · multi-session inbox · diff-rendered sidebar with magicui-style enter/exit/update pulse + FLIP layout (transform-leak fix) · split observer (sonnet decisions + haiku namer, both with auto-respawn) · chat-agent host (sonnet, one persistent subprocess per upstream sessionKey, tools disabled) · POST `/chat/send` + ws chat:chunk/chat:status broadcasts · auto-send on observer open=true with 5-min cooldown + global toggle (default off) · chat-thread block in detail pane (markdown, "auto" badge for server-fired chunks) · charts above the conversation, panel-styled, capped to last 5 turns · soft pink visual system (full strawberry/dessert redesign, six-hue per-session palette) · sticky frosted nav with github pill + auto-break-down toggle · sidebar/detail visual separation · svg dripping-frosting cap on bar plots (color-mix lightened, only on tall bars) · hover-burst radial sprinkle spray out of frosted bars · brand jump-roll on the cake logo · wandering cake-perch mascot picks a random DOM target on session-open · palette-unified mascot trio (`mascot-uni-1/2/3.svg`) in the wandering pool · sidebar selected-card mascot with hover y-flip + fade in/out · DESIGN.md regenerated from current code (tagged `pre-design-md-refresh` / `post-design-md-refresh`).
 
-what's not wired yet: observer profile persistence (`session_id` resume across restarts) · feedback channel back to observer · userpromptsubmit hook for the final injection back into the user's main claude session · codex schema parser.
+what's not wired yet: **registry-as-driver** (flag exists at `META_USE_PROCESS_DISCOVERY=0`; flipping it + deleting lineage-collapse + slug-matching self-feed filter + `recentMs` first-touch gate is the next commit) · full codex jsonl parser (only `session_meta` is parsed today, enough for the inbox card; turn aggregation + token counts land when codex sessions plug into observer.ts) · observer profile persistence (`session_id` resume across restarts) · feedback channel back to observer · userpromptsubmit hook for the final injection back into the user's main claude session.
 
 ---
 
@@ -58,6 +58,7 @@ env vars (all optional):
 | `META_MAGNITUDE_TOK`           | 1500                 | fallback trigger threshold (used when observer is off)  |
 | `META_MAGNITUDE_TC`            | 5                    | fallback trigger threshold (tools/turn)                 |
 | `META_MAGNITUDE_CHARS`         | 6000                 | fallback char trigger                                   |
+| `META_USE_PROCESS_DISCOVERY`   | 0 (off, shadow mode) | when `1`, the abtop-style PID-driven registry (`src/registry.ts`) replaces the legacy mtime-driven tailer view as the source-of-truth for `recentSessions()`. shadow-mode runs the registry either way, exposed at `/diag/discovery`. |
 
 **locations:**
 
@@ -74,7 +75,17 @@ env vars (all optional):
 - commit `43fd0eb` — auto-break-down default off + sidebar FLIP transform leak fix.
 - commit `c21139f` — wandering cake-perch mascot + svg mascots in sidebar cards.
 - commit `f631f6f` — add bar-frost-v2.svg.
-- commit `d72ec37` — current head: sidebar mascot smaller (36px) + overlays + hover y-flip with fade in/out.
+- commit `d72ec37` — sidebar mascot smaller (36px) + overlays + hover y-flip with fade in/out.
+- tag `pre-design-md-refresh` → `d72ec37` — last clean state before the DESIGN.md regen.
+- commit `38b5be5` — DESIGN.md regenerated from current code (per-session palette, mascots, frosting, sprinkle burst, FLIP, charts band, chat-thread). tag `post-design-md-refresh`.
+- commit `87b0745` — wandering cake-perch: swap to two mascot-var-3 svgs.
+- commit `f876adf` — wandering cake-perch: re-add mascot-var-2, three variants total. tag `wandering-mascot-var3`.
+- commit `10b3d16` — wandering pool now uses palette-unified `mascot-uni-{1,2,3}.svg` derived from the same canonical wine + strawberry + lavender palette. tag `wandering-mascot-unified`.
+- commit `267c8ea` — abtop pivot 1/5: `src/process-discovery.ts` — pure ProcInfo + getChildrenMap + hasActiveDescendant + cmdHasBinary + lastPathSegment, ported from `vendor/abtop/src/collector/process.rs`. one `ps -axo` shell-out per call.
+- commit `98c3e55` — abtop pivot 2/5: `src/claude-discovery.ts` — PID-driven cc session resolution. ports findClaudePids, findSessionFileForPid, buildDiscoveryContext, resolveProjectDir (worktree fallback), encodeCwdPath (exact `/ \ : _ . → -` rule, fixes a silent mismatch in our prior naive replace), findLiveSessionId (`/clear` repair with 5s grace + sibling-PID exclusion), loadSession. Reads richer SessionFile schema (status / entrypoint / updatedAt / name) that cc 2.1.119+ writes. `entrypoint='sdk-cli' && cwd under ~/.cut-the-cake/` flags `isInternal=true` — replaces slug-matching self-feed filter once consumers wire through.
+- commit `e98755c` — abtop pivot 3/5: `src/codex-discovery.ts` — codex doesn't write a per-PID metadata file, so it's `lsof -F pn -p <pids>` to find which `rollout-*.jsonl` each codex PID has open, then a minimal first-line `session_meta` parser to get sid/cwd/version/git.branch. Recently-finished pass (rollouts < 5 min old, no PID owner) returns `pid=0 isRecent=true` rows.
+- commit `4903dea` — abtop pivot 4/5: `src/registry.ts` — abtop's `MultiCollector` shape. one tick fetches the process table once, runs both collectors in parallel, returns sorted `RegistrySession[]`. tick cadence 2s; codex's lsof gated to slow ticks (every 5th, ≈10s). claude discovery is pure node fs and runs every tick.
+- commit `7c05566` — current head, abtop pivot 5/5: shadow-mode wiring in `src/server.ts`. registry now starts at boot regardless of `META_USE_PROCESS_DISCOVERY` flag (default `0`); it just doesn't drive the inbox yet. new endpoints `GET /diag/discovery` (current snapshot) and `GET /diag/discovery-vs-tailer` (set diff vs legacy view — `onlyInDiscovery` are sessions the new path catches that the tailer misses, `onlyInTailer` are dead-PID ghosts + `-private-var-folders-` ephemeral helpers the legacy path leaks). registry.stop() runs on SIGINT/SIGTERM.
 
 ---
 
@@ -94,16 +105,27 @@ env vars (all optional):
 | V'    | per-session colors + sidebar separation + svg frosting                 | done · committed |
 | V''   | new frosting svg + sprinkle burst + brand jump-roll + cake-perch       | done · committed |
 | V'''  | svg mascots + sidebar mascot hover y-flip with fade in/out             | done · committed |
+| V'''' | palette-unified wandering mascot trio + DESIGN.md regen                | done · committed |
+| F     | abtop-style PID-driven discovery (process + claude + codex + registry) | done · committed (shadow mode — registry runs but doesn't drive inbox) |
+| F'    | flip registry-as-driver + delete lineage-collapse + slug filter + recentMs gate | not started — that's commit 6 |
 
-**current head:** `d72ec37` (sidebar mascot: smaller, overlays content, hover y-flip with fade in/out).
+**current head:** `7c05566` (abtop pivot 5/5: shadow wiring + diag endpoints).
 
-**working tree:** clean.
+**working tree:** dirty (mid-flight asset work, none of it landed by this session):
+- 4 deleted files (`bar-frost.svg`, `bar-frost-v2.svg`, `empty-state-cake-duo.webp`, `header-banner-cake-clouds.webp`) — the empty-state webp is still referenced at `public/index.html:1000` so the page will show a missing image until it's restored or the html swaps it out.
+- untracked: `public/assets/mascot-var-3-{1,2}.svg` (legacy alternates after the unify), `public/assets/mascot-uni-23-anim.svg` (animated wink mascot, see below).
+- modified: `notes/state.md` (this file — being updated post-pivot).
 
 ---
 
 ## architecture
 
 ```
+TWO discovery paths feed the inbox today. legacy is the source-of-truth;
+process-driven runs in shadow mode and is exposed at /diag/discovery.
+
+LEGACY (filesystem-driven, mtime-gated):
+
 ~/.claude/projects/<slug>/<uuid>.jsonl                 ← claude code cli
 ~/Library/Application Support/Claude/                  ← claude.app local-agent-mode
    local-agent-mode-sessions/**/audit.jsonl            (same cc schema)
@@ -114,6 +136,39 @@ src/tailer.ts        per-file FileState (offset + partial + uuid dedupe);
                      per-tick re-glob baseline + recursive fs.watch
                      wake-up on each source root (claude-mem §3 pattern);
                      only tails files with recent mtime
+
+ABTOP-STYLE (process-driven, PID-gated) — shadow mode:
+
+ps -axo pid,ppid,%cpu,command   ← src/process-discovery.ts
+       │  ProcInfo map + childrenMap (one ps per tick, shared)
+       ▼
+src/claude-discovery.ts   findClaudePids → for each PID:
+                            read ~/.claude/sessions/<pid>.json (sid, cwd,
+                            startedAt, status, entrypoint, name, version);
+                          encodeCwdPath(cwd) → projects/<slug>/<sid>.jsonl;
+                          /clear repair via findLiveSessionId (mtime ≥
+                          startedAt-5s, exclude sids claimed by other PIDs);
+                          worktree fallback in resolveProjectDir;
+                          isInternal=true when entrypoint='sdk-cli' &&
+                          cwd under ~/.cut-the-cake/.
+
+src/codex-discovery.ts    findCodexPids → batched lsof -F pn -p pid1,pid2…
+                          → filter rollout-*.jsonl held open;
+                          first-line session_meta parse (sid, cwd,
+                          cli_version, git.branch, started_at).
+
+       │  ClaudeSession[] + CodexSession[]
+       ▼
+src/registry.ts      MultiCollector — one tick = one ps + parallel
+                     collectors; codex's lsof gated to slow ticks
+                     (every 5th, ≈10s); claude is pure node fs and runs
+                     every tick. snapshot kept on .current().
+       │
+       ▼  (today: only feeds /diag/discovery + /diag/discovery-vs-tailer.
+           tomorrow: replaces recentSessions() in src/server.ts when
+           META_USE_PROCESS_DISCOVERY flips to 1.)
+
+—————————————————————————————————————————————————————
        │  raw line
        ▼
 src/jsonl.ts         parser → MetaEvent[]; extracts model + input/output tokens
@@ -180,7 +235,8 @@ DESIGN.md                        visual system: strawberry tokens, plum chart-on
 
 src/server.ts                    Bun server: per-session state, ws fanout, observer onDecision/onName,
                                  chat host, POST /chat/send + /chat/auto-send, auto-send dispatcher
-                                 (buildAutoSendSeed + maybeAutoSendChat), temp-folder filter, /assets
+                                 (buildAutoSendSeed + maybeAutoSendChat), temp-folder filter, /assets,
+                                 GET /diag/discovery + /diag/discovery-vs-tailer (registry shadow view)
 src/tailer.ts                    multi-source jsonl tailer (cc cli + claude.app); poll + recursive fs.watch
 src/jsonl.ts                     record parser → MetaEvent[]; tokens, model, lines added/removed
 src/turns.ts                     per-turn assembly + tally
@@ -189,6 +245,28 @@ src/observer.ts                  TWO sdk subprocesses (decisions:sonnet + namer:
                                  generic startSdkLoop helper; FIFO inflight per loop; respawn
 src/chat-agent.ts                "break it down" host: one persistent sdk subprocess per upstream
                                  sessionKey; tools disabled; first-prompt seed support; ChatChunk.kind
+src/process-discovery.ts         ports vendor/abtop/src/collector/process.rs — pure ProcInfo (pid,
+                                 ppid, cpu_pct, command) via ps -axo, getChildrenMap, hasActiveDescendant
+                                 (cpu>threshold), cmdHasBinary (handles cc autoupdater layout
+                                 <name>/versions/<file>), lastPathSegment.
+src/claude-discovery.ts          ports vendor/abtop/src/collector/claude.rs — PID-driven cc session
+                                 resolution. findClaudePids, findSessionFileForPid, buildDiscoveryContext
+                                 (claimed_sids_by_pid + pids_per_cwd), resolveProjectDir (worktree
+                                 fallback), encodeCwdPath (exact `/ \\ : _ . → -`), findLiveSessionId
+                                 (`/clear` repair), loadSession. surfaces SessionFile schema cc 2.1.119+
+                                 writes (status, entrypoint, updatedAt, name).
+src/codex-discovery.ts           ports vendor/abtop/src/collector/codex.rs (macOS arm) — codex has no
+                                 sessions/<pid>.json so we lsof -F pn -p the codex PIDs to find their
+                                 open rollout-*.jsonl, then parse the first-line session_meta event for
+                                 sid/cwd/cli_version/git.branch/started_at. recently-finished pass
+                                 (rollouts < 5min old, no PID owner) returns pid=0 + isRecent=true rows.
+src/registry.ts                  ports vendor/abtop/src/collector/mod.rs MultiCollector — one tick fetches
+                                 process table once, runs both collectors in parallel against the same
+                                 snapshot. tick cadence 2s. SLOW_POLL_INTERVAL=5: codex lsof only every
+                                 5th tick (≈10s), reuses cached codex snapshot in between. surfaces
+                                 RegistrySnapshot{sessions, procs, childrenMap, tookMs, fetchedAt,
+                                 tickCount} via .current(). consumed today only by /diag endpoints;
+                                 will become inbox source-of-truth when META_USE_PROCESS_DISCOVERY=1.
 
 public/index.html                spa: sticky frosted nav (logo with brand-jump-roll + auto break-down
                                  toggle pill + gh pill) · diff-rendered sidebar with gsap enter/exit/
@@ -201,15 +279,26 @@ public/index.html                spa: sticky frosted nav (logo with brand-jump-r
                                  DOM target on session-open (size adapts per surface)
 
 public/assets/
-  cake-icon.svg                  primary mascot SVG (live state + cake-perch pool)
-  mascot-var-2.svg               secondary mascot SVG (idle state + cake-perch pool)
+  cake-icon.svg                  primary mascot SVG (sidebar live state)
+  mascot-var-2.svg               secondary mascot SVG (sidebar idle state ≥5min)
+  mascot-uni-1.svg               wandering pool — canonical wine + strawberry palette (= mascot-var-2 verbatim)
+  mascot-uni-2.svg               wandering pool — palette-unified recolor of legacy mascot-var-3-1
+  mascot-uni-3.svg               wandering pool — palette-unified recolor of legacy mascot-var-3-2
   frosting-new.svg               bar-frost cap silhouette (in active use)
-  bar-frost.svg                  legacy frost silhouette (kept as alternate)
-  bar-frost-v2.svg               alternate frost silhouette (kept as alternate)
   logo-cake-slice.webp           top-nav logo (gets the brand-jump-roll on hover)
-  empty-state-cake-duo.webp      empty detail-pane illustration
-  header-banner-cake-clouds.webp orphan (was the summary-panel backdrop) — safe to delete
   send-button-rocket.webp        orphan (replaced by inline svg arrow) — safe to delete
+
+  (untracked / dirty)
+  mascot-uni-23-anim.svg         animated wink mascot — base = uni-2, eye-open paths + an
+                                 eye-closed wink-arc lifted from uni-3 crossfade on a 4s loop
+                                 (built by diagnostics/build-mascot-animation.mjs).
+  mascot-var-3-1.svg             legacy alternate (pre-unify); now redundant.
+  mascot-var-3-2.svg             legacy alternate (pre-unify); now redundant.
+
+  (deleted on disk, not yet committed)
+  bar-frost.svg, bar-frost-v2.svg            — legacy frost alternates; only frosting-new.svg is wired.
+  empty-state-cake-duo.webp                  — STILL REFERENCED at public/index.html:1000.
+  header-banner-cake-clouds.webp             — long orphan.
 
 notes/plan.md                    v1 plan: 5 phases, data model, hook contract, defaults
 notes/claude-mem-patterns.md     24-section reference of patterns from claude-mem
@@ -393,7 +482,7 @@ normative source of truth: `DESIGN.md` (visual) + `PRODUCT.md` (strategic). this
 
 **wandering cake-perch mascot** (one per detail pane, picks a random target on session-open):
 - pool of perch surfaces: `.cx-bar.bar-output` / `.cx-bar.bar-added` (size 26px, only frosted), `.chart-card` (38px, top-right), `.session-head h2` (30px, right of text), `.chat-input` (36px, top-right). size adapts per surface.
-- target + tilt are deterministic via `djb2(sessionId)` so a session keeps a consistent look — different sessions pick different surfaces. icon also hashed: pool of two svgs (`cake-icon.svg`, `mascot-var-2.svg`) so different sessions get different mascot faces.
+- target + tilt are deterministic via `djb2(sessionId)` so a session keeps a consistent look — different sessions pick different surfaces. icon also hashed: pool of three palette-unified svgs (`mascot-uni-1.svg`, `mascot-uni-2.svg`, `mascot-uni-3.svg`) so different sessions get different mascot poses while the cartoon reads as the same character. all three derive from the same canonical wine + strawberry + lavender palette (see `diagnostics/unify-mascot-colors.mjs`). the sidebar selected-card mascot pulls from a separate two-svg pair (`cake-icon.svg` for live, `mascot-var-2.svg` for idle); pools are intentionally distinct.
 - **mounts silently** (no entrance gsap). prior cake fades out softly on session change before the new one mounts. re-mounted on every 5s refresh tick (chart/chat-input innerHTML wipes wreck DOM nodes inside them) with no animation, so the cake stays visually pinned.
 - impl: `placeCakePerch(sessionId, {animate})` in `public/index.html`. `animate` only controls the prior cleanup fade — the new cake always mounts at rest.
 
@@ -421,7 +510,12 @@ both sides cooperate to keep the inbox tight; understand both before touching ei
   parallel terminals on the same project keep emitting events and stay visible.
 - since we have no PID-FD discovery (would need libproc/Bun bindings), this is a heuristic, not abtop's exact mechanism. good enough in practice; a sibling that pauses >60s and then types again pops back in.
 
-if "missing sessions" comes up again: `curl -s localhost:3737/sessions | jq` is authoritative for what the server is keeping. if the server has it but the UI doesn't, it's a client filter or a stale browser cache.
+**ALL of the lineage-collapse + temp-folder filter + slug-matching self-feed filter become obsolete the moment `META_USE_PROCESS_DISCOVERY=1` flips.** `src/registry.ts` already returns the live, post-/clear-repaired set, with our own SDK subprocesses tagged `isInternal`. delete plan is in commit 6 (resume-here queue item #1).
+
+if "missing sessions" comes up again:
+- `curl -s localhost:3737/sessions` — what the server is keeping (legacy mtime view, source-of-truth today).
+- `curl -s localhost:3737/diag/discovery` — what the abtop-style PID-driven view sees this tick.
+- `curl -s localhost:3737/diag/discovery-vs-tailer` — set diff. `onlyInDiscovery` should be small (idle-but-live sessions or just-spawned ones); `onlyInTailer` should mostly be `-private-var-folders-...` ephemeral helpers and dead-PID ghosts.
 
 ---
 
@@ -440,7 +534,8 @@ if "missing sessions" comes up again: `curl -s localhost:3737/sessions | jq` is 
 6. **doc drift — "passive" / old name in older notes:**
    - `notes/plan.md` — still references "chunk-to-chat" + "passive observer" framing
    - `notes/claude-mem-patterns.md` — still references "passive"
-   - `.impeccable/design.json` — sidecar from the indigo era; not yet rewritten for the strawberry tokens
+   - `.impeccable/design.json` — sidecar from the indigo era; STILL stale even after the DESIGN.md regen at `38b5be5` (impeccable's own doc says "regenerate the sidecar whenever you regenerate root DESIGN.md"; the regen pass was interrupted before the sidecar got rewritten).
+   - DESIGN.md vs PRODUCT.md drift: DESIGN.md now enumerates **six** "concentrated whimsy spots" (logo + sidebar mascot + wandering cake-perch + frosting caps + sprinkle hover-burst + empty-state cake-duo); PRODUCT.md still says "five places exactly, no more." resolve before the next visual pass — either drop one (cake-duo + cake-perch overlap conceptually) or update the rule.
    doc-only cleanup; not user-facing.
 
 7. **abort propagation depth.** server shutdown calls `observer.stop()` + `chatHost.stop()`, then `setTimeout(exit, 500)`. unverified the sdk subprocesses actually die in that window — could orphan on slow shutdown.
@@ -449,61 +544,75 @@ if "missing sessions" comes up again: `curl -s localhost:3737/sessions | jq` is 
 
 9. **gh-pill star count is hardcoded `—` placeholder.** real github star fetch not wired (would need a client-side fetch to `api.github.com/repos/oronanschel/cut-the-cake` with rate-limit awareness, or a build step).
 
-10. **orphaned assets.** `public/assets/header-banner-cake-clouds.webp` (used by removed summary panel) and `public/assets/send-button-rocket.webp` (replaced by inline svg) are still on disk but unreferenced. safe to delete. (legacy webp mascots already deleted in `c21139f`.)
+10. **orphaned assets.** `public/assets/send-button-rocket.webp` is still on disk but unreferenced (replaced by inline svg). `header-banner-cake-clouds.webp` was deleted in the working tree this session but not yet committed. legacy webp mascots already deleted in `c21139f`. **separate caveat:** `empty-state-cake-duo.webp` was also deleted in the working tree but is still referenced at `public/index.html:1000` — don't commit that deletion alone or the empty state will show a broken image.
 
 11. **chat input prefills the same insight even after auto-fire.** when auto-send fires using the observer's latest prefill, the chat-input textarea still shows that same prefill — a user might re-send it. fix: when `lastAutoSendTs[sessionKey]` covers the current insight, render an empty placeholder textarea instead of the prefill. (cosmetic, called out during verification of the auto-send wire-up.)
 
 12. **chat thread state is in-memory only.** `chatThreads` and `chatStatuses` are server-side Maps that don't persist across restarts. on a server reboot, an in-flight conversation is lost from the UI even if the chat-agent subprocess could conceptually be resumed.
+
+13. **the registry discovers our own server's bun process indirectly.** `bun run src/server.ts` doesn't match `cmdHasBinary(cmd, 'claude')` so we don't pick it up as a session, but it does spawn one ps-shell-out per tick (every 2s). on a quiet machine this is ~700 procs scanned per tick. fine for now; if it becomes hot we can cache per slow-tick like abtop does.
+
+14. **`/diag/discovery` only covers the cc default config dir** (`~/.claude`). users with a custom `CLAUDE_CONFIG_DIR` won't see those sessions in the abtop view. abtop reads `/proc/<pid>/environ` (linux) / libproc (mac) per PID on slow-tick to discover the env var; for our needs the default-only path is fine — if anyone hits this we can add the env walk later. fully-defaulted machines (i.e. ours) match abtop output exactly.
 
 ---
 
 ## what's next (priority order)
 
 **already landed in this run** (commits since last state.md update):
-- ✅ `5f2d750` — observer split into sonnet decisions + haiku namer (shared `startSdkLoop` helper). chat-agent wired: POST `/chat/send`, ws chat:chunk/chat:status, chat-thread block, hello-payload chat state. auto-send dispatcher (`maybeAutoSendChat` + `buildAutoSendSeed`) fires on observer open=true, with 5min cooldown + recent-turn ring buffer. global toggle pill (top-nav) + POST `/chat/auto-send`. temp-folder filter (`-private-var-folders-`) hides claude-code's title-generators. new frosting svg with 20% rim above / 80% inside + color-mix lighter cap + 25% min-bar threshold. brand jump-roll on the cake logo.
-- ✅ `40683db` — hover-burst radial sprinkle spray out of frosted bars; ~60% bar color + ~40% accent picks; 9 sprinkles, 30–50px outward.
-- ✅ `43fd0eb` — auto-break-down default off (`META_AUTO_SEND_ENABLED === "1"`). sidebar FLIP transform leak fix: `killTweensOf(el, "y,transform")` + `clearProps:"transform"` on completion.
-- ✅ `c21139f` — wandering cake-perch mascot picks a random DOM target on session-open; size adapts per surface (26/30/36/38px); two svg mascot variants picked by hash. sidebar mascot constants now point at the svg pair (`cake-icon.svg` / `mascot-var-2.svg`); webp mascots deleted.
-- ✅ `f631f6f` — `bar-frost-v2.svg` added as alternate.
-- ✅ `d72ec37` — sidebar mascot 36×36px, `bottom: 1px`, overlays content (z-index 2, no padding-right reserve). hover y-axis flip with smooth opacity fade in/out (45% mid-flip).
+- ✅ `38b5be5` — DESIGN.md regenerated from current code via `/impeccable document` (per-session palette, six dessert hues, mascots, frosting caps, sprinkle burst, FLIP, charts band, chat-thread, brand jump-roll). +345 / −220 lines. tagged `pre-design-md-refresh` (on `d72ec37`) and `post-design-md-refresh` (on `38b5be5`).
+- ✅ `87b0745` — wandering cake-perch: pool swapped to two new mascot-var-3 svgs (mid-step toward the unified set).
+- ✅ `f876adf` — wandering cake-perch: re-add `mascot-var-2.svg` for three variants total. tagged `wandering-mascot-var3`.
+- ✅ `10b3d16` — wandering cake-perch: pool swapped to palette-unified `mascot-uni-{1,2,3}.svg`. all three share a canonical palette (wine outlines, body-pink + body-coral, cream + peach skin, orange + orange-deep, lavender pair) so the cartoon reads as the same character across sessions. legacy `mascot-var-3-{1,2}.svg` linger as untracked alternates. tagged `wandering-mascot-unified`. recoloring done by `diagnostics/unify-mascot-colors.mjs` (gitignored).
+- ✅ `267c8ea` → `7c05566` — **abtop pivot, 5 commits, methodical port** of `vendor/abtop/src/collector/{process,claude,codex,mod}.rs` into typescript. process-driven session discovery now runs every 2s in shadow mode at `/diag/discovery` + `/diag/discovery-vs-tailer`. legacy mtime-driven tailer is still source-of-truth for the inbox (flag default `META_USE_PROCESS_DISCOVERY=0`). on this machine the diff endpoint shows the new view drops 3 `-private-var-folders-` ephemeral helpers + dead-PID ghosts that the legacy view leaks, and surfaces `entrypoint` / `status` / `name` / `version` fields cc 2.1.119+ writes that the tailer never read.
 
 ---
 
 **resume-here queue** (in priority order):
 
-1. **observer profile persistence (M2)** — store `session_id` to `~/.cut-the-cake/{observer,namer}.session`, pass `resume: id` on respawn. preserves accumulated context across server restarts. arguably the highest-value backend item now that the chat path is wired.
+1. **commit 6: flip the registry to drive the inbox.** delete `LINEAGE_FRESH_MS` lineage-collapse in `public/index.html`, delete the slug-matching self-feed filter in `src/server.ts` (lines around the `chunk-to-chat-observer`/`cut-the-cake-namer`/`cut-the-cake-chat` includes — `entrypoint:'sdk-cli'+isInternal=true` covers it), drop the `recentMs` first-touch gate in `src/tailer.ts:175` (server-side `isInWindow` is enough), then change `META_USE_PROCESS_DISCOVERY` default to `1` and rewrite `recentSessions()` in `server.ts` to merge `registry.current().sessions` with the existing per-session SessionState map (registry tells us *which* sessions; SessionState carries the per-session events/threads/observer decisions/chat thread). claude.app local-agent-mode source has no `sessions/{PID}.json` so it stays on the legacy fs-watch path — the registry handles cc only. ~150 line net deletion. one PR.
 
-2. **chat input prefill cleanup after auto-send** — when an auto-send has fired for a session, blank the textarea instead of re-rendering the same prefill the server just sent. one-line conditional in `renderChatInput`. (open issue #11.)
+2. **finish the asset-cleanup commit.** the working tree carries 4 deletions + 2 untracked legacy mascots + the animated wink svg. resolve before continuing: restore or replace `empty-state-cake-duo.webp` (still referenced by `public/index.html:1000`), commit the `bar-frost*.svg` + `header-banner-cake-clouds.webp` deletions, decide whether to commit `mascot-uni-23-anim.svg` (built but not wired anywhere yet — see issue #13).
 
-3. **sidebar update-pulse signature tuning.** `cardSig` currently includes `lastEventTs`, which jumps on every event. for very chatty sessions the pulse fires constantly. consider gating to `(insight|sessionName)` only, leaving the live-border + opacity for "still active" signal.
+3. **regenerate `.impeccable/design.json` sidecar.** DESIGN.md was refreshed at `38b5be5` but the sidecar is still on the indigo-era schema (says "chunk-to-chat", carries old tokens). impeccable's doc says regenerate with the root file. simple fix: re-run `/impeccable document` and accept the sidecar write this time, or hand-edit. (open issue #6.)
 
-4. **rename observer cwd.** `~/.chunk-to-chat/observer/` → `~/.cut-the-cake/observer/`. cosmetic but consistent. (open issue #3.)
+4. **observer profile persistence (M2)** — store `session_id` to `~/.cut-the-cake/{observer,namer}.session`, pass `resume: id` on respawn. preserves accumulated context across server restarts. arguably the highest-value backend item now that the chat path is wired.
 
-5. **github stars on the gh-pill.** small cdn fetch; cache 10min in localStorage; fall back to `★` glyph + repo name if rate-limited.
+5. **chat input prefill cleanup after auto-send** — when an auto-send has fired for a session, blank the textarea instead of re-rendering the same prefill the server just sent. one-line conditional in `renderChatInput`. (open issue #11.)
 
-6. **rewrite `notes/plan.md` and `notes/claude-mem-patterns.md`** to drop "passive" framing and the old name. doc cleanup.
+6. **full codex jsonl parser (`src/codex-jsonl.ts`)** — `src/codex-discovery.ts` only parses the first-line `session_meta` event today. wiring codex sessions through the same observer/turns/triggers pipeline as cc requires emitting `MetaEvent`s for `event_msg` (user_message, agent_message, token_count, task_complete) and `response_item` (function_call/function_call_output for tool calls). reference: `vendor/abtop/src/collector/codex.rs:580-1150`. once landed, codex sessions get chat-thread treatment + observer flags identical to cc.
 
-7. **delete orphaned assets.** `public/assets/header-banner-cake-clouds.webp` + `public/assets/send-button-rocket.webp`.
+5. **PRODUCT.md "five places" vs DESIGN.md "six concentrated whimsy spots".** drop one (cake-duo + cake-perch overlap) or update PRODUCT.md to six. (open issue #6.)
+
+6. **sidebar update-pulse signature tuning.** `cardSig` currently includes `lastEventTs`, which jumps on every event. for very chatty sessions the pulse fires constantly. consider gating to `(insight|sessionName)` only, leaving the live-border + opacity for "still active" signal.
+
+7. **rename observer cwd.** `~/.chunk-to-chat/observer/` → `~/.cut-the-cake/observer/`. cosmetic but consistent. (open issue #3.)
+
+8. **github stars on the gh-pill.** small cdn fetch; cache 10min in localStorage; fall back to `★` glyph + repo name if rate-limited.
+
+9. **rewrite `notes/plan.md` and `notes/claude-mem-patterns.md`** to drop "passive" framing and the old name. doc cleanup.
 
 backend / observer work (independent of the design queue):
 
-8. **feedback channel (M3)** — server tracks user interactions (which auto-fires the user kept vs ignored, which prefills they edited heavily, which sessions they opened then closed without reading), pushes a periodic summary back into the decisions observer. observer adapts gate.
+10. **feedback channel (M3)** — server tracks user interactions (which auto-fires the user kept vs ignored, which prefills they edited heavily, which sessions they opened then closed without reading), pushes a periodic summary back into the decisions observer. observer adapts gate.
 
-9. **userpromptsubmit hook (phase E)** — once we have a refined "break it down" thread, a hook script should be able to inject the chat-agent's last reply into the user's main cc session. correct stdout shape per `claude-mem-patterns.md` §21.
+11. **userpromptsubmit hook (phase E)** — once we have a refined "break it down" thread, a hook script should be able to inject the chat-agent's last reply into the user's main cc session. correct stdout shape per `claude-mem-patterns.md` §21.
 
-10. **codex schema parser** — `~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl`; uses different `{type, payload}` envelope. straightforward second parser branch in `jsonl.ts`.
+12. **codex schema parser** — `~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl`; uses different `{type, payload}` envelope. straightforward second parser branch in `jsonl.ts`.
 
-11. **PID → FD session discovery (abtop-style).** would replace lineage-collapse heuristic with authoritative "this jsonl is held open by a live claude process" signal. requires libproc bindings on macOS / `/proc/<pid>/fd` on Linux / sysinfo on Windows. defer until the heuristic visibly fails.
+13. **decide where the animated wink mascot lives.** `mascot-uni-23-anim.svg` was built but isn't wired into the wandering pool yet. options: replace one of the three uni svgs with the animated version (so ~1/3 of sessions get a winking cake), add as a fourth pool entry, or repurpose for a different surface (top-nav logo? sidebar mascot for "live"?). animation is pure inline css (opacity crossfade between open-eye and wink-arc paths), so it works inside `<img src=...>`.
+
+14. **PID → FD session discovery (abtop-style).** would replace lineage-collapse heuristic with authoritative "this jsonl is held open by a live claude process" signal. requires libproc bindings on macOS / `/proc/<pid>/fd` on Linux / sysinfo on Windows. defer until the heuristic visibly fails.
 
 ---
 
 **process notes for the next session:**
 - per saved feedback memory: invoke `codex:rescue` for an independent pass after big chunks, before starting the next.
-- design source-of-truth: `PRODUCT.md` (strategic) + `DESIGN.md` (visual). both are normative.
-- the user prefers short replies. when iterating on UI, propose 2–3 directions tightly and let them pick a letter.
+- design source-of-truth: `PRODUCT.md` (strategic) + `DESIGN.md` (visual). both are normative. DESIGN.md was refreshed at `38b5be5` and is now the canonical token reference; the sidecar at `.impeccable/design.json` is stale and should not be trusted.
+- the user prefers short replies. when iterating on UI, propose 2–3 directions tightly and let them pick a letter. **escalation:** when relaying long structured output from `/impeccable` or other agent skills, summarize into a few bullets first — the user said "this is too much for me to read at once" mid-`/impeccable` critique and asked for the shorter version. relay tightly, don't dump.
 - after any animation change, the user has stated "too fast" / "milder" multiple times — bias slow + soft on initial proposals.
 - when verifying UI changes, drive the page via chrome-devtools-mcp (snapshot → click/fill → evaluate_script) — saved an enormous amount of round-tripping during the chat-agent + auto-send wire-up.
 - if "missing sessions" comes up, hit `curl -s localhost:3737/sessions` first to see what the server's actually tracking. layered filters are: temp-folder filter → `isInWindow` → lineage collapse → client `sortedSessions`.
+- **mascot eye conventions** (clarified this session): when the user says "right eye" they mean the viewer's right side of the image, not the cupcake's anatomical right. confirmed during the wink-animation work — they wanted the higher-x (viewer's right) eye to wink, not the lower-x.
 
 ---
 
