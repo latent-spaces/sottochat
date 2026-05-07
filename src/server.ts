@@ -6,6 +6,7 @@ import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver } from "./observer";
 import { startScriptifier, SCRIPT_STYLES, type ScriptBeat, type ScriptStyle } from "./scriptifier";
 import { generateTts, ttsAudioPath, type WordTiming } from "./tts";
+import { exportToMp4, exportMp4Path } from "./hyperframes-export";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
 
@@ -102,6 +103,23 @@ type ScriptPayload = {
   closedTs: number;       // turn end ts at scriptifier-feed time — used for active-script ordering
 };
 
+// per-turn mp4 export status. lifecycle:
+//   rendering → ready (with hash, mp4 url, durationS, bytes)
+//             → error (with message)
+// state lives in a sessionKey-keyed Map so the snapshot can rehydrate on
+// reconnect without a server-side disk scan.
+type ExportPayload = {
+  turnId: string;
+  status: "rendering" | "ready" | "error";
+  hash?: string;
+  mp4Url?: string;
+  durationS?: number;
+  bytes?: number;
+  errorMessage?: string;
+  ts: number;             // last ui mutation
+  startedTs: number;      // when rendering kicked off (for elapsed-time UI)
+};
+
 type SessionState = {
   info: SessionInfo;
   events: MetaEvent[];
@@ -116,6 +134,7 @@ type SessionState = {
   observerByTurn: Map<string, number>;
   recentClosedTurns: Turn[];        // ring buffer (RECENT_CLOSED_TURNS) used to seed auto-fired chats
   scripts: Map<string, ScriptPayload>;  // turnId → karaoke script + tts state
+  exports: Map<string, ExportPayload>;  // turnId → mp4 export status
 };
 
 const sessions = new Map<string, SessionState>();
@@ -179,6 +198,7 @@ function getOrCreate(info: SessionInfo): SessionState {
       observerByTurn: new Map(),
       recentClosedTurns: [],
       scripts: new Map(),
+      exports: new Map(),
     };
     sessions.set(k, s);
   } else {
@@ -224,6 +244,7 @@ function snapshot(s: SessionState) {
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
     scripts: Object.fromEntries(s.scripts),
+    exports: Object.fromEntries(s.exports),
     voice: voiceFor(k),
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
@@ -437,6 +458,129 @@ const server = Bun.serve({
       const file = Bun.file(ttsAudioPath(m[1]!));
       if (await file.exists()) return new Response(file);
       return new Response("not found", { status: 404 });
+    }
+
+    // /export/<hash>.mp4 — serves cached mp4 exports from
+    // ~/.cut-the-cake/exports/<hash>/output.mp4. hex-only filename is also our
+    // path-traversal guard. mirrors the /tts route shape.
+    if (url.pathname.startsWith("/export/") && req.method === "GET") {
+      const tail = url.pathname.slice(8);
+      const m = tail.match(/^([a-f0-9]{64})\.mp4$/);
+      if (!m) {
+        return new Response("not found", { status: 404 });
+      }
+      const file = Bun.file(exportMp4Path(m[1]!));
+      if (await file.exists()) return new Response(file);
+      return new Response("not found", { status: 404 });
+    }
+
+    // POST /debug/export-script — kick off an mp4 render of an existing
+    // ScriptPayload. body: { sessionKey, turnId }. requires the script to be
+    // status "ready" (audio + words present). returns 202 immediately and the
+    // render runs in the background, broadcasting export:rendering →
+    // export:ready / export:error over the websocket. NOT gated behind
+    // META_DEBUG (runtime feature, not a debug affordance) — same as
+    // /debug/regen-script.
+    if (url.pathname === "/debug/export-script" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      const turnId = typeof o.turnId === "string" ? o.turnId : "";
+      if (!sessionKey || !turnId) {
+        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
+      }
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
+        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
+      }
+      const payload = sess.scripts.get(turnId);
+      if (!payload) {
+        return Response.json({ error: "unknown turnId" }, { status: 404 });
+      }
+      if (payload.status !== "ready" || !payload.audioUrl || !payload.durationS || !payload.words) {
+        return Response.json({ error: "script not ready (audio + words required)" }, { status: 400 });
+      }
+      // pull the audio hash out of the audioUrl (/tts/<hash>.wav). this is the
+      // canonical key tts.ts already cached the wav under, so we don't need to
+      // re-hash the text here.
+      const audioMatch = String(payload.audioUrl).match(/\/tts\/([a-f0-9]{64})\.wav$/);
+      if (!audioMatch) {
+        return Response.json({ error: "audioUrl does not match expected /tts/<hash>.wav shape" }, { status: 500 });
+      }
+      const audioHash = audioMatch[1]!;
+      const audioPath = ttsAudioPath(audioHash);
+
+      const now = Date.now();
+      const exportPayload: ExportPayload = {
+        turnId,
+        status: "rendering",
+        ts: now,
+        startedTs: now,
+      };
+      sess.exports.set(turnId, exportPayload);
+      if (isVisible(sess)) {
+        broadcast({ kind: "export:rendering", sessionKey, turnId, startedTs: now });
+      }
+      const voice = voiceFor(sessionKey);
+
+      // background fire-and-forget. errors land on the payload + broadcast as
+      // export:error. never throws synchronously into the http handler.
+      void (async () => {
+        try {
+          const result = await exportToMp4({
+            turnId,
+            beats: payload.beats,
+            audioPath,
+            audioHash,
+            words: payload.words!,
+            durationS: payload.durationS!,
+            voice,
+            style: activeScriptStyle,
+          });
+          exportPayload.status = "ready";
+          exportPayload.hash = result.hash;
+          exportPayload.mp4Url = `/export/${result.hash}.mp4`;
+          exportPayload.durationS = result.durationS;
+          exportPayload.bytes = result.bytes;
+          exportPayload.ts = Date.now();
+          if (isVisible(sess)) {
+            broadcast({
+              kind: "export:ready",
+              sessionKey,
+              turnId,
+              hash: result.hash,
+              mp4Url: exportPayload.mp4Url,
+              durationS: result.durationS,
+              bytes: result.bytes,
+            });
+          }
+          console.log(
+            `[export] ${turnId.slice(0, 8)} · ${result.hash.slice(0, 8)} · ${(result.bytes / 1024).toFixed(0)} kB · ${result.durationS.toFixed(1)}s`
+          );
+        } catch (err) {
+          exportPayload.status = "error";
+          exportPayload.errorMessage = err instanceof Error ? err.message : String(err);
+          exportPayload.ts = Date.now();
+          console.error(
+            `[export] ${turnId.slice(0, 8)} failed: ${exportPayload.errorMessage}`
+          );
+          if (isVisible(sess)) {
+            broadcast({
+              kind: "export:error",
+              sessionKey,
+              turnId,
+              message: exportPayload.errorMessage,
+            });
+          }
+        }
+      })();
+
+      return Response.json({ ok: true, sessionKey, turnId }, { status: 202 });
     }
 
     // /debug/inject-script — inject a fully-formed demo ScriptPayload onto a

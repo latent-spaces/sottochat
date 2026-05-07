@@ -1088,6 +1088,96 @@
     .video-marker-corner.BE_CAREFUL { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
     .video-marker-corner.STEP       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
     .video-marker-corner.NOTE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+
+    /* style 4: stamp — round rubber-stamp svg lands inline before the beat
+       text. lives inside .video-beat.has-marker-stamp; the beat element flips
+       to a horizontal flex layout so the stamp sits to the left of the line.
+       per-marker tint is set via inline style from MARKER_COLORS. */
+    .video-beat.has-marker-stamp {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+    }
+    .video-stamp {
+      flex-shrink: 0;
+      width: 56px;
+      height: 56px;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center;
+      will-change: transform, opacity;
+    }
+    .video-stamp svg { width: 100%; height: 100%; display: block; }
+    .video-stamp .vst-text {
+      font-family: var(--mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      text-anchor: middle;
+      dominant-baseline: middle;
+    }
+
+    /* style 5: ticker — pill scrolls horizontally across the stage bottom on
+       entry. queue handled in JS so multiple markers stack instead of stomp. */
+    .video-ticker-track {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 6px;
+      height: 22px;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 4;
+    }
+    .video-ticker {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 22px;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 11px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      will-change: transform, opacity;
+    }
+    .video-ticker .vtk-label { font-weight: 700; }
+    .video-ticker .vtk-text {
+      font-family: var(--font);
+      font-size: 11px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      opacity: 0.85;
+      max-width: 320px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .video-ticker.INSIGHT     { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-ticker.BE_CAREFUL  { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-ticker.STEP        { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-ticker.NOTE        { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+
+    /* style 6: halo — soft pulsing box-shadow on the active marked beat.
+       no inline marker treatment; the colour comes from the per-marker class
+       so JS only toggles the wrapper class, gsap drives the box-shadow tween.
+       persistent-but-soft alternative to discrete pill/banner treatments. */
+    .video-beat.video-halo {
+      border-radius: 10px;
+      padding: 6px 10px;
+      margin: 0 -10px;
+      will-change: box-shadow;
+    }
     .video-pane-controls {
       display: flex;
       align-items: center;
@@ -1171,6 +1261,75 @@
       font-size: 11px;
       color: #b91c1c;
       padding: 6px 0;
+    }
+
+    /* export-mp4 button — small action chip in the video-pane-controls row.
+       three states share one slot: "export mp4" (idle, clickable),
+       "rendering 0:23" (mid-render with elapsed timer), "download mp4" (anchor).
+       sits at the right edge of the controls row, after the time label. */
+    .video-export {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 12px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--surface);
+      border: 1px solid color-mix(in oklab, var(--accent) 35%, transparent);
+      border-radius: var(--r-pill);
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out), border-color 0.12s var(--ease-out);
+      appearance: none;
+    }
+    .video-export:hover {
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+      border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+    }
+    .video-export:disabled {
+      cursor: default;
+      color: var(--fg-muted);
+      border-color: var(--border);
+      background: transparent;
+    }
+    .video-export.is-rendering {
+      color: var(--fg-muted);
+      cursor: progress;
+    }
+    .video-export.is-ready {
+      color: #fff;
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .video-export.is-ready:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    .video-export.is-error {
+      color: #b91c1c;
+      border-color: #fecaca;
+    }
+    .video-export .ve-spinner {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: vsp-pulse 1.4s infinite ease-in-out;
+    }
+    .video-export-error-msg {
+      flex: 0 0 auto;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: #b91c1c;
+      max-width: 240px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     /* conversation panel — last user/agent exchange, panel-style like the chart cards
@@ -2900,13 +3059,70 @@
     // rAF id, beat boundaries, last-painted indices, etc. so we don't double-mount
     // audio elements on re-render.
     const videoRuntime = new Map();
+    // mp4 exports state — sessionKey → Map<turnId, ExportPayload>. populated by
+    // hello/session:upsert snapshots and the export:rendering / export:ready /
+    // export:error ws msgs. each ExportPayload looks like:
+    //   { turnId, status: "rendering"|"ready"|"error", hash?, mp4Url?, durationS?,
+    //     bytes?, errorMessage?, ts, startedTs }
+    const exportsByKey = new Map();
+    // setTimeout chain id (per sessionKey) used to tick the rendering-elapsed
+    // label. NOT rAF — 1Hz is plenty and we don't want to compete with the
+    // karaoke loop or run while the tab is hidden.
+    const exportElapsedTimers = new Map();
+    function clearExportElapsedTimer(sessionKey) {
+      const t = exportElapsedTimers.get(sessionKey);
+      if (t) {
+        clearTimeout(t);
+        exportElapsedTimers.delete(sessionKey);
+      }
+    }
+    function scheduleExportElapsedTick(sessionKey) {
+      clearExportElapsedTimer(sessionKey);
+      const tick = () => {
+        const m = exportsByKey.get(sessionKey);
+        if (!m) return;
+        // pick the latest rendering payload (only one expected at a time).
+        let target = null;
+        for (const ep of m.values()) {
+          if (ep.status === "rendering") {
+            if (!target || (ep.ts || 0) > (target.ts || 0)) target = ep;
+          }
+        }
+        if (!target) {
+          clearExportElapsedTimer(sessionKey);
+          return;
+        }
+        const btn = dVideoPane.querySelector(
+          '.video-export[data-export-turn="' + cssAttr(target.turnId) + '"]'
+        );
+        if (btn) {
+          const elapsedS = Math.max(0, Math.floor((Date.now() - (target.startedTs || target.ts || 0)) / 1000));
+          const lbl = btn.querySelector(".ve-label");
+          if (lbl) lbl.textContent = "rendering " + vbFmtTime(elapsedS);
+        }
+        const id = setTimeout(tick, 1000);
+        exportElapsedTimers.set(sessionKey, id);
+      };
+      // first tick immediately (so the user doesn't sit on "rendering 0:00" for
+      // a full second), subsequent every 1000ms.
+      const id = setTimeout(tick, 1000);
+      exportElapsedTimers.set(sessionKey, id);
+    }
+    // attribute-safe quote escaper for the data-export-turn lookup. turnIds are
+    // model-emitted ULIDs in practice but be defensive in case of demo-/x ids.
+    function cssAttr(s) {
+      return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    }
     // marker-style preference — "pill" (default, current behaviour, inline chip
     // before the beat), "banner" (slide-in overlay across the stage on entry),
-    // or "corner" (small glyph in head + tinted active-word highlight). seeded
-    // from URL query (?marker=…) on load, persisted in localStorage under
+    // "corner" (small glyph in head + tinted active-word highlight), "stamp"
+    // (rubber-stamp svg landing inline on entry), "ticker" (pill scrolling
+    // across the stage bottom), or "halo" (pulsing accent box-shadow on the
+    // active beat for the beat's full duration). seeded from URL query
+    // (?marker=…) on load, persisted in localStorage under
     // VIDEO_MARKER_STYLE_KEY. applyMarkerStyle() persists + re-renders.
     const VIDEO_MARKER_STYLE_KEY = "cutCakeMarkerStyle";
-    const VIDEO_MARKER_STYLES = ["pill", "banner", "corner"];
+    const VIDEO_MARKER_STYLES = ["pill", "banner", "corner", "stamp", "ticker", "halo"];
     let markerStyle = (function () {
       try {
         const fromUrl = new URLSearchParams(window.location.search).get("marker");
@@ -2923,11 +3139,15 @@
       if (!VIDEO_MARKER_STYLES.includes(style) || style === markerStyle) return;
       markerStyle = style;
       try { localStorage.setItem(VIDEO_MARKER_STYLE_KEY, style); } catch {}
-      // when leaving banner/corner, clear any leftover banner element + tint.
+      // when leaving banner/corner/stamp/ticker/halo, reset trackers so the
+      // next render mounts a fresh treatment for the active beat.
       for (const [, rt] of videoRuntime.entries()) {
         if (rt) {
           rt.lastBannerBeatIdx = -1;
           rt.lastCornerBeatIdx = -1;
+          rt.lastStampBeatIdx = -1;
+          rt.lastTickerBeatIdx = -1;
+          rt.lastHaloBeatIdx = -1;
         }
       }
       refresh();
@@ -2940,7 +3160,7 @@
     // seeds optimistically from localStorage and overwrites on the hello
     // payload + scriptstyle:setting ws msgs (mirrors the autosend pattern).
     const VIDEO_SCRIPT_STYLE_KEY = "cutCakeScriptStyle";
-    const VIDEO_SCRIPT_STYLES = ["default", "cinematic", "tldr", "deep-dive"];
+    const VIDEO_SCRIPT_STYLES = ["default", "cinematic", "tldr", "deep-dive", "comedic", "noir", "kids"];
     let scriptStyle = (function () {
       try {
         const stored = localStorage.getItem(VIDEO_SCRIPT_STYLE_KEY);
@@ -4058,8 +4278,9 @@
       // emphasis words add .emph (compared case-insensitively, stripped of
       // punctuation on both sides for fuzzier matches).
       // marker chip is only rendered inline when markerStyle === "pill"; the
-      // banner and corner styles render the marker indicator elsewhere (an
-      // overlay over the stage, a glyph in the head row).
+      // banner / corner / stamp / ticker / halo styles render the marker
+      // indicator elsewhere (overlay, head-row glyph, inline svg stamp,
+      // bottom ticker, or pulsing box-shadow on the beat itself).
       const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const normalize = w => String(w || "").toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
       const inlinePill = markerStyle === "pill";
@@ -4095,6 +4316,13 @@
       // show a disabled play button so the layout doesn't pop in.
       const hasAudio = script.status === "ready" && !!script.audioUrl;
       const playDisabled = hasAudio ? "" : " disabled";
+      // mp4 export status — only meaningful once the script is ready (audio
+      // and word timings are required to render the composition).
+      const exportPayload = (() => {
+        const m = exportsByKey.get(sessionKey);
+        return (m && m.get(script.turnId)) || null;
+      })();
+      const exportHtml = hasAudio ? buildExportButtonHtml(script.turnId, exportPayload) : "";
       const controlsHtml = errorHtml +
         '<div class="video-pane-controls" id="' + ctrlsId + '">' +
           '<button class="video-play-btn" type="button" aria-label="play"' + playDisabled + '>' +
@@ -4102,6 +4330,7 @@
           '</button>' +
           '<div class="video-scrub" role="slider" aria-label="seek"><div class="video-scrub-fill"></div></div>' +
           '<div class="video-time">0:00 / ' + durStr + '</div>' +
+          exportHtml +
         '</div>';
 
       // marker-style picker lives in the head row (right side, before the
@@ -4210,10 +4439,14 @@
         rt.lastBeatIdx = -1;
         rt.lastWordIdx = -1;
         // marker-style trackers need a fresh start: the stage was just rebuilt
-        // so any banner DOM is gone, and the corner glyph hangs off the head
-        // row which was also re-emitted.
+        // so any banner / stamp / ticker DOM is gone, and the corner glyph
+        // hangs off the head row which was also re-emitted.
         rt.lastBannerBeatIdx = -1;
         rt.lastCornerBeatIdx = -1;
+        rt.lastStampBeatIdx = -1;
+        rt.lastTickerBeatIdx = -1;
+        rt.lastHaloBeatIdx = -1;
+        rt.tickerQueueEndAt = 0;
       } else {
         // cleanup any prior runtime for this key.
         if (rt) {
@@ -4236,9 +4469,16 @@
           lastBeatIdx: -1,
           lastWordIdx: -1,
           // marker-style trackers — initialised so the first beat-change after
-          // mount triggers a fresh banner / corner-glyph entry.
+          // mount triggers a fresh banner / corner-glyph / stamp / ticker /
+          // halo entry. tickerQueueEndAt holds the timestamp at which the most
+          // recently scheduled ticker pill finished its entrance, used to
+          // stagger queued pills ~700ms apart.
           lastBannerBeatIdx: -1,
           lastCornerBeatIdx: -1,
+          lastStampBeatIdx: -1,
+          lastTickerBeatIdx: -1,
+          lastHaloBeatIdx: -1,
+          tickerQueueEndAt: 0,
           duration: script.durationS || 0,
         };
         videoRuntime.set(sessionKey, rt);
@@ -4289,9 +4529,95 @@
         };
       }
 
+      // wire export button click. ready-state buttons are anchors with their
+      // own native download behaviour, so we only attach a handler to the
+      // idle/error buttons (idle → POST kicks off render).
+      const exportBtn = dVideoPane.querySelector(".video-export[data-export-turn]");
+      if (exportBtn && exportBtn.tagName !== "A" && !exportBtn.disabled) {
+        exportBtn.onclick = () => {
+          const turnId = exportBtn.getAttribute("data-export-turn");
+          if (!turnId) return;
+          requestExport(sessionKey, turnId);
+        };
+      }
+      // kick the elapsed-time ticker if there's a rendering payload for this
+      // session (post-reload + reconnect flow). idempotent; no-op when nothing
+      // is rendering.
+      scheduleExportElapsedTick(sessionKey);
+
       // initial paint reflects current audio.currentTime (may be 0 on first
       // mount, may be nonzero after a re-render mid-playback).
       paintKaraokeFrame(sessionKey);
+    }
+
+    // build the export-button html for a given (turnId, ExportPayload?).
+    // returns "" when the payload is missing the bits we need (callers gate on
+    // hasAudio externally — this just maps payload → html).
+    function buildExportButtonHtml(turnId, ep) {
+      const turnAttr = '"' + cssAttr(turnId) + '"';
+      if (!ep || ep.status === "error") {
+        const errMsg = ep && ep.errorMessage ? ep.errorMessage : "";
+        const errSlot = errMsg
+          ? '<span class="video-export-error-msg" title="' + escapeHtml(errMsg) + '">' + escapeHtml(errMsg) + '</span>'
+          : '';
+        const cls = ep && ep.status === "error" ? " is-error" : "";
+        return errSlot +
+          '<button type="button" class="video-export' + cls + '" data-export-turn=' + turnAttr +
+            ' aria-label="export mp4">' +
+            '<span class="ve-label">' + (ep && ep.status === "error" ? "retry export" : "export mp4") + '</span>' +
+          '</button>';
+      }
+      if (ep.status === "rendering") {
+        const elapsedS = Math.max(0, Math.floor((Date.now() - (ep.startedTs || ep.ts || Date.now())) / 1000));
+        return '<button type="button" class="video-export is-rendering" data-export-turn=' + turnAttr +
+          ' disabled aria-label="rendering">' +
+            '<span class="ve-spinner" aria-hidden="true"></span>' +
+            '<span class="ve-label">rendering ' + vbFmtTime(elapsedS) + '</span>' +
+          '</button>';
+      }
+      // ready — anchor with download attribute. browser saves on click.
+      const url = String(ep.mp4Url || "");
+      const sizeKb = ep.bytes ? Math.round(ep.bytes / 1024) : 0;
+      const sizeLabel = sizeKb > 0 ? " · " + sizeKb + "kb" : "";
+      return '<a class="video-export is-ready" href="' + escapeHtml(url) + '" download data-export-turn=' + turnAttr +
+        ' aria-label="download mp4">' +
+          '<span class="ve-label">download mp4' + escapeHtml(sizeLabel) + '</span>' +
+        '</a>';
+    }
+
+    // POST /debug/export-script for (sessionKey, turnId). server returns 202
+    // and broadcasts export:rendering immediately; we still optimistically set
+    // a local ExportPayload so the button repaints without waiting for the
+    // round trip. on http error, surface a transient errorMessage so the
+    // button's error state shows up without requiring a refresh.
+    async function requestExport(sessionKey, turnId) {
+      let m = exportsByKey.get(sessionKey);
+      if (!m) { m = new Map(); exportsByKey.set(sessionKey, m); }
+      const now = Date.now();
+      m.set(turnId, { turnId, status: "rendering", ts: now, startedTs: now });
+      refresh();
+      try {
+        const res = await fetch("/debug/export-script", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionKey, turnId }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const msg = (body && body.error) || ("http " + res.status);
+          m.set(turnId, { turnId, status: "error", errorMessage: msg, ts: Date.now(), startedTs: now });
+          refresh();
+        }
+      } catch (err) {
+        m.set(turnId, {
+          turnId,
+          status: "error",
+          errorMessage: err && err.message ? err.message : String(err),
+          ts: Date.now(),
+          startedTs: now,
+        });
+        refresh();
+      }
     }
 
     // swap the play-btn glyph between play and pause shapes. uses a single
@@ -4446,6 +4772,31 @@
             clearMarkerCorner(sessionKey);
           }
         }
+        if (markerStyle === "stamp") {
+          if (curMarker && rt.lastStampBeatIdx !== beatIdx) {
+            rt.lastStampBeatIdx = beatIdx;
+            triggerMarkerStamp(rt, beatIdx, curBeat);
+          } else if (!curMarker) {
+            rt.lastStampBeatIdx = -1;
+          }
+        }
+        if (markerStyle === "ticker") {
+          if (curMarker && rt.lastTickerBeatIdx !== beatIdx) {
+            rt.lastTickerBeatIdx = beatIdx;
+            triggerMarkerTicker(rt, curBeat, curBeat.text);
+          } else if (!curMarker) {
+            rt.lastTickerBeatIdx = -1;
+          }
+        }
+        if (markerStyle === "halo") {
+          if (curMarker && rt.lastHaloBeatIdx !== beatIdx) {
+            rt.lastHaloBeatIdx = beatIdx;
+            applyMarkerHalo(rt, beatIdx, curBeat);
+          } else if (!curMarker) {
+            rt.lastHaloBeatIdx = -1;
+            clearMarkerHalo(rt);
+          }
+        }
       }
       rt.lastWordIdx = wordIdx;
 
@@ -4566,6 +4917,180 @@
       try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
     }
 
+    // ---- marker-style triggers (stamp + ticker + halo) ---------------------
+    // mount an inline rubber-stamp svg at the start of the marked beat. the
+    // stamp lives inside the beat element, ahead of the word-spans; the beat
+    // gets .has-marker-stamp so it lays out as flex-row. on a re-fire (new
+    // beat) any prior stamp on a sibling beat is cleared. animation: scale-in
+    // from 1.6 + rotate(-8deg) → settle to scale 1 + rotate 2deg with a
+    // back.out bounce. reduced-motion: opacity fade-in only.
+    function triggerMarkerStamp(rt, beatIdx, beat) {
+      if (!rt || !rt.stageEl || !beat || !beat.marker) return;
+      // strip any prior stamp from sibling beats — only the active marked
+      // beat carries a stamp at any given time.
+      rt.stageEl.querySelectorAll(".video-stamp").forEach(el => { try { el.remove(); } catch {} });
+      rt.stageEl.querySelectorAll(".video-beat.has-marker-stamp").forEach(el => {
+        el.classList.remove("has-marker-stamp");
+      });
+      const beatEl = rt.stageEl.querySelector('.video-beat[data-beat-idx="' + beatIdx + '"]');
+      if (!beatEl) return;
+      const colors = MARKER_COLORS[beat.marker] || { bg: "#fde68a", fg: "#78350f" };
+      const bg = colors.bg || "#ffffff";
+      const fg = colors.fg || "#1a1a1f";
+      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      // round-ish svg stamp: outer ring, dashed inner ring, mono label text.
+      // colours come from MARKER_COLORS so the stamp reads as "this marker's
+      // tint, dialled up". inline svg keeps it zero-asset.
+      const stamp = document.createElement("span");
+      stamp.className = "video-stamp";
+      stamp.setAttribute("data-marker", beat.marker);
+      stamp.innerHTML =
+        '<svg viewBox="0 0 64 64" aria-hidden="true">' +
+          '<circle cx="32" cy="32" r="28" fill="' + bg + '" stroke="' + fg + '" stroke-width="2.5"/>' +
+          '<circle cx="32" cy="32" r="22" fill="none" stroke="' + fg + '" stroke-width="1" stroke-dasharray="2 2"/>' +
+          '<text class="vst-text" x="32" y="33" fill="' + fg + '">' + escapeHtml(labelText) + '</text>' +
+        '</svg>';
+      beatEl.classList.add("has-marker-stamp");
+      // mount as the first child so the stamp sits before the word-spans.
+      if (beatEl.firstChild) beatEl.insertBefore(stamp, beatEl.firstChild);
+      else beatEl.appendChild(stamp);
+
+      const reduce = reduceMotionOn();
+      if (typeof gsap === "undefined") return;
+      if (reduce) {
+        gsap.fromTo(stamp, { opacity: 0 }, { opacity: 1, duration: 0.18, ease: "none" });
+        return;
+      }
+      gsap.fromTo(stamp,
+        { scale: 1.6, rotate: -8, opacity: 0 },
+        { scale: 1.0, rotate: 2, opacity: 1, duration: 0.32, ease: "back.out(2.4)", transformOrigin: "center" }
+      );
+    }
+
+    // append a marker pill to the per-stage ticker track and animate it from
+    // the right edge to the left across ~1.4s. multiple markers stack via
+    // rt.tickerQueueEndAt: a new pill starts ~700ms after the previous one's
+    // entrance kicked off, so they ride the bottom in sequence instead of
+    // stomping each other. each pill self-removes on tween completion.
+    // reduced-motion: park the pill on the right and cross-fade in/out.
+    function triggerMarkerTicker(rt, beat, beatText) {
+      if (!rt || !rt.stageEl || !beat || !beat.marker) return;
+      // find/create the per-stage ticker track. it sits inside .video-pane-stage
+      // (which is position:relative) so it inherits the stage clipping bounds.
+      let track = rt.stageEl.querySelector(":scope > .video-ticker-track");
+      if (!track) {
+        track = document.createElement("div");
+        track.className = "video-ticker-track";
+        rt.stageEl.appendChild(track);
+      }
+      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      const pill = document.createElement("div");
+      pill.className = "video-ticker " + beat.marker;
+      pill.innerHTML =
+        '<span class="vtk-label">' + escapeHtml(labelText) + '</span>' +
+        '<span class="vtk-text">' + escapeHtml(String(beatText || "")) + '</span>';
+      track.appendChild(pill);
+
+      const reduce = reduceMotionOn();
+      const removePill = () => { try { pill.remove(); } catch {} };
+      if (typeof gsap === "undefined") {
+        // no gsap — keep the pill visible for ~1.4s then drop it.
+        setTimeout(removePill, 1400);
+        return;
+      }
+      if (reduce) {
+        // park at the right edge and cross-fade — no horizontal scroll under
+        // reduced-motion.
+        pill.style.right = "12px";
+        pill.style.left = "auto";
+        gsap.fromTo(pill,
+          { opacity: 0 },
+          { opacity: 1, duration: 0.18, ease: "none",
+            onComplete: () => {
+              gsap.to(pill, { opacity: 0, duration: 0.18, ease: "none", delay: 1.0, onComplete: removePill });
+            },
+          });
+        return;
+      }
+      // queue: start ~700ms after the most-recently scheduled pill entered.
+      const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+      const delayMs = Math.max(0, (rt.tickerQueueEndAt || 0) - now);
+      rt.tickerQueueEndAt = now + delayMs + 700;
+      const delaySec = delayMs / 1000;
+      // park at left:100% (off the right edge) then translate left by the
+      // pill width plus track width — that exits off the left edge.
+      pill.style.left = "100%";
+      gsap.fromTo(pill,
+        { x: 0, opacity: 1 },
+        {
+          x: () => -(pill.offsetWidth + (track.offsetWidth || 0)),
+          duration: 1.4,
+          delay: delaySec,
+          ease: "power1.inOut",
+          onComplete: removePill,
+        });
+    }
+
+    // tween the active beat's box-shadow from transparent → coloured halo →
+    // back to transparent across the beat's full duration. colour comes from
+    // MARKER_COLORS[beat.marker] (NOTE falls back to soft yellow so the cue
+    // stays visible). reduced-motion: hold a static soft glow for the beat's
+    // life, no shadow tween.
+    function applyMarkerHalo(rt, beatIdx, beat) {
+      if (!rt || !rt.stageEl || !beat || !beat.marker) return;
+      // only one beat halos at a time — clear any halo on sibling beats.
+      rt.stageEl.querySelectorAll(".video-beat.video-halo").forEach(el => {
+        if (typeof gsap !== "undefined") gsap.killTweensOf(el);
+        el.classList.remove("video-halo");
+        el.style.boxShadow = "";
+      });
+      const beatEl = rt.stageEl.querySelector('.video-beat[data-beat-idx="' + beatIdx + '"]');
+      if (!beatEl) return;
+      beatEl.classList.add("video-halo");
+
+      const colors = MARKER_COLORS[beat.marker];
+      const baseColor = (colors && colors.bg) ? colors.bg : "#fde68a";
+      // ~60% alpha overlay via color-mix so the halo blends with the page.
+      const haloColor = "color-mix(in oklab, " + baseColor + " 60%, transparent)";
+      const transparent = "0 0 0 0 transparent";
+
+      const bb = (rt.beatBoundaries || [])[beatIdx];
+      const beatDurMs = (bb && isFinite(bb.endS) && isFinite(bb.startS) && bb.endS > bb.startS)
+        ? Math.max(400, (bb.endS - bb.startS) * 1000)
+        : 1800;
+      const halfSec = (beatDurMs / 1000) / 2;
+
+      const reduce = reduceMotionOn();
+      if (typeof gsap === "undefined" || reduce) {
+        // static soft glow for the beat life; cleared by clearMarkerHalo or
+        // by the next halo apply.
+        beatEl.style.boxShadow = "0 0 24px 4px " + haloColor;
+        return;
+      }
+      gsap.fromTo(beatEl,
+        { boxShadow: transparent },
+        {
+          boxShadow: "0 0 36px 8px " + haloColor,
+          duration: halfSec,
+          ease: "sine.inOut",
+          onComplete: () => {
+            gsap.to(beatEl, {
+              boxShadow: transparent,
+              duration: halfSec,
+              ease: "sine.inOut",
+            });
+          },
+        });
+    }
+    function clearMarkerHalo(rt) {
+      if (!rt || !rt.stageEl) return;
+      rt.stageEl.querySelectorAll(".video-beat.video-halo").forEach(el => {
+        if (typeof gsap !== "undefined") gsap.killTweensOf(el);
+        el.classList.remove("video-halo");
+        el.style.boxShadow = "";
+      });
+    }
+
     // make a session key safe for use in an html id (sessions are keyed on
     // "source:absolute/path", which contains characters css selectors hate).
     function cssIdSafe(s) {
@@ -4617,6 +5142,16 @@
           m.set(turnId, script);
         }
         scriptsByKey.set(key, m);
+      }
+      // hydrate per-session mp4 export status (from snapshot.exports). same
+      // turnId-keyed shape as scripts; lets a reload pick up an in-flight
+      // render without re-POSTing /debug/export-script.
+      if (snap.exports && typeof snap.exports === "object") {
+        const em = exportsByKey.get(key) || new Map();
+        for (const [turnId, ep] of Object.entries(snap.exports)) {
+          em.set(turnId, ep);
+        }
+        exportsByKey.set(key, em);
       }
       // hydrate per-session voice override. snapshot.voice always carries the
       // resolved voice (override OR server default), so unconditional set is
@@ -4746,6 +5281,42 @@
             existing.errorMessage = msg.message;
             refresh();
           }
+        } else if (msg.kind === "export:rendering") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          let m = exportsByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); exportsByKey.set(msg.sessionKey, m); }
+          const startedTs = typeof msg.startedTs === "number" ? msg.startedTs : Date.now();
+          m.set(msg.turnId, { turnId: msg.turnId, status: "rendering", ts: Date.now(), startedTs });
+          refresh();
+        } else if (msg.kind === "export:ready") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          let m = exportsByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); exportsByKey.set(msg.sessionKey, m); }
+          const prev = m.get(msg.turnId);
+          m.set(msg.turnId, {
+            turnId: msg.turnId,
+            status: "ready",
+            hash: typeof msg.hash === "string" ? msg.hash : undefined,
+            mp4Url: typeof msg.mp4Url === "string" ? msg.mp4Url : (typeof msg.hash === "string" ? "/export/" + msg.hash + ".mp4" : undefined),
+            durationS: typeof msg.durationS === "number" ? msg.durationS : undefined,
+            bytes: typeof msg.bytes === "number" ? msg.bytes : undefined,
+            ts: Date.now(),
+            startedTs: prev ? prev.startedTs : Date.now(),
+          });
+          refresh();
+        } else if (msg.kind === "export:error") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          let m = exportsByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); exportsByKey.set(msg.sessionKey, m); }
+          const prev = m.get(msg.turnId);
+          m.set(msg.turnId, {
+            turnId: msg.turnId,
+            status: "error",
+            errorMessage: typeof msg.message === "string" ? msg.message : "render failed",
+            ts: Date.now(),
+            startedTs: prev ? prev.startedTs : Date.now(),
+          });
+          refresh();
         }
       });
       ws.addEventListener("close", () => {
