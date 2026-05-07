@@ -809,6 +809,7 @@
       letter-spacing: 0.04em;
     }
     .video-pane-stage {
+      position: relative;
       min-height: 120px;
       max-height: 320px;
       padding: 8px 0;
@@ -861,7 +862,7 @@
       background: color-mix(in oklab, var(--accent) 12%, transparent);
     }
     .vb-word.active {
-      background: color-mix(in oklab, var(--accent) 28%, transparent);
+      background: var(--marker-tint, color-mix(in oklab, var(--accent) 28%, transparent));
       padding: 0 2px;
       border-radius: 3px;
       font-weight: 600;
@@ -888,6 +889,107 @@
     .video-marker.BE_CAREFUL  { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
     .video-marker.STEP        { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
     .video-marker.NOTE        { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+
+    /* marker-style picker — three small toggles in the video-pane-head row.
+       hidden if the active script has no markers. mono uppercase, current style
+       carries aria-pressed=true + accent border. */
+    .video-marker-picker {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      margin-left: 8px;
+      padding: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .vmp-btn {
+      appearance: none;
+      background: transparent;
+      border: none;
+      padding: 0 8px;
+      height: 18px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: color 0.12s var(--ease-out), background 0.12s var(--ease-out);
+    }
+    .vmp-btn:hover { color: var(--fg); }
+    .vmp-btn[aria-pressed="true"] {
+      color: var(--accent);
+      background: color-mix(in oklab, var(--accent) 14%, transparent);
+      font-weight: 600;
+    }
+    .vmp-divider {
+      width: 1px;
+      align-self: stretch;
+      background: var(--border);
+      flex: 0 0 auto;
+    }
+
+    /* style 2: banner — full-bleed overlay across the stage when entering a
+       marked beat. lives inside .video-pane-stage (position:relative).
+       z-index above beat stack but below page-level controls. */
+    .video-banner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 18px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      text-align: center;
+      pointer-events: none;
+      z-index: 5;
+      border-bottom: 1px solid color-mix(in oklab, var(--fg) 12%, transparent);
+      box-shadow: 0 6px 24px -16px rgba(0, 0, 0, 0.35);
+    }
+    .video-banner .vbn-label {
+      font-family: var(--mono);
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .video-banner .vbn-text {
+      font-size: 22px;
+      line-height: 1.3;
+      font-weight: 500;
+    }
+    .video-banner.INSIGHT     { background: #fde68a; color: #78350f; }
+    .video-banner.BE_CAREFUL  { background: #fed7aa; color: #7c2d12; }
+    .video-banner.STEP        { background: #dbeafe; color: #1e3a8a; }
+    .video-banner.NOTE        { background: var(--bg); color: var(--fg-muted); border-bottom: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+
+    /* style 3: corner — small glyph + label in the video-pane-head while the
+       current beat is marked. tints the active-word highlight via --marker-tint
+       set on .video-pane inline. */
+    .video-marker-corner {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 18px;
+      padding: 0 8px;
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .video-marker-corner svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .video-marker-corner.INSIGHT    { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-marker-corner.BE_CAREFUL { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-marker-corner.STEP       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-marker-corner.NOTE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
     .video-pane-controls {
       display: flex;
       align-items: center;
@@ -2700,6 +2802,88 @@
     // rAF id, beat boundaries, last-painted indices, etc. so we don't double-mount
     // audio elements on re-render.
     const videoRuntime = new Map();
+    // marker-style preference — "pill" (default, current behaviour, inline chip
+    // before the beat), "banner" (slide-in overlay across the stage on entry),
+    // or "corner" (small glyph in head + tinted active-word highlight). seeded
+    // from URL query (?marker=…) on load, persisted in localStorage under
+    // VIDEO_MARKER_STYLE_KEY. applyMarkerStyle() persists + re-renders.
+    const VIDEO_MARKER_STYLE_KEY = "cutCakeMarkerStyle";
+    const VIDEO_MARKER_STYLES = ["pill", "banner", "corner"];
+    let markerStyle = (function () {
+      try {
+        const fromUrl = new URLSearchParams(window.location.search).get("marker");
+        if (fromUrl && VIDEO_MARKER_STYLES.includes(fromUrl)) {
+          localStorage.setItem(VIDEO_MARKER_STYLE_KEY, fromUrl);
+          return fromUrl;
+        }
+        const stored = localStorage.getItem(VIDEO_MARKER_STYLE_KEY);
+        if (stored && VIDEO_MARKER_STYLES.includes(stored)) return stored;
+      } catch {}
+      return "pill";
+    })();
+    function applyMarkerStyle(style) {
+      if (!VIDEO_MARKER_STYLES.includes(style) || style === markerStyle) return;
+      markerStyle = style;
+      try { localStorage.setItem(VIDEO_MARKER_STYLE_KEY, style); } catch {}
+      // when leaving banner/corner, clear any leftover banner element + tint.
+      for (const [, rt] of videoRuntime.entries()) {
+        if (rt) {
+          rt.lastBannerBeatIdx = -1;
+          rt.lastCornerBeatIdx = -1;
+        }
+      }
+      refresh();
+    }
+    // shared cue-audio context for the corner-style entry beep. instantiated
+    // lazily on first need so we don't trip the autoplay policy on page load.
+    let _markerCueCtx = null;
+    function getMarkerCueCtx() {
+      if (_markerCueCtx) return _markerCueCtx;
+      try {
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return null;
+        _markerCueCtx = new Ctor();
+      } catch { _markerCueCtx = null; }
+      return _markerCueCtx;
+    }
+    function playMarkerCue() {
+      if (reduceMotionOn()) return;
+      const ctx = getMarkerCueCtx();
+      if (!ctx) return;
+      try {
+        // resume() is a no-op if already running; required after autoplay block.
+        if (ctx.state === "suspended") { ctx.resume().catch(() => {}); }
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 200;
+        // 8% peak volume, ~120ms blip with a short attack + release so it
+        // doesn't click. envelope is 8ms attack, 100ms decay-to-zero.
+        const now = ctx.currentTime;
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(0.08, now + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.13);
+      } catch {}
+    }
+    // svg glyphs for the corner-style indicator. INSIGHT = lightbulb,
+    // BE_CAREFUL = warning triangle, STEP = numbered chevron, NOTE = small dot.
+    const MARKER_CORNER_GLYPHS = {
+      INSIGHT: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.7.6 1 1.5 1 2.3v1h6v-1c0-.8.3-1.7 1-2.3A7 7 0 0 0 12 2z"/></svg>',
+      BE_CAREFUL: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.86 1.82 18a2 2 0 0 0 1.7 3h16.96a2 2 0 0 0 1.7-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      STEP: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>',
+      NOTE: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="3"/></svg>',
+    };
+    // marker → solid colour (for the banner background and the corner tint)
+    // so JS reads from a single source of truth instead of duplicating CSS.
+    const MARKER_COLORS = {
+      INSIGHT:    { bg: "#fde68a", fg: "#78350f" },
+      BE_CAREFUL: { bg: "#fed7aa", fg: "#7c2d12" },
+      STEP:       { bg: "#dbeafe", fg: "#1e3a8a" },
+      NOTE:       { bg: null,      fg: null      }, // dashed paper, no tint
+    };
     // sessionKeys whose chat-thread the user has explicitly expanded. default
     // is collapsed: only the last RECENT_VISIBLE chunks render, with a "show
     // N earlier" toggle. send (manual or quick-pill) resets to collapsed so a
@@ -3571,8 +3755,12 @@
       // build beat html. words wrap in <span class="vb-word" data-word-idx>;
       // emphasis words add .emph (compared case-insensitively, stripped of
       // punctuation on both sides for fuzzier matches).
+      // marker chip is only rendered inline when markerStyle === "pill"; the
+      // banner and corner styles render the marker indicator elsewhere (an
+      // overlay over the stage, a glyph in the head row).
       const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const normalize = w => String(w || "").toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+      const inlinePill = markerStyle === "pill";
       let globalWordIdx = 0;
       const beatsHtml = beats.map((b, i) => {
         const tokens = beatTokens[i];
@@ -3584,12 +3772,13 @@
           globalWordIdx++;
           return html;
         }).join(" ");
-        const markerHtml = b.marker
+        const showInlinePill = inlinePill && !!b.marker;
+        const markerHtml = showInlinePill
           ? '<span class="video-marker ' + escAttr(b.marker) + '">' + escapeHtml(b.marker.toLowerCase().replace(/_/g, " ")) + '</span>'
           : "";
-        const markerCls = b.marker ? " has-marker" : "";
-        return '<div class="video-beat future' + markerCls + '" data-beat-idx="' + i + '">' +
-                 (b.marker ? markerHtml + '<div class="vb-line">' + wordSpans + '</div>' : wordSpans) +
+        const markerCls = showInlinePill ? " has-marker" : "";
+        return '<div class="video-beat future' + markerCls + '" data-beat-idx="' + i + '" data-marker="' + (b.marker ? escAttr(b.marker) : '') + '">' +
+                 (showInlinePill ? markerHtml + '<div class="vb-line">' + wordSpans + '</div>' : wordSpans) +
                '</div>';
       }).join("");
 
@@ -3613,15 +3802,42 @@
           '<div class="video-time">0:00 / ' + durStr + '</div>' +
         '</div>';
 
+      // marker-style picker lives in the head row (right side, before the
+      // duration pill). hidden if the active script has no markers — the
+      // setting is irrelevant for a marker-less script.
+      const hasAnyMarker = beats.some(b => !!b.marker);
+      const pickerHtml = hasAnyMarker
+        ? '<div class="video-marker-picker" role="group" aria-label="marker style">' +
+            VIDEO_MARKER_STYLES.map((opt, idx) => (
+              (idx > 0 ? '<span class="vmp-divider" aria-hidden="true"></span>' : '') +
+              '<button type="button" class="vmp-btn" data-marker-style="' + opt + '" aria-pressed="' + (opt === markerStyle ? 'true' : 'false') + '">' + opt + '</button>'
+            )).join('') +
+          '</div>'
+        : '';
+
       dVideoPane.innerHTML =
         '<div class="video-pane-head">' +
           '<span class="video-label">video</span>' +
           statusHtml +
+          pickerHtml +
           '<span class="video-duration">' + durStr + '</span>' +
         '</div>' +
         '<div class="video-pane-stage" id="' + stageId + '">' + beatsHtml + '</div>' +
         controlsHtml +
         '<div class="video-attribution">narrated by scriptifier · af_heart</div>';
+
+      // clear any stale --marker-tint on the pane container; paintKaraokeFrame
+      // will re-set it for the corner style when sitting on a marked beat.
+      try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
+
+      // wire picker click → applyMarkerStyle.
+      const pickerBtns = dVideoPane.querySelectorAll(".vmp-btn[data-marker-style]");
+      pickerBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const next = btn.getAttribute("data-marker-style");
+          if (next) applyMarkerStyle(next);
+        });
+      });
 
       // mount audio + wire controls. reuse existing runtime if turnId + audioUrl
       // match (so a refresh-tick doesn't interrupt playback).
@@ -3658,6 +3874,11 @@
         rt.beats = beats;
         rt.lastBeatIdx = -1;
         rt.lastWordIdx = -1;
+        // marker-style trackers need a fresh start: the stage was just rebuilt
+        // so any banner DOM is gone, and the corner glyph hangs off the head
+        // row which was also re-emitted.
+        rt.lastBannerBeatIdx = -1;
+        rt.lastCornerBeatIdx = -1;
       } else {
         // cleanup any prior runtime for this key.
         if (rt) {
@@ -3679,6 +3900,10 @@
           stageEl, ctrlsEl, playBtn, scrubEl, fillEl, timeEl,
           lastBeatIdx: -1,
           lastWordIdx: -1,
+          // marker-style trackers — initialised so the first beat-change after
+          // mount triggers a fresh banner / corner-glyph entry.
+          lastBannerBeatIdx: -1,
+          lastCornerBeatIdx: -1,
           duration: script.durationS || 0,
         };
         videoRuntime.set(sessionKey, rt);
@@ -3853,12 +4078,37 @@
             beatEl.scrollIntoView({ behavior: "smooth", block: "center" });
           }
           // marker pulse — only when reduced-motion is OFF and gsap available.
-          const markerEl = beatEl.querySelector(".video-marker");
-          if (markerEl && typeof gsap !== "undefined" && !reduceMotionOn()) {
-            gsap.fromTo(markerEl,
-              { scale: 1.0 },
-              { scale: 1.08, duration: 0.14, ease: "back.out(2)", yoyo: true, repeat: 1, transformOrigin: "center" }
-            );
+          // pill-style only; banner/corner have their own entry animation.
+          if (markerStyle === "pill") {
+            const markerEl = beatEl.querySelector(".video-marker");
+            if (markerEl && typeof gsap !== "undefined" && !reduceMotionOn()) {
+              gsap.fromTo(markerEl,
+                { scale: 1.0 },
+                { scale: 1.08, duration: 0.14, ease: "back.out(2)", yoyo: true, repeat: 1, transformOrigin: "center" }
+              );
+            }
+          }
+        }
+        // marker-style-specific hooks: fire only when crossing into a marked
+        // beat (lastBannerBeatIdx / lastCornerBeatIdx track the previous fire
+        // so the same beat doesn't re-trigger on rAF re-renders).
+        const curBeat = (rt.beats || [])[beatIdx];
+        const curMarker = curBeat && curBeat.marker;
+        if (markerStyle === "banner") {
+          if (curMarker && rt.lastBannerBeatIdx !== beatIdx) {
+            rt.lastBannerBeatIdx = beatIdx;
+            triggerMarkerBanner(sessionKey, beatIdx, curBeat);
+          } else if (!curMarker) {
+            rt.lastBannerBeatIdx = -1;
+          }
+        }
+        if (markerStyle === "corner") {
+          if (curMarker && rt.lastCornerBeatIdx !== beatIdx) {
+            rt.lastCornerBeatIdx = beatIdx;
+            triggerMarkerCorner(sessionKey, beatIdx, curBeat);
+          } else if (!curMarker) {
+            rt.lastCornerBeatIdx = -1;
+            clearMarkerCorner(sessionKey);
           }
         }
       }
@@ -3873,6 +4123,112 @@
         const dStr = dur > 0 ? vbFmtTime(dur) : "—:—";
         rt.timeEl.textContent = vbFmtTime(t) + " / " + dStr;
       }
+    }
+
+    // ---- marker-style triggers (banner + corner) ---------------------------
+    // mount the banner overlay inside the current session's stage and animate
+    // it in→hold→out. existing banner (if any) is removed first so back-to-back
+    // marker beats don't stack. respects reduced-motion (just fade).
+    function triggerMarkerBanner(sessionKey, beatIdx, beat) {
+      const rt = videoRuntime.get(sessionKey);
+      if (!rt || !rt.stageEl || !beat || !beat.marker) return;
+      // remove any prior banner immediately so we don't stack two overlays.
+      const prior = rt.stageEl.querySelector(":scope > .video-banner");
+      if (prior) prior.remove();
+      const banner = document.createElement("div");
+      banner.className = "video-banner " + beat.marker;
+      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      const labelSpan = document.createElement("div");
+      labelSpan.className = "vbn-label";
+      labelSpan.textContent = labelText;
+      const textSpan = document.createElement("div");
+      textSpan.className = "vbn-text";
+      textSpan.textContent = String(beat.text || "");
+      banner.appendChild(labelSpan);
+      banner.appendChild(textSpan);
+      rt.stageEl.appendChild(banner);
+
+      const removeBanner = () => { try { banner.remove(); } catch {} };
+      const reduce = reduceMotionOn();
+      if (typeof gsap === "undefined") {
+        // no gsap — just show then hide via setTimeout.
+        setTimeout(removeBanner, reduce ? 900 : 1500);
+        return;
+      }
+      if (reduce) {
+        gsap.fromTo(banner,
+          { opacity: 0 },
+          { opacity: 1, duration: 0.15, ease: "none",
+            onComplete: () => {
+              gsap.to(banner, {
+                opacity: 0, duration: 0.15, ease: "none", delay: 0.9,
+                onComplete: removeBanner,
+              });
+            },
+          });
+        return;
+      }
+      gsap.fromTo(banner,
+        { yPercent: -100, opacity: 0 },
+        { yPercent: 0, opacity: 1, duration: 0.24, ease: "power3.out",
+          onComplete: () => {
+            gsap.to(banner, {
+              yPercent: -100, opacity: 0,
+              duration: 0.24, ease: "power3.in", delay: 1.1,
+              onComplete: removeBanner,
+            });
+          },
+        });
+    }
+
+    // mount/refresh the corner glyph in the head row, set --marker-tint on the
+    // pane, pulse the glyph, and play a short audio cue. cleared by
+    // clearMarkerCorner() when the active beat loses its marker.
+    function triggerMarkerCorner(sessionKey, beatIdx, beat) {
+      const rt = videoRuntime.get(sessionKey);
+      if (!rt || !beat || !beat.marker) return;
+      const head = dVideoPane.querySelector(".video-pane-head");
+      if (!head) return;
+      // remove any existing corner so we don't accumulate stale glyphs.
+      const prior = head.querySelector(".video-marker-corner");
+      if (prior) prior.remove();
+      const labelText = String(beat.marker || "").toLowerCase().replace(/_/g, " ");
+      const glyph = MARKER_CORNER_GLYPHS[beat.marker] || MARKER_CORNER_GLYPHS.NOTE;
+      const corner = document.createElement("span");
+      corner.className = "video-marker-corner " + beat.marker;
+      corner.innerHTML = glyph + '<span>' + escapeHtml(labelText) + '</span>';
+      // insert before the duration pill so order reads: label · status · picker · corner · duration.
+      const duration = head.querySelector(".video-duration");
+      if (duration) head.insertBefore(corner, duration);
+      else head.appendChild(corner);
+
+      // tint the active-word highlight via CSS variable on the pane container.
+      const colors = MARKER_COLORS[beat.marker];
+      if (colors && colors.bg) {
+        dVideoPane.style.setProperty("--marker-tint", colors.bg);
+      } else {
+        // NOTE doesn't tint — let the default accent-mix come through.
+        dVideoPane.style.removeProperty("--marker-tint");
+      }
+
+      // pulse + audio cue. both gated on reduced-motion (cue silenced too).
+      if (typeof gsap !== "undefined" && !reduceMotionOn()) {
+        gsap.fromTo(corner,
+          { scale: 1.0 },
+          { scale: 1.15, duration: 0.11, ease: "back.out(2)", yoyo: true, repeat: 1, transformOrigin: "center" }
+        );
+      }
+      playMarkerCue();
+    }
+    function clearMarkerCorner(sessionKey) {
+      const rt = videoRuntime.get(sessionKey);
+      if (!rt) return;
+      const head = dVideoPane.querySelector(".video-pane-head");
+      if (head) {
+        const corner = head.querySelector(".video-marker-corner");
+        if (corner) corner.remove();
+      }
+      try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
     }
 
     // make a session key safe for use in an html id (sessions are keyed on
