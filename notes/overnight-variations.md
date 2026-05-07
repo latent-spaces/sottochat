@@ -22,6 +22,12 @@ or with no sessionKey since the route now requires it explicitly — pick one fr
 4. **marker style** — `pill | banner | corner | stamp | ticker | halo`. how the marker tokens flag visually inside the karaoke. global. URL param `?marker=<style>` works as a shortcut.
 5. **(implicit) mp4 export button** — appears in `.video-pane-controls` once status is ready. click → `rendering 0:NN` ticker → `download mp4 · NNNkb` link.
 
+## interactivity: bookmarks
+
+each `.video-beat` shows a small ribbon icon in its top-right corner. visible while .current or on hover; full-color (filled) when bookmarked. click toggles. bookmarked beats render as a `.video-bookmarks` chip row above the controls — `📑 #N` (1-based beat index). click a chip seeks the audio to that beat's `startS`. the demo session has beat 7 (the INSIGHT/PUNCHLINE one) pre-bookmarked so you can see the chip on first load.
+
+server-side: `Map<sessionKey, Map<turnId, Set<number>>>`. POST `/debug/bookmark` `{sessionKey, turnId, beatIdx, action: "add"|"remove"|"toggle"}`, POST `/debug/bookmarks/clear`, broadcasts `bookmark:setting`. snapshot rehydrates on hello.
+
 ## the seven scriptifier voices, in vibe order
 
 - **default** — current, dry-with-a-wink, terminal-flavored, 6-15 short beats.
@@ -72,7 +78,29 @@ e2218d2  notes: mp4 export verified end-to-end (live render, 22.2s, 2MB)
 8d217a8  video-pane: alternative marker vocabulary — design ↔ story (R)
 ```
 
-tag: `overnight-variations-v1` at `010acff`. R is post-tag; the tag predates the marker vocab swap.
+tag: `overnight-variations-v1` at `010acff`. R + S are post-tag.
+
+```
+3e2f448  notes: tour catches up — five pickers + R commit listed
+d52fd52  video-pane: per-turn beat bookmarks (S)
+```
+
+## live-verified endpoints (curled this run)
+
+- `POST /debug/inject-script` — injects the cached cafebabe demo on the workspace-claude-meta session, confirmed `status: ready` with audioUrl.
+- `POST /debug/marker-vocab {vocab: "story"}` and `{vocab: "design"}` — both return `{ok: true}`. invalid vocab returns 400 with the allowlist.
+- `POST /debug/bookmark` — add/remove/toggle all work, returns sorted-asc array. out-of-range beatIdx returns 400. demo session has beat 7 pre-bookmarked.
+- `POST /debug/export-script` — kicks off real mp4 render. completed in 22.2s for the 41s demo wav, output at `/export/<hash>.mp4` streams 2 MB of valid mp4.
+- `GET /tts/<hash>.wav` — streams the cached audio. `GET /export/<hash>.mp4` similarly. both honor the hex-only path-traversal guards.
+
+## ws messages the client now handles
+
+- `script:beats` / `script:ready` / `script:error` — scriptifier + tts pipeline
+- `scriptstyle:setting` — script-style picker swap broadcast
+- `markervocab:setting` — marker-vocab picker swap broadcast
+- `voice:setting` — per-session voice override broadcast
+- `bookmark:setting` — bookmark toggle broadcast
+- `export:rendering` / `export:ready` / `export:error` — mp4 export pipeline
 
 ## known unverified
 
