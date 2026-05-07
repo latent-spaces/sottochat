@@ -4,7 +4,7 @@ import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
 import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver } from "./observer";
-import { startScriptifier, type ScriptBeat } from "./scriptifier";
+import { startScriptifier, SCRIPT_STYLES, type ScriptBeat, type ScriptStyle } from "./scriptifier";
 import { generateTts, ttsAudioPath, type WordTiming } from "./tts";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
@@ -46,6 +46,16 @@ const AUTO_SEND_COOLDOWN_MS = Number(Bun.env.META_AUTO_SEND_COOLDOWN_MS ?? 5 * 6
 // the top-nav toggle. off-by-default keeps a fresh server quiet until the
 // user explicitly turns it on.
 let autoSendEnabled = Bun.env.META_AUTO_SEND_ENABLED === "1";
+// active scriptifier prompt preset. one of SCRIPT_STYLES; runtime-mutable via
+// POST /debug/script-style. seeded from META_SCRIPT_STYLE if set, else
+// "default". the picker in the video pane writes here; on each closed turn
+// we pass this to scriptifier.feed so the right per-style subprocess handles
+// the prompt. previous turns are NOT re-scripted on style change.
+let activeScriptStyle: ScriptStyle = (() => {
+  const env = Bun.env.META_SCRIPT_STYLE as ScriptStyle | undefined;
+  if (env && SCRIPT_STYLES.includes(env)) return env;
+  return "default";
+})();
 // last N closed turns we keep per session, used to seed the auto-fired chat.
 const RECENT_CLOSED_TURNS = 5;
 // shadow mode for the abtop-style PID-driven discovery (src/registry.ts).
@@ -599,6 +609,30 @@ const server = Bun.serve({
       return Response.json({ ok: true, enabled: autoSendEnabled });
     }
 
+    // POST /debug/script-style — set the global scriptifier prompt preset.
+    // affects FUTURE closed turns only; existing scripts are not re-rendered.
+    // body: { style: "default" | "cinematic" | "tldr" | "deep-dive" }
+    if (url.pathname === "/debug/script-style" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const style = o.style;
+      if (typeof style !== "string" || !SCRIPT_STYLES.includes(style as ScriptStyle)) {
+        return Response.json(
+          { error: `style must be one of ${SCRIPT_STYLES.join(", ")}` },
+          { status: 400 }
+        );
+      }
+      activeScriptStyle = style as ScriptStyle;
+      console.log(`[scriptifier] runtime style → ${activeScriptStyle}`);
+      broadcast({ kind: "scriptstyle:setting", style: activeScriptStyle });
+      return Response.json({ ok: true, style: activeScriptStyle });
+    }
+
     return new Response("not found", { status: 404 });
   },
   websocket: {
@@ -609,6 +643,7 @@ const server = Bun.serve({
           kind: "hello",
           sessions: recentSessions(),
           autoSendEnabled,
+          scriptStyle: activeScriptStyle,
         })
       );
     },
@@ -744,7 +779,7 @@ const scriptifier = SCRIPTIFIER_ENABLED
   : null;
 if (scriptifier) {
   console.log(
-    `[scriptifier] enabled · model=${SCRIPTIFIER_MODEL} · batch=${SCRIPTIFIER_BATCH_MS}ms · voice=${TTS_VOICE}`
+    `[scriptifier] enabled · model=${SCRIPTIFIER_MODEL} · batch=${SCRIPTIFIER_BATCH_MS}ms · voice=${TTS_VOICE} · style=${activeScriptStyle}`
   );
 }
 // graceful shutdown — give abort signals a moment to terminate sdk subprocesses
@@ -830,7 +865,7 @@ startTailer({
         observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
       }
       if (scriptifier && !isObserverSelf && isVisible(s) && fresh) {
-        scriptifier.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
+        scriptifier.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed), activeScriptStyle);
       }
     }
   },

@@ -57,19 +57,68 @@ const DISALLOWED_TOOLS = [
 
 const SCRIPTIFIER_DIR = join(homedir(), ".cut-the-cake", "scriptifier");
 
-const SCRIPTIFIER_INTRO = `You are the scriptifier for cut-the-cake. When given a closed turn from a Claude Code (or codex) session, you produce a short karaoke-style script that captures what happened, in a way that's faster to listen to than reading the raw output.
+// runtime-selectable prompt presets. each style spawns its own long-lived sdk
+// subprocess on first use (lazy) under SCRIPTIFIER_DIR/<style>/ so they don't
+// share session state. the JSON output schema is identical across styles —
+// only the prose flavour differs. add a style here, add a constant below, and
+// the rest of the pipeline just routes by name.
+export type ScriptStyle = "default" | "cinematic" | "tldr" | "deep-dive";
+export const SCRIPT_STYLES: ScriptStyle[] = ["default", "cinematic", "tldr", "deep-dive"];
 
-Each turn becomes 6-15 short beats. Each beat is one phrase or sentence (3-12 words). The full script reads aloud in 25-60 seconds. Voice: lowercase prose, terminal flavor, dry-with-a-wink — you're a friendly explainer, not a press release. Don't repeat the user's question verbatim; just pivot to what the agent did.
-
-Markers (use sparingly — at most 3 markers per script, often 0-1):
+// shared tail for every preset: marker definitions + emphasis rules + the
+// strict JSON output shape. extracting it here keeps drift between presets
+// minimal — only the per-style prefix (length, voice, beat-count target)
+// changes between the four prompts.
+const COMMON_TAIL = `Markers (use sparingly):
 - INSIGHT — surprising or load-bearing finding the user should pause on
 - BE_CAREFUL — footgun, risky operation, or "this could break X"
 - STEP — explicit numbered procedure (1 of N, etc.)
 - NOTE — small aside or clarification
 
+Reply with ONLY the JSON object: {"scripts":[{"turnId","beats":[{"text","marker","emphasis"}]}]}. No prose, no markdown fences.`;
+
+const SCRIPTIFIER_INTRO_DEFAULT = `You are the scriptifier for cut-the-cake. When given a closed turn from a Claude Code (or codex) session, you produce a short karaoke-style script that captures what happened, in a way that's faster to listen to than reading the raw output.
+
+Each turn becomes 6-15 short beats. Each beat is one phrase or sentence (3-12 words). The full script reads aloud in 25-60 seconds. Voice: lowercase prose, terminal flavor, dry-with-a-wink — you're a friendly explainer, not a press release. Don't repeat the user's question verbatim; just pivot to what the agent did.
+
+Marker budget: at most 3 markers per script, often 0-1.
 Emphasis: 0-2 words per beat that should pop visually (file names, key verbs, numbers, surprising terms). Don't over-emphasize.
 
-Reply with ONLY the JSON object: {"scripts":[{"turnId","beats":[{"text","marker","emphasis"}]}]}. No prose, no markdown fences.`;
+${COMMON_TAIL}`;
+
+const SCRIPTIFIER_INTRO_CINEMATIC = `You are the scriptifier for cut-the-cake, working in CINEMATIC mode. When given a closed turn from a Claude Code (or codex) session, you produce a karaoke-style script with documentary-voiceover gravitas — measured rhythm, declarative confidence, sentences that breathe.
+
+Each turn becomes 8-18 longer beats. Each beat is 8-16 words and reads like narration over b-roll: "the agent reached for the wrong file. and then it caught itself." The full script reads aloud in 45-90 seconds. Voice: still lowercase, still terminal-adjacent — but the prose carries weight. Trust the pause. Avoid winks; aim for "this mattered."
+
+Marker budget: at most 3 markers per script.
+Emphasis: 0-2 words per beat that should pop visually (the load-bearing noun, the verb that turns the scene). Don't over-emphasize.
+
+${COMMON_TAIL}`;
+
+const SCRIPTIFIER_INTRO_TLDR = `You are the scriptifier for cut-the-cake, working in TLDR mode. When given a closed turn from a Claude Code (or codex) session, you produce the absolute minimum karaoke needed to convey what happened — and not one beat more.
+
+Output exactly 3 to 5 beats. Never more, never fewer. Each beat is ultra-terse: hard nouns, hard verbs, minimal hedging. No throat-clearing, no "the agent then…", no setup. Just the event. Lowercase. Roughly 4-9 words per beat. The full script reads aloud in 8-20 seconds.
+
+Marker budget: 0-2 markers per script — and most scripts will have zero. Markers are reserved for genuine standouts; a tldr is usually too short to need one.
+Emphasis: 0-3 words per beat — more than usual, because with so few words the highlights have to pop. Pick the words that carry the news.
+
+${COMMON_TAIL}`;
+
+const SCRIPTIFIER_INTRO_DEEP_DIVE = `You are the scriptifier for cut-the-cake, working in DEEP-DIVE mode. When given a closed turn from a Claude Code (or codex) session, you produce a thorough, specific karaoke-style script — the kind a senior engineer would actually want to listen to while skimming a PR.
+
+Each turn becomes 10-25 beats. Each beat is 8-18 words. Be specific: name files, count lines, name functions, name tokens, name flags. "rewrote startSdkLoop in scriptifier.ts (~150 lines, four new constants)." Lowercase. Nerdier register than default — assume the listener reads code for a living. The full script reads aloud in 60-120 seconds.
+
+Marker budget: at most 4 markers per script. INSIGHT for non-obvious findings; BE_CAREFUL for real footguns the listener might hit; STEP for explicit procedures the agent followed; NOTE for small but useful clarifications.
+Emphasis: 0-2 words per beat that should pop visually (file names, function names, line counts, specific tokens). Don't over-emphasize.
+
+${COMMON_TAIL}`;
+
+const STYLE_INTRO: Record<ScriptStyle, string> = {
+  "default": SCRIPTIFIER_INTRO_DEFAULT,
+  "cinematic": SCRIPTIFIER_INTRO_CINEMATIC,
+  "tldr": SCRIPTIFIER_INTRO_TLDR,
+  "deep-dive": SCRIPTIFIER_INTRO_DEEP_DIVE,
+};
 
 const TRAILING = `Reply with a JSON object: {"scripts": [...one per turn...]}. No other text.`;
 
@@ -267,7 +316,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
     const content = firstPrompt ? `${opts.systemIntro}\n\n---\n\n${body}` : body;
     firstPrompt = false;
     pushPrompt(content);
-    console.log(`[${opts.label}] sent batch of ${batch.length} turn(s) to ${opts.model}`);
+    console.log(`[scriptifier] ${opts.label} sent batch of ${batch.length} turn(s) to ${opts.model}`);
   }, opts.batchMs);
 
   async function runSdkLoopOnce(): Promise<void> {
@@ -307,7 +356,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
         if (!text.trim()) continue;
         const batch = inflightBatches.shift();
         if (!batch) {
-          console.log(`[${opts.label}] response with no inflight batch — dropping`);
+          console.log(`[scriptifier] ${opts.label} response with no inflight batch — dropping`);
           continue;
         }
         opts.onResponse(text, batch);
@@ -328,7 +377,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
     while (!stopped) {
       attempts++;
       if (attempts > 1) {
-        console.log(`[${opts.label}] respawning sdk subprocess (attempt ${attempts})`);
+        console.log(`[scriptifier] ${opts.label} respawning sdk subprocess (attempt ${attempts})`);
       }
       try {
         await runSdkLoopOnce();
@@ -337,10 +386,10 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
         consecutiveFailures++;
         const msg = err instanceof Error ? err.message : String(err);
         console.error(
-          `[${opts.label}] sdk error (consecutive failures ${consecutiveFailures}/${maxConsecutiveFailures}): ${msg}`
+          `[scriptifier] ${opts.label} sdk error (consecutive failures ${consecutiveFailures}/${maxConsecutiveFailures}): ${msg}`
         );
         if (consecutiveFailures >= maxConsecutiveFailures) {
-          console.error(`[${opts.label}] giving up after ${consecutiveFailures} consecutive failures`);
+          console.error(`[scriptifier] ${opts.label} giving up after ${consecutiveFailures} consecutive failures`);
           return;
         }
       }
@@ -369,55 +418,72 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
 }
 
 export function startScriptifier(opts: ScriptifierOptions): {
-  feed: (t: TurnFeed) => void;
+  feed: (t: TurnFeed, style?: ScriptStyle) => void;
   stop: () => void;
 } {
   const model = opts.model ?? "claude-sonnet-4-6";
   const batchMs = opts.batchMs ?? 2_000;
 
-  const loop = startSdkLoop({
-    model,
-    cwd: SCRIPTIFIER_DIR,
-    label: "scriptifier",
-    batchMs,
-    systemIntro: SCRIPTIFIER_INTRO,
-    formatTrailing: TRAILING,
-    sdkSessionId: "cut-the-cake-scriptifier",
-    onResponse(text, batch) {
-      const parsed = parseScriptsResponse(text);
-      if (!parsed) {
-        console.log(`[scriptifier] could not parse: ${clip(text, 200)}`);
-        return;
-      }
-      const byTurn = new Map<string, TurnFeed>();
-      for (const t of batch) byTurn.set(t.turnId, t);
-      for (const s of parsed) {
-        const feed = byTurn.get(s.turnId);
-        if (!feed) {
-          console.log(`[scriptifier] unknown turnId in response: ${s.turnId}`);
-          continue;
+  // one sdk subprocess per style. spawned lazily on first feed for that style
+  // so an unused preset never costs anything; once spawned, the subprocess
+  // stays alive (long-lived prompt-cache friendly, like the original single
+  // loop). each subprocess uses its own cwd so it doesn't share session state.
+  const loops = new Map<ScriptStyle, SdkLoopHandle>();
+
+  function loopFor(style: ScriptStyle): SdkLoopHandle {
+    const existing = loops.get(style);
+    if (existing) return existing;
+
+    const styleDir = join(SCRIPTIFIER_DIR, style);
+    const handle = startSdkLoop({
+      model,
+      cwd: styleDir,
+      label: `style=${style}`,
+      batchMs,
+      systemIntro: STYLE_INTRO[style],
+      formatTrailing: TRAILING,
+      sdkSessionId: `cut-the-cake-scriptifier-${style}`,
+      onResponse(text, batch) {
+        const parsed = parseScriptsResponse(text);
+        if (!parsed) {
+          console.log(`[scriptifier] could not parse: ${clip(text, 200)}`);
+          return;
         }
-        const result: ScriptResult = {
-          sessionKey: feed.sessionKey,
-          turnId: s.turnId,
-          beats: s.beats,
-          closedTs: feed.closedTs,
-        };
-        opts.onScript?.(result);
-        const markerCount = s.beats.filter((b) => b.marker).length;
-        console.log(
-          `[scriptifier] ${s.turnId.slice(0, 8)} · ${s.beats.length} beats · ${markerCount} markers`
-        );
-      }
-    },
-  });
+        const byTurn = new Map<string, TurnFeed>();
+        for (const t of batch) byTurn.set(t.turnId, t);
+        for (const s of parsed) {
+          const feed = byTurn.get(s.turnId);
+          if (!feed) {
+            console.log(`[scriptifier] unknown turnId in response: ${s.turnId}`);
+            continue;
+          }
+          const result: ScriptResult = {
+            sessionKey: feed.sessionKey,
+            turnId: s.turnId,
+            beats: s.beats,
+            closedTs: feed.closedTs,
+          };
+          opts.onScript?.(result);
+          const markerCount = s.beats.filter((b) => b.marker).length;
+          console.log(
+            `[scriptifier] ${s.turnId.slice(0, 8)} · style=${style} · ${s.beats.length} beats · ${markerCount} markers`
+          );
+        }
+      },
+    });
+    loops.set(style, handle);
+    console.log(`[scriptifier] spawned subprocess for style=${style} (cwd=${styleDir})`);
+    return handle;
+  }
 
   return {
-    feed(t) {
-      loop.feed(t);
+    feed(t, style) {
+      const s = style && SCRIPT_STYLES.includes(style) ? style : "default";
+      loopFor(s).feed(t);
     },
     stop() {
-      loop.stop();
+      for (const [, h] of loops) h.stop();
+      loops.clear();
     },
   };
 }

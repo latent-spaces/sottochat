@@ -2834,6 +2834,51 @@
       }
       refresh();
     }
+
+    // scriptifier prompt-preset preference. controls which system prompt the
+    // server sends to the scriptifier subprocess for the NEXT closed turn.
+    // affects future scripts only — existing beats/audio aren't re-rendered.
+    // authoritative value is the server's `activeScriptStyle`; the client
+    // seeds optimistically from localStorage and overwrites on the hello
+    // payload + scriptstyle:setting ws msgs (mirrors the autosend pattern).
+    const VIDEO_SCRIPT_STYLE_KEY = "cutCakeScriptStyle";
+    const VIDEO_SCRIPT_STYLES = ["default", "cinematic", "tldr", "deep-dive"];
+    let scriptStyle = (function () {
+      try {
+        const stored = localStorage.getItem(VIDEO_SCRIPT_STYLE_KEY);
+        if (stored && VIDEO_SCRIPT_STYLES.includes(stored)) return stored;
+      } catch {}
+      return "default";
+    })();
+    function setScriptStyleLocal(style) {
+      if (!VIDEO_SCRIPT_STYLES.includes(style)) return false;
+      if (style === scriptStyle) return true;
+      scriptStyle = style;
+      try { localStorage.setItem(VIDEO_SCRIPT_STYLE_KEY, style); } catch {}
+      return true;
+    }
+    async function applyScriptStyle(style) {
+      const prev = scriptStyle;
+      if (!setScriptStyleLocal(style)) return;
+      // optimistic repaint of the picker; ws msg will reconfirm.
+      refresh();
+      try {
+        const res = await fetch("/debug/script-style", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ style }),
+        });
+        if (!res.ok) {
+          console.warn("[script-style] post failed", res.status);
+          setScriptStyleLocal(prev);
+          refresh();
+        }
+      } catch (err) {
+        console.warn("[script-style] post error", err);
+        setScriptStyleLocal(prev);
+        refresh();
+      }
+    }
     // shared cue-audio context for the corner-style entry beep. instantiated
     // lazily on first need so we don't trip the autoplay policy on page load.
     let _markerCueCtx = null;
@@ -3815,11 +3860,24 @@
           '</div>'
         : '';
 
+      // script-style picker — controls the scriptifier prompt preset for the
+      // NEXT closed turn. shown unconditionally (unlike the marker picker)
+      // because the user might want to pre-set the style before the next
+      // turn lands. shares .vmp-btn styling, keyed by data-script-style.
+      const scriptStylePickerHtml =
+        '<div class="video-marker-picker video-script-style-picker" role="group" aria-label="script style">' +
+          VIDEO_SCRIPT_STYLES.map((opt, idx) => (
+            (idx > 0 ? '<span class="vmp-divider" aria-hidden="true"></span>' : '') +
+            '<button type="button" class="vmp-btn" data-script-style="' + opt + '" aria-pressed="' + (opt === scriptStyle ? 'true' : 'false') + '">' + opt + '</button>'
+          )).join('') +
+        '</div>';
+
       dVideoPane.innerHTML =
         '<div class="video-pane-head">' +
           '<span class="video-label">video</span>' +
           statusHtml +
           pickerHtml +
+          scriptStylePickerHtml +
           '<span class="video-duration">' + durStr + '</span>' +
         '</div>' +
         '<div class="video-pane-stage" id="' + stageId + '">' + beatsHtml + '</div>' +
@@ -3836,6 +3894,15 @@
         btn.addEventListener("click", () => {
           const next = btn.getAttribute("data-marker-style");
           if (next) applyMarkerStyle(next);
+        });
+      });
+
+      // wire script-style picker click → applyScriptStyle (POSTs to server).
+      const scriptStyleBtns = dVideoPane.querySelectorAll(".vmp-btn[data-script-style]");
+      scriptStyleBtns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const next = btn.getAttribute("data-script-style");
+          if (next) applyScriptStyle(next);
         });
       });
 
@@ -4335,6 +4402,10 @@
             autoSendEnabled = msg.autoSendEnabled;
             paintAutoSend();
           }
+          if (typeof msg.scriptStyle === "string" && VIDEO_SCRIPT_STYLES.includes(msg.scriptStyle)) {
+            // server is the source of truth — overwrite the localStorage seed.
+            setScriptStyleLocal(msg.scriptStyle);
+          }
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
@@ -4373,6 +4444,10 @@
           if (typeof msg.enabled === "boolean") {
             autoSendEnabled = msg.enabled;
             paintAutoSend();
+          }
+        } else if (msg.kind === "scriptstyle:setting") {
+          if (typeof msg.style === "string" && VIDEO_SCRIPT_STYLES.includes(msg.style)) {
+            if (setScriptStyleLocal(msg.style)) refresh();
           }
         } else if (msg.kind === "script:beats" || msg.kind === "script:ready") {
           if (!msg.script || typeof msg.script.turnId !== "string") return;
