@@ -62,8 +62,8 @@ const SCRIPTIFIER_DIR = join(homedir(), ".cut-the-cake", "scriptifier");
 // share session state. the JSON output schema is identical across styles —
 // only the prose flavour differs. add a style here, add a constant below, and
 // the rest of the pipeline just routes by name.
-export type ScriptStyle = "default" | "cinematic" | "tldr" | "deep-dive";
-export const SCRIPT_STYLES: ScriptStyle[] = ["default", "cinematic", "tldr", "deep-dive"];
+export type ScriptStyle = "default" | "cinematic" | "tldr" | "deep-dive" | "comedic" | "noir" | "kids";
+export const SCRIPT_STYLES: ScriptStyle[] = ["default", "cinematic", "tldr", "deep-dive", "comedic", "noir", "kids"];
 
 // shared tail for every preset: marker definitions + emphasis rules + the
 // strict JSON output shape. extracting it here keeps drift between presets
@@ -113,11 +113,41 @@ Emphasis: 0-2 words per beat that should pop visually (file names, function name
 
 ${COMMON_TAIL}`;
 
+const SCRIPTIFIER_INTRO_COMEDIC = `You are the scriptifier for cut-the-cake, working in COMEDIC mode. When given a closed turn from a Claude Code (or codex) session, you produce a karaoke-style script that lands like stand-up — small absurdities included, the agent's near-misses played for the chuckle they deserve.
+
+Each turn becomes 6-12 beats. Beats are punchy, ~5-12 words, and they rhythm like comedy: setup → twist → payoff. The full script reads aloud in 20-50 seconds. Voice: lowercase, terminal-flavored, dry-with-a-wink dialed up to dry-with-a-smirk — but never goofy, never punching down at the agent. The work is real; the wink is at the situation.
+
+Marker budget: 0-3 markers per script, used sparingly. When BE_CAREFUL lands it should feel like a stage cue ("watch this") more than a warning.
+Emphasis: 0-2 words per beat, often the punchline word — the one that earns the laugh.
+
+${COMMON_TAIL}`;
+
+const SCRIPTIFIER_INTRO_NOIR = `You are the scriptifier for cut-the-cake, working in NOIR mode. When given a closed turn from a Claude Code (or codex) session, you produce a karaoke-style script that reads like a detective novel narrator clocking the scene. Terse. Atmospheric. Declarative.
+
+Each turn becomes 5-10 beats. Beats are short — 4-10 words. Hard verbs. No hedging, no "tries to," no "seems." The agent did things. Things happened. Lowercase. The full script reads aloud in 15-40 seconds. Voice: lowercase, terminal-adjacent, but the prose is dry asphalt — every sentence carries its own weight, and the silences between them carry more.
+
+Marker budget: 0-2 markers per script. INSIGHT lands like a clue dropping into place. BE_CAREFUL is a warning that's already too late.
+Emphasis: 0-1 words per beat, and most beats need none — the prose carries the weight without highlights.
+
+${COMMON_TAIL}`;
+
+const SCRIPTIFIER_INTRO_KIDS = `You are the scriptifier for cut-the-cake, working in KIDS mode. When given a closed turn from a Claude Code (or codex) session, you produce a karaoke-style script that explains what happened to a smart 8-year-old — clear, friendly, concrete, never condescending.
+
+Each turn becomes 5-12 beats. Each beat is one short sentence (5-12 words). Swap jargon for concrete metaphors: "the watcher peeks at the file like checking the cookie jar," "the agent stitched two notes together," "it tried the door, the door was locked." Lowercase. The full script reads aloud in 20-50 seconds. Voice: still lowercase, still terminal-adjacent — but warm and curious. Recast markers in the prose: STEP becomes a stepping-stone you hop, BE_CAREFUL becomes "watch out!" landing in the sentence itself.
+
+Marker budget: 0-3 markers per script. Use them when a kid would actually pause.
+Emphasis: 1-2 words per beat — the fun, vivid words that pop.
+
+${COMMON_TAIL}`;
+
 const STYLE_INTRO: Record<ScriptStyle, string> = {
   "default": SCRIPTIFIER_INTRO_DEFAULT,
   "cinematic": SCRIPTIFIER_INTRO_CINEMATIC,
   "tldr": SCRIPTIFIER_INTRO_TLDR,
   "deep-dive": SCRIPTIFIER_INTRO_DEEP_DIVE,
+  "comedic": SCRIPTIFIER_INTRO_COMEDIC,
+  "noir": SCRIPTIFIER_INTRO_NOIR,
+  "kids": SCRIPTIFIER_INTRO_KIDS,
 };
 
 const TRAILING = `Reply with a JSON object: {"scripts": [...one per turn...]}. No other text.`;
