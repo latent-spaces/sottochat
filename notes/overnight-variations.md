@@ -14,12 +14,13 @@ curl -X POST http://localhost:3737/debug/inject-script \
 ```
 or with no sessionKey since the route now requires it explicitly — pick one from `curl localhost:3737/state | jq '.sessions[0].key'`.
 
-## the four pickers in `.video-pane-head` (left → right)
+## the five pickers in `.video-pane-head` (left → right)
 
 1. **voice** — `warm | calm | crisp` (af_heart / am_michael / bf_emma). per-session. clicking opens a small dropdown with id + accent caption. POSTs `/debug/voice`. localStorage seeded by hello payload.
-2. **script style** — `default | cinematic | tldr | deep-dive | comedic | noir | kids`. seven scriptifier prompt presets, each with its own sandbox subprocess at `~/.cut-the-cake/scriptifier/<style>/`. global. POSTs `/debug/script-style`. **affects future turns only** — won't re-roll the current script.
-3. **marker style** — `pill | banner | corner | stamp | ticker | halo`. how INSIGHT/BE_CAREFUL/STEP/NOTE flag visually inside the karaoke. global. URL param `?marker=<style>` works as a shortcut.
-4. **(implicit) mp4 export button** — appears in `.video-pane-controls` once status is ready. click → `rendering 0:NN` ticker → `download mp4 · NNNkb` link.
+2. **script style** — `default | cinematic | tldr | deep-dive | comedic | noir | kids`. seven scriptifier prompt presets, each with its own sandbox subprocess at `~/.cut-the-cake/scriptifier/<style>--<vocab>/`. global. POSTs `/debug/script-style`. **affects future turns only** — won't re-roll the current script.
+3. **marker vocab** — `design | story`. design = INSIGHT/BE_CAREFUL/STEP/NOTE; story = PUNCHLINE/GOTCHA/PIVOT/ASIDE. same semantic intent, different prose energy. global. POSTs `/debug/marker-vocab`. **affects future turns only.**
+4. **marker style** — `pill | banner | corner | stamp | ticker | halo`. how the marker tokens flag visually inside the karaoke. global. URL param `?marker=<style>` works as a shortcut.
+5. **(implicit) mp4 export button** — appears in `.video-pane-controls` once status is ready. click → `rendering 0:NN` ticker → `download mp4 · NNNkb` link.
 
 ## the seven scriptifier voices, in vibe order
 
@@ -64,9 +65,14 @@ ecb9108  video-pane fixes from codex review (high + medium + low)
 1a70d27  scriptifier: 3 more prompt presets — comedic | noir | kids
 e189b1a  notes: creative review of the video-pane build
 2b2b7d6  video-pane: mp4 export (D) + 3 more marker treatments (F) + script-style picker entries (E)
+7912f10  notes: morning tour of the overnight variations
+419e621  scriptifier: defensive caps on prompt input + model output (Q)
+010acff  video-pane: visual identity — frosted play button + sprinkle burst (G)
+e2218d2  notes: mp4 export verified end-to-end (live render, 22.2s, 2MB)
+8d217a8  video-pane: alternative marker vocabulary — design ↔ story (R)
 ```
 
-still in flight at the time of writing: variation G (frosted play button + sprinkle burst on word advance — visual identity per creative-review.md alt 1) and variation Q (defensive caps on scriptifier output size — closes the codex "trust-based output size" finding). both background workers, will land after this doc is committed.
+tag: `overnight-variations-v1` at `010acff`. R is post-tag; the tag predates the marker vocab swap.
 
 ## known unverified
 
