@@ -152,6 +152,24 @@ const sockets = new Set<Bun.ServerWebSocket<unknown>>();
 // kept separate so observed-data state stays focused on tailer-sourced facts.
 const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
+// per-session beat bookmarks. key = sessionKey, value = turnId → set of beat
+// indices the user flagged as worth remembering. in-memory like chatThreads —
+// fine for v1; restart wipes them. broadcast as `bookmark:setting` events so
+// every connected tab stays in sync.
+const bookmarks = new Map<string, Map<string, Set<number>>>();
+function bookmarksFor(sessionKey: string, turnId: string): Set<number> {
+  let perTurn = bookmarks.get(sessionKey);
+  if (!perTurn) {
+    perTurn = new Map();
+    bookmarks.set(sessionKey, perTurn);
+  }
+  let set = perTurn.get(turnId);
+  if (!set) {
+    set = new Set();
+    perTurn.set(turnId, set);
+  }
+  return set;
+}
 // per-session cooldown for observer-driven auto-sends; see AUTO_SEND_COOLDOWN_MS.
 const lastAutoSendTs = new Map<string, number>();
 // per-session TTS voice override. unset entries fall back to TTS_VOICE
@@ -242,6 +260,15 @@ function snapshot(s: SessionState) {
   const chat = chatThreads.get(k);
   const status = chatStatuses.get(k);
   const displayName = chatDisplayNameFor(s.info);
+  // include per-turn bookmarks so a reconnect/refresh repaints the chip row +
+  // active-state on the beat icons without waiting for a fresh ws msg.
+  const bm = bookmarks.get(k);
+  const bookmarksOut: Record<string, number[]> = {};
+  if (bm) {
+    for (const [turnId, set] of bm.entries()) {
+      if (set.size > 0) bookmarksOut[turnId] = [...set].sort((a, b) => a - b);
+    }
+  }
   return {
     key: k,
     info: s.info,
@@ -255,6 +282,7 @@ function snapshot(s: SessionState) {
     scripts: Object.fromEntries(s.scripts),
     exports: Object.fromEntries(s.exports),
     voice: voiceFor(k),
+    bookmarks: bookmarksOut,
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
@@ -921,6 +949,76 @@ const server = Bun.serve({
       console.log(`[scriptifier] runtime marker-vocab → ${activeMarkerVocab}`);
       broadcast({ kind: "markervocab:setting", vocab: activeMarkerVocab });
       return Response.json({ ok: true, vocab: activeMarkerVocab });
+    }
+
+    // POST /debug/bookmark — toggle/add/remove a bookmark on (sessionKey,
+    // turnId, beatIdx). NOT a debug-gated affordance — runtime feature for
+    // flagging beats during karaoke playback. body:
+    //   { sessionKey, turnId, beatIdx, action: "add"|"remove"|"toggle" }
+    // returns { ok, bookmarks: number[] } and broadcasts bookmark:setting so
+    // every connected tab stays in sync.
+    if (url.pathname === "/debug/bookmark" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      const turnId = typeof o.turnId === "string" ? o.turnId : "";
+      const beatIdx = typeof o.beatIdx === "number" ? o.beatIdx : -1;
+      const action = typeof o.action === "string" ? o.action : "toggle";
+      if (!sessionKey || !turnId.length) {
+        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
+      }
+      if (!Number.isInteger(beatIdx) || beatIdx < 0) {
+        return Response.json({ error: "beatIdx must be a non-negative integer" }, { status: 400 });
+      }
+      if (action !== "add" && action !== "remove" && action !== "toggle") {
+        return Response.json({ error: "action must be add|remove|toggle" }, { status: 400 });
+      }
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
+        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
+      }
+      const script = sess.scripts.get(turnId);
+      if (!script || !Array.isArray(script.beats)) {
+        return Response.json({ error: "unknown turnId" }, { status: 404 });
+      }
+      if (beatIdx >= script.beats.length) {
+        return Response.json({ error: "beatIdx out of range" }, { status: 400 });
+      }
+      const set = bookmarksFor(sessionKey, turnId);
+      if (action === "add") set.add(beatIdx);
+      else if (action === "remove") set.delete(beatIdx);
+      else if (set.has(beatIdx)) set.delete(beatIdx);
+      else set.add(beatIdx);
+      const list = [...set].sort((a, b) => a - b);
+      broadcast({ kind: "bookmark:setting", sessionKey, turnId, bookmarks: list });
+      return Response.json({ ok: true, bookmarks: list });
+    }
+
+    // POST /debug/bookmarks/clear — drop every bookmark for (sessionKey,
+    // turnId). same broadcast shape as /debug/bookmark, just with an empty
+    // array. used by the "clear" link at the right end of the chips row.
+    if (url.pathname === "/debug/bookmarks/clear" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      const turnId = typeof o.turnId === "string" ? o.turnId : "";
+      if (!sessionKey || !turnId.length) {
+        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
+      }
+      const perTurn = bookmarks.get(sessionKey);
+      if (perTurn) perTurn.delete(turnId);
+      broadcast({ kind: "bookmark:setting", sessionKey, turnId, bookmarks: [] });
+      return Response.json({ ok: true, bookmarks: [] });
     }
 
     return new Response("not found", { status: 404 });

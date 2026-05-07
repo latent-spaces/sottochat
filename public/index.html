@@ -1202,6 +1202,97 @@
       padding-top: 10px;
       border-top: 1px solid color-mix(in oklab, var(--accent) 14%, transparent);
     }
+
+    /* per-beat bookmark icon — tucked in the top-right of every .video-beat.
+       hidden at rest (opacity 0); revealed on hover or while the beat is the
+       .current one. .is-on flips it to filled accent so already-bookmarked
+       beats show up clearly. small right-padding on the beat so the long-form
+       wordSpans don't flow under the icon. */
+    .video-beat { position: relative; padding-right: 22px; }
+    .vb-bookmark {
+      position: absolute;
+      top: 2px;
+      right: 0;
+      width: 18px;
+      height: 18px;
+      padding: 2px;
+      border: 0;
+      background: transparent;
+      color: var(--fg-muted);
+      cursor: pointer;
+      opacity: 0;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 160ms var(--ease-out), color 160ms var(--ease-out), background 160ms var(--ease-out);
+    }
+    .vb-bookmark svg { width: 14px; height: 14px; display: block; }
+    .video-beat:hover .vb-bookmark,
+    .video-beat.current .vb-bookmark { opacity: 0.7; }
+    .vb-bookmark:hover {
+      opacity: 1 !important;
+      color: var(--accent);
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+    }
+    .vb-bookmark.is-on {
+      opacity: 1 !important;
+      color: var(--accent);
+    }
+
+    /* bookmark chips row — sits between the karaoke stage and the controls
+       row. mono caption-style; chips are pills with the beat number; each
+       chip click seeks the audio to that beat. hidden when zero bookmarks. */
+    .video-bookmarks {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .video-bookmarks-label {
+      color: var(--accent);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .video-bookmark-chip {
+      display: inline-flex;
+      align-items: center;
+      height: 20px;
+      padding: 0 8px;
+      background: var(--surface);
+      border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+      border-radius: var(--r-pill);
+      color: var(--fg);
+      cursor: pointer;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      transition: transform 140ms var(--ease-out), border-color 140ms var(--ease-out), background 140ms var(--ease-out);
+    }
+    .video-bookmark-chip:hover {
+      transform: scale(1.04);
+      border-color: var(--accent);
+      background: color-mix(in oklab, var(--accent) 10%, transparent);
+    }
+    .video-bookmark-clear {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      background: transparent;
+      border: 0;
+      cursor: pointer;
+      padding: 2px 4px;
+      text-transform: lowercase;
+    }
+    .video-bookmark-clear:hover { text-decoration: underline; }
+
     .video-play-btn {
       flex: 0 0 auto;
       width: 44px;
@@ -3103,6 +3194,23 @@
     //   { turnId, status: "rendering"|"ready"|"error", hash?, mp4Url?, durationS?,
     //     bytes?, errorMessage?, ts, startedTs }
     const exportsByKey = new Map();
+    // per-session beat bookmarks — sessionKey → Map<turnId, sorted asc number[]>.
+    // populated by hello/session:upsert snapshots and bookmark:setting ws msgs.
+    // server is the source of truth; clicks POST /debug/bookmark and the
+    // resulting broadcast lands here.
+    const bookmarksByKey = new Map();
+    function bookmarksForKey(sessionKey, turnId) {
+      const m = bookmarksByKey.get(sessionKey);
+      if (!m) return [];
+      const arr = m.get(turnId);
+      return Array.isArray(arr) ? arr : [];
+    }
+    function setBookmarksForKey(sessionKey, turnId, list) {
+      let m = bookmarksByKey.get(sessionKey);
+      if (!m) { m = new Map(); bookmarksByKey.set(sessionKey, m); }
+      const sorted = Array.from(new Set(list)).sort((a, b) => a - b);
+      m.set(turnId, sorted);
+    }
     // setTimeout chain id (per sessionKey) used to tick the rendering-elapsed
     // label. NOT rAF — 1Hz is plenty and we don't want to compete with the
     // karaoke loop or run while the tab is hidden.
@@ -4405,6 +4513,13 @@
       const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       const normalize = w => String(w || "").toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
       const inlinePill = markerStyle === "pill";
+      // active bookmark indices for this script — drives the "is-on" state on
+      // each per-beat icon and the chips row below.
+      const bookmarkSet = new Set(bookmarksForKey(sessionKey, script.turnId));
+      // small ribbon icon. outline by default; the .is-on class on the button
+      // flips colour to accent (full state).
+      const BOOKMARK_SVG_OUTLINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
+      const BOOKMARK_SVG_FILLED  = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
       let globalWordIdx = 0;
       const beatsHtml = beats.map((b, i) => {
         const tokens = beatTokens[i];
@@ -4425,10 +4540,30 @@
           ? '<span class="video-marker ' + escAttr(b.marker) + '">' + escapeHtml(markerLabelFor(b.marker).toLowerCase().replace(/_/g, " ")) + '</span>'
           : "";
         const markerCls = showInlinePill ? " has-marker" : "";
+        const isOn = bookmarkSet.has(i);
+        const bookmarkBtnHtml = '<button type="button" class="vb-bookmark' + (isOn ? ' is-on' : '') + '" data-bookmark-idx="' + i + '" aria-label="' + (isOn ? 'remove bookmark' : 'bookmark beat') + '" aria-pressed="' + (isOn ? 'true' : 'false') + '">' + (isOn ? BOOKMARK_SVG_FILLED : BOOKMARK_SVG_OUTLINE) + '</button>';
+        const inner = showInlinePill ? markerHtml + '<div class="vb-line">' + wordSpans + '</div>' : wordSpans;
         return '<div class="video-beat future' + markerCls + '" data-beat-idx="' + i + '" data-marker="' + (b.marker ? escAttr(b.marker) : '') + '">' +
-                 (showInlinePill ? markerHtml + '<div class="vb-line">' + wordSpans + '</div>' : wordSpans) +
+                 inner + bookmarkBtnHtml +
                '</div>';
       }).join("");
+
+      // chip row above the controls: one chip per bookmarked beat, with a tiny
+      // "clear" link at the right end. hidden when zero bookmarks. chip click
+      // seeks audio to that beat's startS; the clear link POSTs the bulk-clear
+      // endpoint.
+      const sortedBookmarks = Array.from(bookmarkSet).sort((a, b) => a - b);
+      const bookmarksRowHtml = sortedBookmarks.length > 0
+        ? '<div class="video-bookmarks" role="group" aria-label="bookmarked beats">' +
+            '<span class="video-bookmarks-label">bookmarks</span>' +
+            sortedBookmarks.map(idx =>
+              '<button type="button" class="video-bookmark-chip" data-bookmark-seek="' + idx + '" aria-label="seek to beat ' + (idx + 1) + '">' +
+                escapeHtml('📑 #' + (idx + 1)) +
+              '</button>'
+            ).join('') +
+            '<button type="button" class="video-bookmark-clear" aria-label="clear all bookmarks">clear</button>' +
+          '</div>'
+        : '';
 
       const stageId = "vp-stage-" + cssIdSafe(sessionKey);
       const ctrlsId = "vp-controls-" + cssIdSafe(sessionKey);
@@ -4513,6 +4648,7 @@
           '<span class="video-duration">' + durStr + '</span>' +
         '</div>' +
         '<div class="video-pane-stage" id="' + stageId + '">' + beatsHtml + '</div>' +
+        bookmarksRowHtml +
         controlsHtml +
         '<div class="video-attribution">narrated by scriptifier · ' + escapeHtml(currentVoiceId) + '</div>';
 
@@ -4551,6 +4687,12 @@
       // buttons POST to /debug/voice. menu opens with a 140ms fade+y:-4 unless
       // prefers-reduced-motion.
       wireVoicePicker(sessionKey);
+
+      // wire bookmark controls — runs in every render path (icons exist on
+      // every beat regardless of audio readiness; chips/clear only render
+      // when there's at least one bookmark). icon-click toggles, chip-click
+      // seeks the audio runtime, clear-link wipes the turn.
+      wireBookmarkControls(sessionKey, script.turnId, beatBoundaries);
 
       // mount audio + wire controls. reuse existing runtime if turnId + audioUrl
       // match (so a refresh-tick doesn't interrupt playback).
@@ -4732,6 +4874,94 @@
         ' aria-label="download mp4">' +
           '<span class="ve-label">download mp4' + escapeHtml(sizeLabel) + '</span>' +
         '</a>';
+    }
+
+    // wire the per-beat bookmark icons + chips row + clear link. called from
+    // renderVideoPane on every render. handlers POST /debug/bookmark or the
+    // bulk-clear endpoint; the resulting bookmark:setting broadcast updates
+    // bookmarksByKey + triggers a refresh. optimistic local update keeps the
+    // icon snappy; on http error we revert.
+    function wireBookmarkControls(sessionKey, turnId, beatBoundaries) {
+      // icon click → toggle. delegate from .video-pane-stage so we don't have
+      // to attach one listener per beat (and so re-renders don't leak handlers).
+      const stage = dVideoPane.querySelector(".video-pane-stage");
+      if (stage) {
+        stage.onclick = (ev) => {
+          const btn = ev.target && ev.target.closest ? ev.target.closest(".vb-bookmark") : null;
+          if (!btn) return;
+          ev.stopPropagation();
+          const idxStr = btn.getAttribute("data-bookmark-idx");
+          if (idxStr === null) return;
+          const idx = Number(idxStr);
+          if (!Number.isFinite(idx) || idx < 0) return;
+          toggleBookmark(sessionKey, turnId, idx);
+        };
+      }
+      // chip click → seek to that beat's startS (if audio is mounted).
+      const chips = dVideoPane.querySelectorAll(".video-bookmark-chip[data-bookmark-seek]");
+      chips.forEach(chip => {
+        chip.onclick = () => {
+          const idxStr = chip.getAttribute("data-bookmark-seek");
+          if (idxStr === null) return;
+          const idx = Number(idxStr);
+          if (!Number.isFinite(idx) || idx < 0) return;
+          const rt = videoRuntime.get(sessionKey);
+          const bb = (beatBoundaries || [])[idx];
+          if (rt && rt.audio && bb && typeof bb.startS === "number") {
+            try { rt.audio.currentTime = Math.max(0, bb.startS); } catch {}
+            paintKaraokeFrame(sessionKey);
+          }
+        };
+      });
+      // clear link → POST /debug/bookmarks/clear, then optimistic wipe.
+      const clearBtn = dVideoPane.querySelector(".video-bookmark-clear");
+      if (clearBtn) {
+        clearBtn.onclick = async () => {
+          const prev = bookmarksForKey(sessionKey, turnId).slice();
+          setBookmarksForKey(sessionKey, turnId, []);
+          refresh();
+          try {
+            const res = await fetch("/debug/bookmarks/clear", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ sessionKey, turnId }),
+            });
+            if (!res.ok) {
+              setBookmarksForKey(sessionKey, turnId, prev);
+              refresh();
+            }
+          } catch {
+            setBookmarksForKey(sessionKey, turnId, prev);
+            refresh();
+          }
+        };
+      }
+    }
+
+    // optimistic toggle: flip the local set, repaint, then POST. on http error
+    // revert. server broadcasts bookmark:setting → ws handler re-syncs the
+    // canonical list (a no-op on success, corrects on failure).
+    async function toggleBookmark(sessionKey, turnId, beatIdx) {
+      const prev = bookmarksForKey(sessionKey, turnId).slice();
+      const next = prev.includes(beatIdx)
+        ? prev.filter(n => n !== beatIdx)
+        : prev.concat(beatIdx);
+      setBookmarksForKey(sessionKey, turnId, next);
+      refresh();
+      try {
+        const res = await fetch("/debug/bookmark", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ sessionKey, turnId, beatIdx, action: "toggle" }),
+        });
+        if (!res.ok) {
+          setBookmarksForKey(sessionKey, turnId, prev);
+          refresh();
+        }
+      } catch {
+        setBookmarksForKey(sessionKey, turnId, prev);
+        refresh();
+      }
     }
 
     // POST /debug/export-script for (sessionKey, turnId). server returns 202
@@ -5341,6 +5571,17 @@
       if (typeof snap.voice === "string" && VOICE_IDS.includes(snap.voice)) {
         voiceBySessionKey.set(key, snap.voice);
       }
+      // hydrate per-session bookmarks. snapshot.bookmarks is { turnId: [idx,…] }
+      // with arrays already sorted ascending; mirror straight into the local
+      // Map so a refresh repaints chips + filled-icon state without waiting
+      // for a fresh ws msg.
+      if (snap.bookmarks && typeof snap.bookmarks === "object") {
+        let m = bookmarksByKey.get(key);
+        if (!m) { m = new Map(); bookmarksByKey.set(key, m); }
+        for (const [turnId, list] of Object.entries(snap.bookmarks)) {
+          if (Array.isArray(list)) m.set(turnId, list.slice());
+        }
+      }
     }
 
     function appendEvent(sessionKey, ev) {
@@ -5494,6 +5735,11 @@
             ts: Date.now(),
             startedTs: prev ? prev.startedTs : Date.now(),
           });
+          refresh();
+        } else if (msg.kind === "bookmark:setting") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          const list = Array.isArray(msg.bookmarks) ? msg.bookmarks.filter(n => typeof n === "number") : [];
+          setBookmarksForKey(msg.sessionKey, msg.turnId, list);
           refresh();
         } else if (msg.kind === "export:error") {
           if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
