@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { startTailer, type SessionInfo } from "./tailer";
 import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
@@ -16,9 +17,7 @@ const MAX_EVENTS_PER_SESSION = 5000;
 // on every hot reload — see state.md issue #4).
 const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED !== "0";
 // META_OBSERVER_MODEL: per-turn decisions subprocess (sonnet by default — needs judgment).
-// META_NAMER_MODEL:    session-naming subprocess    (haiku  by default — short label task).
 const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-4-6";
-const NAMER_MODEL = Bun.env.META_NAMER_MODEL ?? "claude-haiku-4-5";
 const CHAT_MODEL = Bun.env.META_CHAT_MODEL ?? "claude-sonnet-4-6";
 const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
 // max chat chunks kept per session (in-memory only — lost on server restart).
@@ -78,7 +77,6 @@ type SessionState = {
   totalOutputTokens: number;   // cumulative output across all assistant messages
   observerDecisions: ObserverInsight[];
   observerByTurn: Map<string, number>;
-  sessionName?: string;             // observer-given 2-3 word display name
   recentClosedTurns: Turn[];        // ring buffer (RECENT_CLOSED_TURNS) used to seed auto-fired chats
 };
 
@@ -129,10 +127,32 @@ function getOrCreate(info: SessionInfo): SessionState {
   return s;
 }
 
+// chat-agent sessions live under ~/.cut-the-cake/chat/<sha1(upstream-key, 12)>/
+// so their slug ends with that hash. resolve back to the upstream session by
+// scanning the live session map for a key whose hash matches — gives us the
+// upstream project name to use as a prefix on the chat session's display name.
+function chatHashFor(sessionKey: string): string {
+  return createHash("sha1").update(sessionKey).digest("hex").slice(0, 12);
+}
+function chatDisplayNameFor(info: SessionInfo): string | null {
+  const m = info.slug.match(/cut-the-cake-chat-([a-f0-9]+)$/);
+  if (!m) return null;
+  const hash = m[1];
+  for (const k of sessions.keys()) {
+    if (chatHashFor(k) !== hash) continue;
+    const upstream = sessions.get(k);
+    const slug = upstream?.info.slug ?? "";
+    const project = slug.replace(/^-+/, "").split("-").pop() ?? "";
+    if (project) return `${project} · chat`;
+  }
+  return null;
+}
+
 function snapshot(s: SessionState) {
   const k = keyFor(s.info);
   const chat = chatThreads.get(k);
   const status = chatStatuses.get(k);
+  const displayName = chatDisplayNameFor(s.info);
   return {
     key: k,
     info: s.info,
@@ -143,7 +163,7 @@ function snapshot(s: SessionState) {
     contextTokens: s.contextTokens,
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
-    ...(s.sessionName ? { sessionName: s.sessionName } : {}),
+    ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
   };
@@ -210,7 +230,7 @@ function clip(s: string, n: number): string {
 function buildChatSeed(s: SessionState, decision?: ObserverInsight | null): string {
   const k = keyFor(s.info);
   const lines: string[] = [];
-  lines.push(`The user just watched session "${s.sessionName ?? s.info.slug}" finish a turn.`);
+  lines.push(`The user just watched session "${s.info.slug}" finish a turn.`);
   if (decision?.insight) lines.push(`Observer flagged: ${decision.insight}`);
   if (decision?.tags?.length) lines.push(`Tags: ${decision.tags.join(", ")}`);
   if (s.recentClosedTurns.length) {
@@ -249,7 +269,7 @@ function maybeAutoSendChat(s: SessionState, decision: ObserverInsight) {
   lastAutoSendTs.set(key, now);
   const seed = buildChatSeed(s, decision);
   console.log(
-    `[auto-send] ${s.sessionName ?? s.info.slug} · prefill="${clip(decision.prefill, 80)}"`
+    `[auto-send] ${s.info.slug} · prefill="${clip(decision.prefill, 80)}"`
   );
   chatHost.send(key, decision.prefill, { seed, userKind: "auto" });
 }
@@ -455,7 +475,6 @@ console.log(`[chat] enabled · model=${CHAT_MODEL}`);
 const observer = OBSERVER_ENABLED
   ? startObserver({
       decisionsModel: OBSERVER_MODEL,
-      namerModel: NAMER_MODEL,
       batchMs: OBSERVER_BATCH_MS,
       onDecision(d) {
         const s = sessions.get(d.sessionKey);
@@ -487,24 +506,11 @@ const observer = OBSERVER_ENABLED
         // session to a primed thread instead of an empty input.
         maybeAutoSendChat(s, decision);
       },
-      onName(u) {
-        const s = sessions.get(u.sessionKey);
-        if (!s) return;
-        if (!u.name) return;
-        s.sessionName = u.name;
-        if (isVisible(s)) {
-          broadcast({
-            kind: "observer:name",
-            sessionKey: u.sessionKey,
-            name: u.name,
-          });
-        }
-      },
     })
   : null;
 if (observer) {
   console.log(
-    `[observer] enabled · decisions=${OBSERVER_MODEL} · namer=${NAMER_MODEL} · batch=${OBSERVER_BATCH_MS}ms`
+    `[observer] enabled · decisions=${OBSERVER_MODEL} · batch=${OBSERVER_BATCH_MS}ms`
   );
 }
 // graceful shutdown — give abort signals a moment to terminate sdk subprocesses
@@ -544,13 +550,12 @@ startTailer({
   },
   onEvent(info, ev) {
     // our own sdk subprocesses (observer decisions: ~/.chunk-to-chat/observer/,
-    // namer: ~/.cut-the-cake/namer/, chat hosts: ~/.cut-the-cake/chat/<hash>/)
-    // are themselves cc subprocesses whose jsonls get tailed. surface them as
-    // session cards so the user can see they're alive, but never feed their
-    // own turns back (would be an infinite mirror).
+    // chat hosts: ~/.cut-the-cake/chat/<hash>/) are themselves cc subprocesses
+    // whose jsonls get tailed. surface them as session cards so the user can
+    // see they're alive, but never feed their own turns back (would be an
+    // infinite mirror).
     const isObserverSelf =
       info.slug.includes("chunk-to-chat-observer") ||
-      info.slug.includes("cut-the-cake-namer") ||
       info.slug.includes("cut-the-cake-chat");
     const s = getOrCreate(info);
     const wasVisible = isVisible(s);

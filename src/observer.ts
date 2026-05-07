@@ -1,7 +1,6 @@
-// two long-lived sdk subprocesses:
+// one long-lived sdk subprocess:
 //   - decisions: sonnet-4-6, returns per-turn {open, insight, tags, prefill}
-//   - namer:     haiku-4-5,  returns per-session {sessionName}
-// each keeps prior-batch context so it can adapt as activity shifts.
+// keeps prior-batch context so it can adapt as activity shifts.
 //
 // pattern: claude-mem ClaudeProvider — query() from @anthropic-ai/claude-agent-sdk,
 // async-generator prompt feed, sandboxed cwd, all tools disallowed.
@@ -39,19 +38,11 @@ export type GateDecision = {
   prefill?: string;
 };
 
-export type SessionNameUpdate = {
-  sessionKey: string;
-  name: string;
-};
-
 export type ObserverOptions = {
   /** model for the per-turn decisions subprocess (sonnet by default). */
   decisionsModel?: string;
-  /** model for the session-naming subprocess (haiku by default). */
-  namerModel?: string;
   batchMs?: number;
   onDecision?: (d: GateDecision) => void;
-  onName?: (s: SessionNameUpdate) => void;
 };
 
 const DISALLOWED_TOOLS = [
@@ -70,9 +61,8 @@ const DISALLOWED_TOOLS = [
 ];
 
 // observer cwd kept under the legacy ~/.chunk-to-chat/ dir for now (cosmetic
-// rename in resume queue). namer is fresh, so it lives under the new ~/.cut-the-cake/.
+// rename in resume queue).
 const DECISIONS_DIR = join(homedir(), ".chunk-to-chat", "observer");
-const NAMER_DIR = join(homedir(), ".cut-the-cake", "namer");
 
 const DECISIONS_INTRO = `You are the observer for cut-the-cake, a tool that watches Claude Code sessions and surfaces moments worth user review.
 
@@ -107,23 +97,6 @@ Reply with ONLY a JSON object. No prose, no markdown fences. Schema:
 The decisions array is in the same order as the input batch (one entry per turn).
 
 Tags are short kebab-case labels you invent; we will use them later to learn your patterns. Examples: "loop-suspected", "scope-creep", "test-failures", "style-rewrite".`;
-
-const NAMER_INTRO = `You are the session namer for cut-the-cake, a tool that watches Claude Code sessions.
-
-Your only job: for each distinct session that appears in a batch of recently-closed turns, produce a short rolling display name.
-
-sessionName constraints:
-- 2-3 words, lowercase, no punctuation (e.g. "auth migration", "renderer redesign", "polish queue", "scrape parser")
-- describe what the agent is working on RIGHT NOW, not the project's directory name
-- update as the focus shifts — if the agent pivots from auth to logging mid-session, name with the current focus
-- ≤20 characters total
-
-You see prior batches in your context; use that memory to keep names stable when the focus is unchanged, and to update when the focus has clearly shifted. If you've only seen one turn for a session this run, omit it from the response.
-
-Reply with ONLY a JSON object. No prose, no markdown fences. Schema:
-{"names": [{"sessionKey": "<from input>", "sessionName": "..."}, ...]}
-
-The names array contains one entry per distinct session in the input that you can confidently name.`;
 
 function findClaudeExecutable(): string {
   try {
@@ -226,37 +199,6 @@ function parseDecisionsResponse(text: string): Array<Omit<GateDecision, "session
       ...(tags && tags.length ? { tags } : {}),
       ...(prefill ? { prefill } : {}),
     });
-  }
-  return out;
-}
-
-function parseNamesResponse(text: string): SessionNameUpdate[] | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stripFences(text));
-  } catch {
-    return null;
-  }
-  let raw: unknown[];
-  if (Array.isArray(parsed)) {
-    raw = parsed;
-  } else if (parsed && typeof parsed === "object") {
-    const o = parsed as Record<string, unknown>;
-    raw = Array.isArray(o.names) ? o.names : [];
-  } else {
-    return null;
-  }
-  const out: SessionNameUpdate[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const o = item as Record<string, unknown>;
-    const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
-    const name =
-      typeof o.sessionName === "string" && o.sessionName.trim().length > 0
-        ? o.sessionName.trim().slice(0, 24)
-        : null;
-    if (!sessionKey || !name) continue;
-    out.push({ sessionKey, name });
   }
   return out;
 }
@@ -452,7 +394,6 @@ export function startObserver(opts: ObserverOptions): {
   stop: () => void;
 } {
   const decisionsModel = opts.decisionsModel ?? "claude-sonnet-4-6";
-  const namerModel = opts.namerModel ?? "claude-haiku-4-5";
   const batchMs = opts.batchMs ?? 30_000;
 
   const decisions = startSdkLoop({
@@ -487,40 +428,12 @@ export function startObserver(opts: ObserverOptions): {
     },
   });
 
-  const namer = startSdkLoop({
-    model: namerModel,
-    cwd: NAMER_DIR,
-    label: "namer",
-    batchMs,
-    systemIntro: NAMER_INTRO,
-    formatTrailing: `Reply with a JSON object: {"names": [...one per distinct session you can confidently name...]}. No other text.`,
-    sdkSessionId: "cut-the-cake-namer",
-    onResponse(text, batch) {
-      const parsed = parseNamesResponse(text);
-      if (!parsed) {
-        console.log(`[namer] could not parse: ${clip(text, 200)}`);
-        return;
-      }
-      const validKeys = new Set(batch.map((t) => t.sessionKey));
-      for (const n of parsed) {
-        if (!validKeys.has(n.sessionKey)) {
-          console.log(`[namer] unknown sessionKey in response: ${n.sessionKey.slice(0, 24)}`);
-          continue;
-        }
-        opts.onName?.(n);
-        console.log(`[namer] name ${n.sessionKey.slice(0, 24)} — [${n.name}]`);
-      }
-    },
-  });
-
   return {
     feed(t) {
       decisions.feed(t);
-      namer.feed(t);
     },
     stop() {
       decisions.stop();
-      namer.stop();
     },
   };
 }

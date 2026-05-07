@@ -124,6 +124,9 @@
       display: block;
       transform-origin: 50% 100%;
       will-change: transform;
+      -webkit-user-drag: none;
+      user-select: none;
+      -webkit-user-select: none;
     }
     /* anchor variants — left/top/right resolved relative to the target's offset parent. */
     .cake-perch.bar-top {
@@ -328,9 +331,9 @@
     }
 
     /* inbox separator — divides user-driven sessions (top) from sdk
-       subprocesses we spawned ourselves (bottom: chat-agent, observer,
-       namer). centered hairline label, mono, muted. sits inline in the
-       cards-list flow so the FLIP layout snapshot still works. */
+       subprocesses we spawned ourselves (bottom: chat-agent, observer).
+       centered hairline label, mono, muted. sits inline in the cards-list
+       flow so the FLIP layout snapshot still works. */
     .inbox-separator {
       display: flex;
       align-items: center;
@@ -406,6 +409,9 @@
       pointer-events: none;
       object-fit: contain;
       z-index: 2;      /* float over the card's text content */
+      -webkit-user-drag: none;
+      user-select: none;
+      -webkit-user-select: none;
     }
     .card-head {
       display: flex;
@@ -1381,13 +1387,13 @@
     }
     function sessionName(infoOrSess) {
       if (!infoOrSess) return "—";
-      const sess = infoOrSess.info ? infoOrSess : null;
-      const info = sess ? sess.info : infoOrSess;
-      const project = projectName(info);
-      const obs = sess && sess.sessionName ? sess.sessionName : null;
-      if (!obs) return project || "—";
-      if (obs === project) return project;
-      return "[" + project + "] " + obs;
+      // server attaches a `displayName` for chat-agent sessions: parses their
+      // sandbox-hash slug back to the upstream session's project name and uses
+      // "<project> · chat" so the inbox card reads as the parent's helper, not
+      // an anonymous hash. fall through to the slug-derived name otherwise.
+      if (infoOrSess.displayName) return infoOrSess.displayName;
+      const info = infoOrSess.info ? infoOrSess.info : infoOrSess;
+      return projectName(info) || "—";
     }
     function fmtElapsed(sess) {
       const ts = sess?.lastEventTs;
@@ -1537,6 +1543,11 @@
     // last placed perch, recorded so we can short-circuit refresh re-mounts
     // when the same session+target combo is still valid (avoids replay flicker).
     let lastCakePerchKey = null;
+    // per-session salt mixed into the pick/tilt hashes — bumped each time the
+    // mascot wanders to a fresh spot (after the user pesters it with too many
+    // hovers in too short a window). icon hash deliberately omits the salt
+    // so the same mascot character keeps showing up just in different perches.
+    const perchWanderSalt = new Map();
     function placeCakePerch(sessionId, opts) {
       const animate = !!(opts && opts.animate);
       // chart/chat-input innerHTML is wiped every 5s refresh, taking the cake
@@ -1568,24 +1579,64 @@
         }
       }
       if (!candidates.length) return;
-      const pickH = cakeHash(sessionId + ":pick");
-      const tiltH = cakeHash(sessionId + ":tilt");
+      const salt = perchWanderSalt.get(sessionId) || 0;
+      const pickH = cakeHash(sessionId + ":pick:" + salt);
+      const tiltH = cakeHash(sessionId + ":tilt:" + salt);
       const pick = candidates[pickH % candidates.length];
       const tilt = (tiltH % 31) - 15; // -15..+15 deg
       // ensure the host is a positioned ancestor so absolute children anchor here.
       if (getComputedStyle(pick.el).position === "static") pick.el.style.position = "relative";
+      // icon stays on its session-stable hash (no salt) — same mascot, just
+      // jumping between perches when it wanders.
       const iconIdx = cakeHash(sessionId + ":icon") % CAKE_PERCH_ICONS.length;
       const iconSrc = CAKE_PERCH_ICONS[iconIdx];
       const cake = document.createElement("span");
       cake.id = "cake-perch";
       cake.className = "cake-perch " + pick.anchor;
       cake.style.cssText = "--cake-size: " + pick.size + "px; --cake-tilt: " + tilt + "deg;";
-      cake.innerHTML = '<img src="' + iconSrc + '" alt="" />';
+      cake.innerHTML = '<img src="' + iconSrc + '" alt="" draggable="false" />';
       pick.el.appendChild(cake);
       lastCakePerchKey = sessionId + "|" + pick.anchor;
       // mascot appears silently — no entrance animation, just shows up in place.
       // (the prior fade-out on session change still runs so the old cake clears
       // cleanly before the new one mounts.)
+    }
+    // explicit relocate: bumps the wander salt so placeCakePerch picks a fresh
+    // anchor, then plays an entrance animation on the new perch (placeCakePerch
+    // itself is silent on entry so refresh re-mounts don't flash). triggered by
+    // the pestering-bait threshold below.
+    function wanderPerch(sessionId) {
+      if (!sessionId) return;
+      perchWanderSalt.set(sessionId, (perchWanderSalt.get(sessionId) || 0) + 1);
+      placeCakePerch(sessionId, { animate: true });
+      const cake = document.getElementById("cake-perch");
+      if (!cake || typeof gsap === "undefined" || reduceMotionOn()) return;
+      // delay slightly so the prior cake's 0.35s fade has visibly started; then
+      // drop the new one in with a soft overshoot.
+      gsap.from(cake, {
+        opacity: 0, scale: 0.4, y: -14,
+        duration: 0.5, delay: 0.18,
+        ease: "back.out(1.6)",
+        clearProps: "transform,opacity",
+      });
+    }
+    // pestering-bait counter: tracks recent hover timestamps over a 30s sliding
+    // window. when count crosses a per-trigger threshold (rerolled to 2..5 each
+    // time the bait fires) the perch wanders to a fresh anchor.
+    const perchHoverTimes = [];
+    let perchTeaseLimit = 2 + Math.floor(Math.random() * 4); // 2..5 inclusive
+    function recordPerchHover() {
+      const now = Date.now();
+      perchHoverTimes.push(now);
+      while (perchHoverTimes.length && now - perchHoverTimes[0] > 30_000) {
+        perchHoverTimes.shift();
+      }
+      if (perchHoverTimes.length >= perchTeaseLimit) {
+        perchHoverTimes.length = 0;
+        perchTeaseLimit = 2 + Math.floor(Math.random() * 4);
+        return true;
+      }
+      return false;
     }
     // as a css mask so editing the svg file updates every bar. the span itself
     // carries no markup; the bar's currentColor fills the masked shape.
@@ -1774,15 +1825,14 @@
 
     // sessions whose cwd lives under our own sandbox dirs — these are the
     // sdk subprocesses the server itself spawns (chat-agent under
-    // ~/.cut-the-cake/chat/<hash>/, namer under ~/.cut-the-cake/namer/,
-    // observer under ~/.chunk-to-chat/observer/ on the legacy path). they're
-    // real cc sessions from the tailer's POV, but they aren't user-driven
-    // work — render them grouped under a divider at the bottom of the inbox
-    // so the user-driven cards are never interleaved with our own machinery.
+    // ~/.cut-the-cake/chat/<hash>/, observer under ~/.chunk-to-chat/observer/
+    // on the legacy path). they're real cc sessions from the tailer's POV,
+    // but they aren't user-driven work — render them grouped under a divider
+    // at the bottom of the inbox so the user-driven cards are never
+    // interleaved with our own machinery.
     function isInternalSession(sess) {
       const slug = sess?.info?.slug || '';
       return slug.includes('cut-the-cake-chat') ||
-             slug.includes('cut-the-cake-namer') ||
              slug.includes('chunk-to-chat-observer') ||
              slug.includes('cut-the-cake-observer');
     }
@@ -1852,7 +1902,7 @@
 
       if (opts.selected) {
         const mascotSrc = state === "idle" ? MASCOT_IDLE : MASCOT_ACTIVE;
-        html += '<img class="card-mascot" src="' + mascotSrc + '" alt="" />';
+        html += '<img class="card-mascot" src="' + mascotSrc + '" alt="" draggable="false" />';
       }
       return html;
     }
@@ -1867,12 +1917,11 @@
     function cardSig(sess) {
       // signature of "did the meaningful content change?" — avoids flashing
       // on every minute-tick or selection change. covers new events, new
-      // observer insights, and rolling summary updates.
+      // observer insights.
       const ins = latestOpenInsight(sess.observerDecisions);
       return [
         sess.lastEventTs || 0,
         ins?.insight || "",
-        sess.sessionName || "",
       ].join("");
     }
 
@@ -2013,7 +2062,7 @@
       }
 
       // partition: user-driven cards on top, server-spawned sdk subprocesses
-      // (observer + namer + chat agents) below a divider. inside each group
+      // (observer + chat agents) below a divider. inside each group
       // the original lastEventTs sort is preserved.
       const realList = list.filter(s => !isInternalSession(s));
       const internalList = list.filter(s => isInternalSession(s));
@@ -2539,11 +2588,267 @@
         .to(mascot, { opacity: 1, duration: 0.5, ease: "power2.inOut" }, "<");
     });
 
-    // wandering cake-perch hover: same jump-roll the brand-mark does, just
-    // tuned a bit larger. delegated so the perch keeps the listener after
-    // every 5s re-mount inside the detail pane. animates the inner <img>
-    // (the outer span owns positional transforms set in CSS — animating it
-    // would clobber the `translate(-50%) rotate(tilt)` chain).
+    // wandering cake-perch hover: pool of 15 mild reactions, picked at random
+    // each time so it doesn't feel scripted. all animate the inner <img> (the
+    // outer span owns positional transforms set in CSS — animating it would
+    // clobber the `translate(-50%) rotate(tilt)` chain). cleanup `gsap.set`
+    // resets every prop any pool member touches so leftover state never leaks
+    // between picks. delegated so the perch keeps the listener after every 5s
+    // re-mount inside the detail pane.
+    const PERCH_REACTIONS = [
+      // 1. walk left → flip → walk right → flip back → small step home.
+      function walkFlip(img) {
+        return gsap.timeline()
+          .to(img, { x: -10, duration: 0.45, ease: "sine.inOut" })
+          .to(img, { y: -2, duration: 0.12, ease: "sine.inOut", yoyo: true, repeat: 3 }, "<")
+          .to(img, { rotationY: 180, duration: 0.3, ease: "power2.inOut" })
+          .to(img, { x: 10, duration: 0.6, ease: "sine.inOut" })
+          .to(img, { y: -2, duration: 0.12, ease: "sine.inOut", yoyo: true, repeat: 4 }, "<")
+          .to(img, { rotationY: 360, duration: 0.3, ease: "power2.inOut" })
+          .to(img, { x: 0, duration: 0.32, ease: "sine.inOut" });
+      },
+      // 2. soft head-tilt nod — small z-axis sway.
+      function nod(img) {
+        return gsap.timeline()
+          .to(img, { rotation: 8, duration: 0.22, ease: "sine.inOut" })
+          .to(img, { rotation: -6, duration: 0.3, ease: "sine.inOut" })
+          .to(img, { rotation: 4, duration: 0.25, ease: "sine.inOut" })
+          .to(img, { rotation: 0, duration: 0.2, ease: "sine.inOut" });
+      },
+      // 3. tiny double-hop — two short bounces with a settle.
+      function hop(img) {
+        return gsap.timeline()
+          .to(img, { y: -7, duration: 0.18, ease: "power2.out" })
+          .to(img, { y: 0, duration: 0.22, ease: "back.out(2)" })
+          .to(img, { y: -4, duration: 0.14, ease: "power2.out" }, "+=0.05")
+          .to(img, { y: 0, duration: 0.2, ease: "back.out(2)" });
+      },
+      // 4. gentle breathe — scale up, then back down.
+      function breathe(img) {
+        return gsap.timeline()
+          .to(img, { scale: 1.12, duration: 0.32, ease: "sine.inOut" })
+          .to(img, { scale: 1, duration: 0.5, ease: "sine.out" });
+      },
+      // 5. peek — sidestep right, look back (flip), and slide home.
+      function peek(img) {
+        return gsap.timeline()
+          .to(img, { x: 8, duration: 0.3, ease: "sine.inOut" })
+          .to(img, { rotationY: 180, duration: 0.28, ease: "power2.inOut" })
+          .to(img, { y: -2, duration: 0.18, ease: "sine.inOut", yoyo: true, repeat: 1 })
+          .to(img, { rotationY: 360, duration: 0.28, ease: "power2.inOut" })
+          .to(img, { x: 0, duration: 0.3, ease: "sine.inOut" });
+      },
+      // 6. wiggle — quick tail-wag rotation, decaying amplitude.
+      function wiggle(img) {
+        return gsap.timeline()
+          .to(img, { rotation: -6, duration: 0.1, ease: "sine.inOut" })
+          .to(img, { rotation: 6, duration: 0.12, ease: "sine.inOut" })
+          .to(img, { rotation: -4, duration: 0.12, ease: "sine.inOut" })
+          .to(img, { rotation: 3, duration: 0.12, ease: "sine.inOut" })
+          .to(img, { rotation: 0, duration: 0.16, ease: "sine.out" });
+      },
+      // 7. spin — slow gentle full z-axis rotation, no translate.
+      function spin(img) {
+        return gsap.timeline()
+          .to(img, { rotation: 360, duration: 0.9, ease: "power2.inOut" });
+      },
+      // 8. squish — squash-and-stretch on the x/y scale axes.
+      function squish(img) {
+        return gsap.timeline()
+          .to(img, { scaleX: 1.18, scaleY: 0.85, duration: 0.18, ease: "power2.out" })
+          .to(img, { scaleX: 0.9, scaleY: 1.12, duration: 0.22, ease: "power2.inOut" })
+          .to(img, { scaleX: 1, scaleY: 1, duration: 0.3, ease: "back.out(1.6)" });
+      },
+      // 9. lean — tilt and hold briefly, settle with overshoot.
+      function lean(img) {
+        return gsap.timeline()
+          .to(img, { rotation: -15, duration: 0.32, ease: "power2.out" })
+          .to(img, { rotation: 0, duration: 0.55, ease: "back.out(1.4)" }, "+=0.1");
+      },
+      // 10. shy — fade to half, scale down, then back up.
+      function shy(img) {
+        return gsap.timeline()
+          .to(img, { opacity: 0.55, scale: 0.85, duration: 0.3, ease: "sine.inOut" })
+          .to(img, { opacity: 1, scale: 1, duration: 0.5, ease: "sine.out" }, "+=0.1");
+      },
+      // 11. bobble — small circular path through four cardinal nudges.
+      function bobble(img) {
+        return gsap.timeline()
+          .to(img, { x: -4, y: -3, duration: 0.16, ease: "sine.inOut" })
+          .to(img, { x: 0,  y: -6, duration: 0.16, ease: "sine.inOut" })
+          .to(img, { x: 4,  y: -3, duration: 0.16, ease: "sine.inOut" })
+          .to(img, { x: 0,  y: 0,  duration: 0.18, ease: "sine.inOut" });
+      },
+      // 12. doubleFlip — two quick y-axis flips in place. on-complete reset
+      //     handles the visual snap from 720° back to 0°.
+      function doubleFlip(img) {
+        return gsap.timeline()
+          .to(img, { rotationY: 360, duration: 0.42, ease: "power2.inOut" })
+          .to(img, { rotationY: 720, duration: 0.42, ease: "power2.inOut" });
+      },
+      // 13. shimmy — fast small horizontal jitter, decaying.
+      function shimmy(img) {
+        return gsap.timeline()
+          .to(img, { x: -3, duration: 0.08, ease: "sine.inOut" })
+          .to(img, { x: 3,  duration: 0.1,  ease: "sine.inOut" })
+          .to(img, { x: -2, duration: 0.1,  ease: "sine.inOut" })
+          .to(img, { x: 2,  duration: 0.1,  ease: "sine.inOut" })
+          .to(img, { x: 0,  duration: 0.14, ease: "sine.out" });
+      },
+      // 14. stretch — pull tall briefly, then settle.
+      function stretch(img) {
+        return gsap.timeline()
+          .to(img, { scaleY: 1.2,  scaleX: 0.95, duration: 0.32, ease: "sine.out" })
+          .to(img, { scaleY: 1,    scaleX: 1,    duration: 0.45, ease: "back.out(1.4)" });
+      },
+      // 15. bow — tilt forward + slight scale-down (a small curtsy), straighten.
+      function bow(img) {
+        return gsap.timeline()
+          .to(img, { rotation: 14, scale: 0.92, duration: 0.3, ease: "sine.out" })
+          .to(img, { rotation: 0,  scale: 1,    duration: 0.45, ease: "back.out(1.6)" }, "+=0.1");
+      },
+    ];
+
+    // over-the-top specials. picked with ~5% probability instead of the regular
+    // pool — purely for delight, never gating any UX. side effects (sparkles,
+    // confetti, ring) are fixed-position spans appended to body so they can
+    // cover the whole viewport without being clipped by perch ancestors. each
+    // returns a timeline tied to the mascot itself so the standard onComplete
+    // cleanup still fires once the mascot animation settles.
+    const SPARKLE_COLORS = [
+      "#ec4899", "#f9a8d4", "#a855f7", "#fbbf24",
+      "#5dd0c2", "#7c8cf0", "#fb923c", "#34d399",
+    ];
+    function spawnFlyer(originX, originY, opts) {
+      const s = document.createElement("span");
+      s.className = "sprinkle-burst" + (opts.round ? " round" : "");
+      s.style.position = "fixed";
+      s.style.left = originX + "px";
+      s.style.top = originY + "px";
+      s.style.background = opts.color;
+      s.style.opacity = "0";
+      s.style.zIndex = "1000";
+      s.style.pointerEvents = "none";
+      document.body.appendChild(s);
+      gsap.set(s, { xPercent: -50, yPercent: -50, rotation: Math.random() * 360 });
+      gsap.timeline({ onComplete: () => s.remove() })
+        .to(s, { opacity: 1, duration: 0.1 }, 0)
+        .to(s, {
+          x: opts.dx, y: opts.dy,
+          rotation: "+=" + opts.rot,
+          duration: opts.dur,
+          ease: opts.ease || "power2.out",
+        }, 0)
+        .to(s, { opacity: 0, duration: 0.35, ease: "power1.in" }, opts.dur - 0.35);
+    }
+    const PERCH_SPECIALS = [
+      // A. fullscreen sparkle explosion radiating from the perch.
+      function sparkleExplosion(img, perch) {
+        const r = perch.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const count = 36;
+        for (let i = 0; i < count; i++) {
+          const angle = (Math.PI * 2 / count) * i + (Math.random() - 0.5) * 0.4;
+          const dist = 220 + Math.random() * 380;
+          spawnFlyer(cx, cy, {
+            round: Math.random() < 0.4,
+            color: SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)],
+            dx: Math.cos(angle) * dist,
+            dy: Math.sin(angle) * dist,
+            rot: (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 540),
+            dur: 0.85 + Math.random() * 0.5,
+          });
+        }
+        return gsap.timeline()
+          .to(img, { y: -22, scale: 1.45, duration: 0.32, ease: "back.out(2)" })
+          .to(img, { rotation: 720, duration: 0.7, ease: "power2.inOut" }, "<")
+          .to(img, { y: 0, scale: 1, duration: 0.5, ease: "back.out(1.6)" }, "-=0.2");
+      },
+      // B. confetti rain — pieces fall from the top of the viewport, mascot
+      //    does a celebratory hop with a small head-shake.
+      function confettiRain(img, perch) {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        const count = 42;
+        for (let i = 0; i < count; i++) {
+          const startX = Math.random() * w;
+          spawnFlyer(startX, -20, {
+            round: Math.random() < 0.5,
+            color: SPARKLE_COLORS[Math.floor(Math.random() * SPARKLE_COLORS.length)],
+            dx: (Math.random() - 0.5) * 220,
+            dy: h + 60,
+            rot: (Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 720),
+            dur: 1.4 + Math.random() * 0.9,
+            ease: "power1.in",
+          });
+        }
+        return gsap.timeline()
+          .to(img, { y: -16, scale: 1.2, duration: 0.28, ease: "power2.out" })
+          .to(img, { rotation: -10, duration: 0.16, ease: "sine.inOut", yoyo: true, repeat: 3 }, "<")
+          .to(img, { y: 0, scale: 1, rotation: 0, duration: 0.5, ease: "back.out(1.6)" });
+      },
+      // C. disco spin — three full z-rotations, scale pop, hue-rotate filter
+      //    sweeps through the rainbow then unwinds. proxy-tween drives the
+      //    filter since gsap doesn't natively interpolate hue-rotate strings.
+      function discoSpin(img) {
+        const proxy = { hue: 0 };
+        const tl = gsap.timeline({
+          onComplete: () => { img.style.filter = ""; },
+        });
+        tl.to(img, { scale: 1.3, y: -10, duration: 0.22, ease: "power2.out" })
+          .to(img, { rotation: 1080, duration: 1.0, ease: "power2.inOut" }, "<")
+          .to(proxy, {
+            hue: 720, duration: 1.0,
+            onUpdate: () => {
+              img.style.filter = "hue-rotate(" + proxy.hue + "deg) saturate(1.4)";
+            },
+          }, "<")
+          .to(img, { scale: 1, y: 0, duration: 0.4, ease: "back.out(1.6)" });
+        return tl;
+      },
+      // D. comic burst — POW-style scale spike, brief shake, plus an expanding
+      //    accent ring that emanates from the perch's screen position.
+      function comicBurst(img, perch) {
+        const r = perch.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const ring = document.createElement("span");
+        ring.style.position = "fixed";
+        ring.style.left = cx + "px";
+        ring.style.top = cy + "px";
+        ring.style.width = "30px";
+        ring.style.height = "30px";
+        ring.style.border = "3px solid var(--accent, #ec4899)";
+        ring.style.borderRadius = "50%";
+        ring.style.pointerEvents = "none";
+        ring.style.zIndex = "999";
+        document.body.appendChild(ring);
+        gsap.set(ring, { xPercent: -50, yPercent: -50, scale: 1, opacity: 0.9 });
+        gsap.to(ring, {
+          scale: 9, opacity: 0,
+          duration: 0.6, ease: "power2.out",
+          onComplete: () => ring.remove(),
+        });
+        return gsap.timeline()
+          .to(img, { scale: 2.2, duration: 0.18, ease: "back.out(2.5)" })
+          .to(img, { rotation: -8, duration: 0.05 })
+          .to(img, { rotation: 8,  duration: 0.05 })
+          .to(img, { rotation: -5, duration: 0.05 })
+          .to(img, { rotation: 3,  duration: 0.05 })
+          .to(img, { rotation: 0, scale: 1, duration: 0.42, ease: "back.out(1.8)" });
+      },
+    ];
+
+    function resetPerchImg(img) {
+      gsap.set(img, {
+        rotationY: 0, rotation: 0,
+        x: 0, y: 0,
+        scale: 1, scaleX: 1, scaleY: 1,
+        opacity: 1,
+      });
+    }
+
     document.addEventListener("mouseover", (ev) => {
       if (typeof gsap === "undefined" || reduceMotionOn()) return;
       const t = ev.target;
@@ -2553,18 +2858,38 @@
       const img = perch.querySelector("img");
       if (!img) return;
       if (perch.dataset.spinning === "1") return;
-      perch.dataset.spinning = "1";
-      gsap.timeline({
-        onComplete: () => {
-          gsap.set(img, { rotation: 0, y: 0 });
+
+      // 1/20 lottery: over-the-top reaction. plays in place; doesn't count
+      // against the wander threshold (specials are the reward, not the bait).
+      if (Math.random() < 1 / 20) {
+        perch.dataset.spinning = "1";
+        const special = PERCH_SPECIALS[Math.floor(Math.random() * PERCH_SPECIALS.length)];
+        const tl = special(img, perch);
+        tl.eventCallback("onComplete", () => {
+          resetPerchImg(img);
           perch.dataset.spinning = "0";
-        },
-      })
-        // identical to the brand jump-roll — y/durations/eases all match
-        // brandJumpRoll() so the cake animates the same way wherever it lives.
-        .to(img, { y: -16, duration: 0.28, ease: "expo.out" })
-        .to(img, { rotation: 360, duration: 0.55, ease: "power2.inOut" }, "<0.05")
-        .to(img, { y: 0, duration: 0.45, ease: "expo.out" }, "-=0.25");
+        });
+        return;
+      }
+
+      // pestering bait: 2-5 hovers (rerolled each trigger) inside a 10s window
+      // and the mascot relocates to a fresh anchor instead of reacting in place.
+      if (recordPerchHover()) {
+        const sid = selectedSessionId();
+        if (sid) {
+          wanderPerch(sid);
+          return;
+        }
+      }
+
+      // regular reaction pool.
+      perch.dataset.spinning = "1";
+      const pick = PERCH_REACTIONS[Math.floor(Math.random() * PERCH_REACTIONS.length)];
+      const tl = pick(img);
+      tl.eventCallback("onComplete", () => {
+        resetPerchImg(img);
+        perch.dataset.spinning = "0";
+      });
     });
 
     function renderChatInput(sess, latestFlag) {
@@ -2753,7 +3078,7 @@
         contextTokens: snap.contextTokens || 0,
         totalOutputTokens: snap.totalOutputTokens || 0,
         observerDecisions: Array.isArray(snap.observerDecisions) ? snap.observerDecisions.slice() : [],
-        sessionName: snap.sessionName || null,
+        displayName: snap.displayName || null,
       });
       // chat thread + status come alongside the snapshot — restore on hello
       // so a page reload doesn't wipe a live conversation.
@@ -2834,12 +3159,6 @@
             const idx = s.observerDecisions.findIndex(d => d.turnId === msg.decision.turnId);
             if (idx >= 0) s.observerDecisions[idx] = msg.decision;
             else s.observerDecisions.push(msg.decision);
-            refresh();
-          }
-        } else if (msg.kind === "observer:name") {
-          const s = sessionsByKey.get(msg.sessionKey);
-          if (s) {
-            if (msg.name) s.sessionName = msg.name;
             refresh();
           }
         } else if (msg.kind === "chat:chunk") {
