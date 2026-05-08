@@ -805,6 +805,38 @@
       text-decoration: none;
     }
     .composer-pane-actions a:hover { color: var(--accent); }
+    .cpa-btn {
+      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+      background: color-mix(in oklab, var(--surface) 90%, transparent);
+      color: color-mix(in oklab, var(--text) 75%, transparent);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, transform 0.05s;
+    }
+    .cpa-btn:hover {
+      background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+      color: var(--accent);
+    }
+    .cpa-btn:active { transform: translateY(1px); }
+    .cpa-btn:disabled { opacity: 0.55; cursor: wait; }
+    .cpa-btn-primary {
+      background: var(--accent);
+      color: white;
+      border-color: transparent;
+    }
+    .cpa-btn-primary:hover {
+      background: color-mix(in oklab, var(--accent) 88%, white);
+      color: white;
+    }
+    .composer-pane-status[data-status="empty"] {
+      background: color-mix(in oklab, var(--text) 10%, transparent);
+      color: color-mix(in oklab, var(--text) 60%, transparent);
+    }
+    .composer-pane-status[data-status="empty"] .cps-dot { animation: none; opacity: 0.55; }
     .composer-pane-frame {
       position: relative;
       width: 100%;
@@ -5867,17 +5899,53 @@
     // restart the timeline) when nothing material changed.
     const composerMountedUrl = new Map();
 
+    // tracks an in-flight POST to /composer/demo or /composer/regen so we
+    // don't double-fire when the user clicks twice. cleared when the resulting
+    // composer:* ws msg lands or after a 30s safety timeout.
+    const composerActionPending = new Map();
+
     function renderComposerPane(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       const cp = latestComposerFor(sessionKey);
+      const pending = composerActionPending.get(sessionKey);
+
+      // pane is always visible — it's the canonical entry point for the new
+      // path. when no composer payload exists yet we show the empty state
+      // with a pair of trigger buttons; when one exists we show its status +
+      // (when ready) the iframe.
+      dComposerPane.hidden = false;
+
+      const buttonsHtml =
+        '<span class="composer-pane-actions">' +
+          '<button class="cpa-btn" data-cpa="demo"' + (pending ? ' disabled' : '') + '>' +
+            (pending === "demo" ? "loading…" : "demo preview") +
+          '</button>' +
+          '<button class="cpa-btn cpa-btn-primary" data-cpa="regen"' + (pending ? ' disabled' : '') + '>' +
+            (pending === "regen" ? "kicking off…" : "from latest turn") +
+          '</button>' +
+          (cp && cp.status === "ready" && cp.url ? ' <a href="' + escapeHtml(cp.url) + '" target="_blank" rel="noopener">open ↗</a>' : '') +
+        '</span>';
+
       if (!cp) {
-        // hide the pane entirely if this session has never had a composer run.
-        dComposerPane.hidden = true;
-        dComposerPane.innerHTML = "";
+        // empty state — buttons + a one-line hint where the iframe would go.
         composerMountedUrl.delete(sessionKey);
+        dComposerPane.innerHTML =
+          '<div class="composer-pane-head">' +
+            '<span class="composer-pane-title">composer preview</span>' +
+            '<span class="composer-pane-status" data-status="empty">' +
+              '<span class="cps-dot"></span><span>no preview yet</span>' +
+            '</span>' +
+            buttonsHtml +
+          '</div>' +
+          '<div class="composer-pane-frame">' +
+            '<div class="composer-pane-placeholder">' +
+              'pick "demo preview" for a hand-baked sample, or "from latest turn" to spin up the agent for the most recent closed turn.' +
+            '</div>' +
+          '</div>';
+        bindComposerButtons(sessionKey);
         return;
       }
-      dComposerPane.hidden = false;
+
       const status = cp.status || "running";
       const turnIdShort = (cp.turnId || "").slice(0, 8);
       const elapsed = cp.startedTs ? Math.max(0, Math.round((Date.now() - cp.startedTs) / 1000)) : 0;
@@ -5894,9 +5962,7 @@
             '<span class="cps-dot"></span>' +
             '<span>' + escapeHtml(statusText) + '</span>' +
           '</span>' +
-          '<span class="composer-pane-actions">' +
-            (status === "ready" && cp.url ? '<a href="' + escapeHtml(cp.url) + '" target="_blank" rel="noopener">open ↗</a>' : '') +
-          '</span>' +
+          buttonsHtml +
         '</div>';
 
       let bodyHtml;
@@ -5905,10 +5971,10 @@
         // a refresh() tick (every 5s) would keep restarting the composition.
         const prev = composerMountedUrl.get(sessionKey);
         if (prev === cp.url) {
-          // keep existing DOM. paint head only.
-          dComposerPane.querySelector(".composer-pane-head")?.replaceWith(
-            new DOMParser().parseFromString(headHtml, "text/html").body.firstChild
-          );
+          // keep existing iframe. paint head only.
+          const newHead = new DOMParser().parseFromString(headHtml, "text/html").body.firstChild;
+          dComposerPane.querySelector(".composer-pane-head")?.replaceWith(newHead);
+          bindComposerButtons(sessionKey);
           return;
         }
         bodyHtml = '<div class="composer-pane-frame"><iframe src="' + escapeHtml(cp.url) + '" sandbox="allow-scripts" loading="lazy"></iframe></div>';
@@ -5926,6 +5992,50 @@
       }
 
       dComposerPane.innerHTML = headHtml + bodyHtml;
+      bindComposerButtons(sessionKey);
+    }
+
+    // delegated handlers for the two trigger buttons. rebound on every render
+    // because we re-stamp the head row each pass (the iframe body persists when
+    // the url didn't change). guard against double-fire via composerActionPending.
+    function bindComposerButtons(sessionKey) {
+      dComposerPane.querySelectorAll('.cpa-btn[data-cpa]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const action = btn.getAttribute('data-cpa');
+          if (!action) return;
+          if (composerActionPending.get(sessionKey)) return;
+          composerActionPending.set(sessionKey, action);
+          // safety timeout — clear the pending flag after 30s even if the
+          // server never broadcasts (network drop, server crash, etc).
+          setTimeout(() => {
+            if (composerActionPending.get(sessionKey) === action) {
+              composerActionPending.delete(sessionKey);
+              refresh();
+            }
+          }, 30000);
+          refresh();
+          try {
+            const path = action === "demo" ? "/composer/demo" : "/composer/regen";
+            const res = await fetch(path, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionKey }),
+            });
+            if (!res.ok) {
+              const txt = await res.text();
+              console.warn('[composer] ' + action + ' failed: ' + res.status + ' ' + txt);
+            }
+          } catch (err) {
+            console.warn('[composer] ' + action + ' error:', err);
+          } finally {
+            // demo path returns synchronously (composer:ready broadcast already
+            // fanned out); regen returns 202 and a ws msg will follow. either
+            // way clear pending now.
+            composerActionPending.delete(sessionKey);
+            refresh();
+          }
+        }, { once: true });
+      });
     }
 
     function renderVideoPane(sess) {

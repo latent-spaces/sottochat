@@ -922,15 +922,11 @@ const server = Bun.serve({
       return Response.json({ ok: true, sessionKey, turnId }, { status: 202 });
     }
 
-    // /debug/inject-composer — write a tiny pre-baked HyperFrames composition
-    // for a chosen visible session, mark it ready, broadcast composer:ready.
-    // dev affordance for inspecting the new pane without paying for a real
+    // /composer/demo — write a tiny pre-baked HyperFrames composition for a
+    // chosen visible session, mark it ready, broadcast composer:ready. lets
+    // the user inspect the pane from the dashboard without paying for a real
     // composer agent run. body: { sessionKey: string }. csrf-guarded via Origin.
-    // gated behind META_DEBUG=1 like the other /debug/inject-* routes.
-    if (url.pathname === "/debug/inject-composer" && req.method === "POST") {
-      if (Bun.env.META_DEBUG !== "1") {
-        return Response.json({ error: "META_DEBUG=1 required" }, { status: 403 });
-      }
+    if (url.pathname === "/composer/demo" && req.method === "POST") {
       const origin = req.headers.get("origin");
       if (origin && !origin.startsWith(`http://localhost:${PORT}`) && !origin.startsWith(`http://127.0.0.1:${PORT}`)) {
         return Response.json({ error: "cross-origin blocked" }, { status: 403 });
@@ -970,8 +966,53 @@ const server = Bun.serve({
       if (isVisible(sess)) {
         broadcast({ kind: "composer:ready", sessionKey, turnId, url: payload.url });
       }
-      console.log(`[composer] inject-composer fixture · ${turnId} · ${payload.url}`);
+      console.log(`[composer] /composer/demo fixture · ${turnId} · ${payload.url}`);
       return Response.json({ ok: true, sessionKey, turnId, url: payload.url }, { status: 200 });
+    }
+
+    // /composer/regen — kick off a real composer agent run for the most
+    // recent closed turn in the named session. requires the composer
+    // subprocess pool to be enabled (META_COMPOSER_ENABLED=1, the default).
+    // body: { sessionKey: string }. fires-and-forgets — the agent runs in the
+    // background and broadcasts composer:running → :linting → :ready / :error.
+    if (url.pathname === "/composer/regen" && req.method === "POST") {
+      if (!composer) {
+        return Response.json({ error: "composer disabled (set META_COMPOSER_ENABLED=1)" }, { status: 503 });
+      }
+      const origin = req.headers.get("origin");
+      if (origin && !origin.startsWith(`http://localhost:${PORT}`) && !origin.startsWith(`http://127.0.0.1:${PORT}`)) {
+        return Response.json({ error: "cross-origin blocked" }, { status: 403 });
+      }
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
+      if (!sessionKey) {
+        return Response.json({ error: "sessionKey required" }, { status: 400 });
+      }
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
+        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
+      }
+      // grab the most recent closed turn from the per-session ring; that's
+      // the target. prior context = the 2 entries before it (or fewer if the
+      // session is brand-new).
+      const ring = sess.recentClosedTurns;
+      if (ring.length === 0) {
+        return Response.json({ error: "no closed turn yet for this session" }, { status: 400 });
+      }
+      const targetTurn = ring[ring.length - 1]!;
+      const prior = ring.slice(Math.max(0, ring.length - 3), ring.length - 1);
+      composer.feed(sessionKey, {
+        target: buildTurnFeed(sessionKey, sess.info, targetTurn),
+        prior: prior.map((t) => buildTurnFeed(sessionKey, sess.info, t)),
+      });
+      console.log(`[composer] /composer/regen · ${sessionKey} · target=${targetTurn.id.slice(0, 8)} · prior=${prior.length}`);
+      return Response.json({ ok: true, sessionKey, turnId: targetTurn.id }, { status: 202 });
     }
 
     // /debug/inject-script — inject a fully-formed demo ScriptPayload onto a
