@@ -3,8 +3,9 @@ import { startTailer, type SessionInfo } from "./tailer";
 import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
 import { evaluateTurn, type Trigger } from "./triggers";
-import { buildTurnFeed, startObserver } from "./observer";
+import { buildTurnFeed, startObserver, type TurnFeed } from "./observer";
 import { startScriptifier, SCRIPT_STYLES, MARKER_VOCABS, type ScriptBeat, type ScriptStyle, type MarkerVocab } from "./scriptifier";
+import { startInfographer, type Pill } from "./infographer";
 import { generateTts, ttsAudioPath, type WordTiming } from "./tts";
 import { exportToMp4, exportMp4Path } from "./hyperframes-export";
 import { startChatHost, type ChatChunk } from "./chat-agent";
@@ -29,12 +30,28 @@ const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
 const SCRIPTIFIER_ENABLED = Bun.env.META_SCRIPTIFIER_ENABLED !== "0";
 const SCRIPTIFIER_MODEL = Bun.env.META_SCRIPTIFIER_MODEL ?? "claude-sonnet-4-6";
 const SCRIPTIFIER_BATCH_MS = Number(Bun.env.META_SCRIPTIFIER_BATCH_MS ?? 2_000);
+// infographer: parallel sonnet subprocess that plans info-graphic pills for the
+// tiktok-style player. fired after scriptifier emits beats (so pills can anchor
+// to beat indices, not seconds — robust to tts variation). short batch ceiling
+// since pills should land close behind beats.
+const INFOGRAPHER_ENABLED = Bun.env.META_INFOGRAPHER_ENABLED !== "0";
+const INFOGRAPHER_MODEL = Bun.env.META_INFOGRAPHER_MODEL ?? "claude-sonnet-4-6";
+const INFOGRAPHER_BATCH_MS = Number(Bun.env.META_INFOGRAPHER_BATCH_MS ?? 2_000);
 const TTS_VOICE = Bun.env.META_TTS_VOICE ?? "af_heart";
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
 // per-session ring buffer for ScriptPayloads — keeps a meaningful history
 // without ballooning state. oldest by closedTs is pruned when a new one lands.
 const MAX_SCRIPTS_PER_SESSION = 12;
+// per-session ring buffer for PillPlanPayloads (one per turn). same cadence as
+// scripts — they're planned right after beats land.
+const MAX_PILL_PLANS_PER_SESSION = 12;
+// how many TurnFeeds we keep cached per `turnId` while waiting for the
+// scriptifier to return beats. cap is generous — scriptifier batches every 2s
+// and turns close at most every few seconds; 50 entries covers an entire
+// burst across all visible sessions. evicted on consume in scriptifier's
+// onScript callback or on capacity overflow (drop-oldest).
+const PENDING_TURN_FEED_CAP = 50;
 // when the observer flags a turn open=true with a prefill, the server fires
 // that prefill into the chat agent automatically — no waiting on user input.
 // these guards keep auto-fires from spamming a chatty session:
@@ -112,6 +129,16 @@ type ScriptPayload = {
   closedTs: number;       // turn end ts at scriptifier-feed time — used for active-script ordering
 };
 
+// per-turn infographic pill plan. mirrors ScriptPayload's lifecycle ts/closedTs
+// fields so the client can pick the active plan by closedTs (matches how the
+// active script is picked).
+type PillPlanPayload = {
+  turnId: string;
+  pills: Pill[];
+  ts: number;       // last ui mutation
+  closedTs: number; // turn end ts at infographer-feed time
+};
+
 // per-turn mp4 export status. lifecycle:
 //   rendering → ready (with hash, mp4 url, durationS, bytes)
 //             → error (with message)
@@ -143,6 +170,7 @@ type SessionState = {
   observerByTurn: Map<string, number>;
   recentClosedTurns: Turn[];        // ring buffer (RECENT_CLOSED_TURNS) used to seed auto-fired chats
   scripts: Map<string, ScriptPayload>;  // turnId → karaoke script + tts state
+  pillPlans: Map<string, PillPlanPayload>; // turnId → infographic pill plan
   exports: Map<string, ExportPayload>;  // turnId → mp4 export status
 };
 
@@ -172,6 +200,25 @@ function bookmarksFor(sessionKey: string, turnId: string): Set<number> {
 }
 // per-session cooldown for observer-driven auto-sends; see AUTO_SEND_COOLDOWN_MS.
 const lastAutoSendTs = new Map<string, number>();
+// turnId → TurnFeed cache. populated when we feed the scriptifier; consumed +
+// evicted in scriptifier's onScript callback when forwarding to the
+// infographer. fixes the medium-priority bug where the recentClosedTurns ring
+// (size 5) could roll over before scriptifier returned beats, silently
+// skipping pill plans for chatty sessions. ordered insertion via Map iteration
+// lets us drop-oldest when over capacity.
+const pendingTurnFeeds = new Map<string, TurnFeed>();
+function rememberTurnFeed(turnId: string, feed: TurnFeed) {
+  pendingTurnFeeds.set(turnId, feed);
+  if (pendingTurnFeeds.size > PENDING_TURN_FEED_CAP) {
+    const firstKey = pendingTurnFeeds.keys().next().value;
+    if (firstKey !== undefined) pendingTurnFeeds.delete(firstKey);
+  }
+}
+function consumeTurnFeed(turnId: string): TurnFeed | null {
+  const f = pendingTurnFeeds.get(turnId);
+  if (f) pendingTurnFeeds.delete(turnId);
+  return f ?? null;
+}
 // per-session TTS voice override. unset entries fall back to TTS_VOICE
 // (the global env-driven default). server-side allowlist defends against
 // injection of arbitrary voice ids — Kokoro will accept anything but only
@@ -192,6 +239,16 @@ function pruneScripts(s: SessionState) {
   );
   const drop = entries.length - MAX_SCRIPTS_PER_SESSION;
   for (let i = 0; i < drop; i++) s.scripts.delete(entries[i]![0]);
+}
+
+// same drop-oldest-by-closedTs treatment for pill plans.
+function prunePillPlans(s: SessionState) {
+  if (s.pillPlans.size <= MAX_PILL_PLANS_PER_SESSION) return;
+  const entries = Array.from(s.pillPlans.entries()).sort(
+    (a, b) => (a[1].closedTs || 0) - (b[1].closedTs || 0)
+  );
+  const drop = entries.length - MAX_PILL_PLANS_PER_SESSION;
+  for (let i = 0; i < drop; i++) s.pillPlans.delete(entries[i]![0]);
 }
 
 function pushChatChunk(c: ChatChunk) {
@@ -225,6 +282,7 @@ function getOrCreate(info: SessionInfo): SessionState {
       observerByTurn: new Map(),
       recentClosedTurns: [],
       scripts: new Map(),
+      pillPlans: new Map(),
       exports: new Map(),
     };
     sessions.set(k, s);
@@ -280,6 +338,7 @@ function snapshot(s: SessionState) {
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
     scripts: Object.fromEntries(s.scripts),
+    pillPlans: Object.fromEntries(s.pillPlans),
     exports: Object.fromEntries(s.exports),
     voice: voiceFor(k),
     bookmarks: bookmarksOut,
@@ -387,6 +446,17 @@ const DEMO_BEATS: ScriptBeat[] = [
 ];
 const DEMO_VOICE = "af_heart";
 
+// matching pill plan for the demo beats above. exercises every kind so the
+// tiktok pane shows all pill colors during /debug/inject-script.
+const DEMO_PILLS: Pill[] = [
+  { text: "3 sources", kind: "metric", startBeat: 0, endBeat: 1, side: "right" },
+  { text: "FileState", kind: "file", startBeat: 1, endBeat: 2, side: "left" },
+  { text: "fs.watch + 500ms poll", kind: "tool", startBeat: 2, endBeat: 3, side: "right" },
+  { text: "MetaEvent shape", kind: "decision", startBeat: 3, endBeat: 5, side: "left" },
+  { text: "concurrent subprocess", kind: "decision", startBeat: 6, endBeat: 7, side: "right" },
+  { text: "4hr mtime cap", kind: "warning", startBeat: 8, endBeat: 8, side: "left" },
+];
+
 async function injectDemoScript(s: SessionState): Promise<{ turnId: string; audioUrl: string } | null> {
   const turnId = "demo-" + Date.now().toString(36);
   const text = DEMO_BEATS.map((b) => b.text).join(" ");
@@ -403,6 +473,19 @@ async function injectDemoScript(s: SessionState): Promise<{ turnId: string; audi
   const sessionKey = keyFor(s.info);
   if (isVisible(s)) {
     broadcast({ kind: "script:beats", sessionKey, script: payload });
+  }
+  // demo pill plan lands immediately alongside beats — the demo flow
+  // bypasses the infographer subprocess, so we fabricate a fixture here.
+  const pillPayload: PillPlanPayload = {
+    turnId,
+    pills: DEMO_PILLS,
+    ts: now,
+    closedTs: now,
+  };
+  s.pillPlans.set(turnId, pillPayload);
+  prunePillPlans(s);
+  if (isVisible(s)) {
+    broadcast({ kind: "pills:beats", sessionKey, plan: pillPayload });
   }
   try {
     const tts = await generateTts({ text, voice: voiceFor(keyFor(s.info)) || DEMO_VOICE });
@@ -1105,6 +1188,41 @@ if (observer) {
   );
 }
 
+// infographer: plans tiktok-style info-graphic pills for each closed turn.
+// fired downstream of the scriptifier so pills can anchor to real beat indices.
+// gated on SCRIPTIFIER_ENABLED — its only feed path is inside scriptifier's
+// onScript callback, so without scriptifier the subprocess just sits idle.
+const infographer = (INFOGRAPHER_ENABLED && SCRIPTIFIER_ENABLED)
+  ? startInfographer({
+      model: INFOGRAPHER_MODEL,
+      batchMs: INFOGRAPHER_BATCH_MS,
+      onPlan(p) {
+        const s = sessions.get(p.sessionKey);
+        if (!s) return;
+        const payload: PillPlanPayload = {
+          turnId: p.turnId,
+          pills: p.pills,
+          ts: Date.now(),
+          closedTs: p.closedTs,
+        };
+        s.pillPlans.set(p.turnId, payload);
+        prunePillPlans(s);
+        if (isVisible(s)) {
+          broadcast({
+            kind: "pills:beats",
+            sessionKey: p.sessionKey,
+            plan: payload,
+          });
+        }
+      },
+    })
+  : null;
+if (infographer) {
+  console.log(
+    `[infographer] enabled · model=${INFOGRAPHER_MODEL} · batch=${INFOGRAPHER_BATCH_MS}ms`
+  );
+}
+
 // scriptifier: parallel sonnet subprocess that converts each closed turn into
 // a karaoke-style script. tts is kicked off in the background as soon as the
 // beats land — clients see beats first (status: rendering), then audio +
@@ -1131,6 +1249,21 @@ const scriptifier = SCRIPTIFIER_ENABLED
             sessionKey: r.sessionKey,
             script: payload,
           });
+        }
+        // hand the same beats off to the infographer so it can plan pills
+        // anchored to those beat indices. preferred path: the cached TurnFeed
+        // from when we fed the scriptifier (covers chatty sessions where the
+        // 5-turn ring may have rolled over). fallback: rebuild from the ring
+        // for late-arriving scripts (rare; e.g. infographer started after a
+        // hot-reload while a prior batch was inflight).
+        if (infographer) {
+          const cached = consumeTurnFeed(r.turnId);
+          if (cached) {
+            infographer.feed(cached, r.beats);
+          } else {
+            const turn = s.recentClosedTurns.find((t) => t.id === r.turnId);
+            if (turn) infographer.feed(buildTurnFeed(r.sessionKey, s.info, turn), r.beats);
+          }
         }
         // background tts: full script → wav + per-word timings. errors don't
         // crash the loop — we surface them on the payload and broadcast.
@@ -1174,12 +1307,16 @@ if (scriptifier) {
 // graceful shutdown — give abort signals a moment to terminate sdk subprocesses
 // before the server process exits, otherwise claude subprocesses can be orphaned.
 {
-  const onSignal = (sig: string) => {
-    console.log(`[server] received ${sig} — stopping observer + scriptifier + chat host + registry`);
+  const onSignal = async (sig: string) => {
+    console.log(`[server] received ${sig} — stopping observer + scriptifier + infographer + chat host + registry`);
     observer?.stop();
     scriptifier?.stop();
     chatHost.stop();
     registry.stop();
+    // infographer.stop() is async (resolves when its lifecycle loop exits or
+    // hits a 400ms ceiling). awaiting before the 500ms grace gives the sdk
+    // subprocess a real chance to terminate cleanly.
+    await infographer?.stop();
     setTimeout(() => process.exit(0), 500);
   };
   process.on("SIGINT", () => onSignal("SIGINT"));
@@ -1216,7 +1353,8 @@ startTailer({
     const isObserverSelf =
       info.slug.includes("chunk-to-chat-observer") ||
       info.slug.includes("cut-the-cake-chat") ||
-      info.slug.includes("cut-the-cake-scriptifier");
+      info.slug.includes("cut-the-cake-scriptifier") ||
+      info.slug.includes("cut-the-cake-infographer");
     const s = getOrCreate(info);
     const wasVisible = isVisible(s);
     s.events.push(ev);
@@ -1254,7 +1392,11 @@ startTailer({
         observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
       }
       if (scriptifier && !isObserverSelf && isVisible(s) && fresh) {
-        scriptifier.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed), activeScriptStyle, activeMarkerVocab);
+        const feed = buildTurnFeed(keyFor(s.info), s.info, result.closed);
+        // remember the feed so onScript's infographer hand-off doesn't depend
+        // on the recentClosedTurns ring (size 5) still containing the turn.
+        if (infographer) rememberTurnFeed(result.closed.id, feed);
+        scriptifier.feed(feed, activeScriptStyle, activeMarkerVocab);
       }
     }
   },

@@ -1430,6 +1430,196 @@
       padding: 6px 0;
     }
 
+    /* ---------- tiktok-style video stage (replaces the scroll-stack) ---------- */
+    /* portrait-leaning stage. left column = past phrases, right column = pills,
+       center = current 3-4 word phrase huge + animated. previous phrase fades
+       up + out, next fades in from below. rough-notation underlines the
+       emphasis spans on the active phrase via the cdn lib loaded above. */
+    .video-tiktok-stage {
+      position: relative;
+      width: 100%;
+      min-height: 280px;
+      max-height: 380px;
+      background: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--accent-soft, #ffd6e3) 40%, var(--bg)) 0%,
+        color-mix(in oklab, var(--accent-soft, #ffd6e3) 18%, var(--bg)) 100%
+      );
+      border: 1px solid color-mix(in oklab, var(--accent) 18%, transparent);
+      border-radius: 18px;
+      overflow: hidden;
+      isolation: isolate;
+      padding: 24px 22px;
+      box-sizing: border-box;
+    }
+    /* phrase stack — three slots stacked vertically: prev (small, fading up),
+       current (huge), next (small, ready to slide up). flex 1 1 auto so it
+       fills height; each phrase gets a fixed weight. */
+    .video-phrase-stack {
+      position: absolute;
+      inset: 24px 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .video-phrase {
+      font-family: var(--sans);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      line-height: 1.15;
+      color: var(--fg);
+      text-align: center;
+      max-width: 90%;
+      transition: opacity 240ms ease-out, transform 360ms cubic-bezier(0.22, 1, 0.36, 1), filter 240ms ease-out;
+      will-change: transform, opacity, filter;
+    }
+    .video-phrase.past {
+      font-size: 16px;
+      opacity: 0.30;
+      transform: translateY(-26px);
+      filter: blur(0.4px);
+    }
+    .video-phrase.current {
+      font-size: 38px;
+      opacity: 1;
+      transform: translateY(0);
+      filter: none;
+    }
+    .video-phrase.future {
+      font-size: 14px;
+      opacity: 0.22;
+      transform: translateY(28px);
+      filter: blur(0.4px);
+    }
+    /* word spans inside each phrase. soft pink karaoke fill on .active /
+       .played, no underline (rough-notation handles emphasis annotation). */
+    .video-phrase .vb-word {
+      display: inline;
+      transition: color 160ms ease-out;
+      white-space: pre;
+    }
+    .video-phrase .vb-word.played {
+      color: color-mix(in oklab, var(--accent) 80%, var(--fg));
+    }
+    .video-phrase .vb-word.active {
+      color: var(--accent);
+    }
+    /* rough-notation needs an inline element it can wrap; we mark emphasis
+       words with .emph and the annotator targets these by class. */
+    .video-phrase .vb-word.emph {
+      position: relative;
+      display: inline-block;
+      padding: 0 2px;
+    }
+
+    /* pills overlay: two columns, one anchored left, one anchored right. each
+       pill is a chip whose visibility is driven by the current beat index. */
+    .video-tiktok-pills-left,
+    .video-tiktok-pills-right {
+      position: absolute;
+      top: 24px;
+      bottom: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 2;
+      max-width: 38%;
+    }
+    .video-tiktok-pills-left  { left: 16px; align-items: flex-start; }
+    .video-tiktok-pills-right { right: 16px; align-items: flex-end; }
+    .video-pill {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      background: var(--surface, #fff);
+      border: 1px solid color-mix(in oklab, var(--accent) 26%, transparent);
+      color: var(--fg);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 6px 18px -10px rgba(190, 64, 110, 0.20);
+      opacity: 0;
+      transform: translateX(-12px) scale(0.92);
+      transition:
+        opacity 220ms ease-out,
+        transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform, opacity;
+      max-width: 100%;
+    }
+    .video-tiktok-pills-right .video-pill {
+      transform: translateX(12px) scale(0.92);
+    }
+    .video-pill.is-active {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+    .video-pill .vp-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .video-pill .vp-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 200px;
+    }
+    /* per-kind dot colour. matches the rough-notation marker palette so
+       reads as a coherent visual system. */
+    .video-pill[data-kind="metric"]   .vp-dot { background: #f59e0b; }
+    .video-pill[data-kind="file"]     .vp-dot { background: #6366f1; }
+    .video-pill[data-kind="tool"]     .vp-dot { background: #10b981; }
+    .video-pill[data-kind="decision"] .vp-dot { background: var(--plum, #9333ea); }
+    .video-pill[data-kind="warning"]  .vp-dot { background: #ef4444; }
+    .video-pill[data-kind="note"]     .vp-dot { background: var(--fg-muted, #94a3b8); }
+    .video-pill[data-kind="metric"]   { border-color: color-mix(in oklab, #f59e0b 35%, transparent); }
+    .video-pill[data-kind="file"]     { border-color: color-mix(in oklab, #6366f1 30%, transparent); }
+    .video-pill[data-kind="tool"]     { border-color: color-mix(in oklab, #10b981 30%, transparent); }
+    .video-pill[data-kind="decision"] { border-color: color-mix(in oklab, var(--plum, #9333ea) 28%, transparent); }
+    .video-pill[data-kind="warning"]  { border-color: color-mix(in oklab, #ef4444 35%, transparent); }
+    .video-pill[data-kind="note"]     { border-color: color-mix(in oklab, var(--fg-muted, #94a3b8) 28%, transparent); }
+
+    /* the current-phrase bookmark icon — sits below the stage, smaller than
+       the per-beat icons we used in the scroll-stack. only one visible since
+       only one phrase is current at a time. */
+    .video-phrase-bookmark {
+      position: absolute;
+      right: 18px;
+      top: 18px;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: 1px solid color-mix(in oklab, var(--accent) 28%, transparent);
+      border-radius: 6px;
+      background: var(--surface, #fff);
+      color: color-mix(in oklab, var(--accent) 60%, var(--fg-muted));
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 3;
+      pointer-events: auto;
+    }
+    .video-phrase-bookmark.is-on { color: var(--accent); }
+    .video-phrase-bookmark svg { width: 14px; height: 14px; display: block; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .video-phrase,
+      .video-pill {
+        transition: none !important;
+      }
+    }
+
     /* export-mp4 button — small action chip in the video-pane-controls row.
        three states share one slot: "export mp4" (idle, clickable),
        "rendering 0:23" (mid-render with elapsed timer), "download mp4" (anchor).
@@ -1994,6 +2184,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://unpkg.com/rough-notation@0.5.1/lib/rough-notation.iife.js"></script>
   <script>
     // dom
     const cardsEl = document.getElementById("cards");
@@ -2724,7 +2915,8 @@
       return slug.includes('cut-the-cake-chat') ||
              slug.includes('chunk-to-chat-observer') ||
              slug.includes('cut-the-cake-observer') ||
-             slug.includes('cut-the-cake-scriptifier');
+             slug.includes('cut-the-cake-scriptifier') ||
+             slug.includes('cut-the-cake-infographer');
     }
 
     function sortedSessions() {
@@ -3226,6 +3418,13 @@
     // rAF id, beat boundaries, last-painted indices, etc. so we don't double-mount
     // audio elements on re-render.
     const videoRuntime = new Map();
+    // pill plans state — sessionKey → Map<turnId, PillPlanPayload>. each
+    // payload has { turnId, pills: [{text, kind, startBeat, endBeat, side?}],
+    // ts, closedTs }. populated by hello/session:upsert snapshots and the
+    // pills:beats ws msg. drives the tiktok-style infographic overlay in the
+    // video-pane. anchored to beat indices, not seconds, so the same plan
+    // works regardless of tts variation.
+    const pillsByKey = new Map();
     // mp4 exports state — sessionKey → Map<turnId, ExportPayload>. populated by
     // hello/session:upsert snapshots and the export:rendering / export:ready /
     // export:error ws msgs. each ExportPayload looks like:
@@ -4470,6 +4669,90 @@
       }
     }
 
+    // ---------- tiktok-style helpers ----------
+    // re-slice beats into 3-4 word phrases anchored to whisper word timings.
+    // each phrase is one "card" in the tiktok stack — short enough to read at
+    // a glance. tries to avoid leaving 1-word orphans by preferring 3+2 over
+    // 4+1 splits when remaining = 5.
+    function sliceBeatsToPhrases(beats, beatBoundaries, words) {
+      const phrases = [];
+      const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const normalize = w => String(w || "").toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+      let phraseIdx = 0;
+      for (let bi = 0; bi < beats.length; bi++) {
+        const beat = beats[bi];
+        const bb = beatBoundaries[bi];
+        if (!bb) continue;
+        const beatTokens = vbTokenize(beat.text);
+        const emphSet = new Set((Array.isArray(beat.emphasis) ? beat.emphasis : []).map(normalize).filter(Boolean));
+        // phrase chunking — preferred sizes 3 and 4. avoid orphans on remainder=5.
+        let i = 0;
+        let isFirstOfBeat = true;
+        while (i < beatTokens.length) {
+          const remaining = beatTokens.length - i;
+          let n;
+          if (remaining <= 4) n = remaining;
+          else if (remaining === 5) n = 3;
+          else if (remaining === 6) n = 3;
+          else if (remaining === 7) n = 4;
+          else n = 4;
+          const tokens = beatTokens.slice(i, i + n);
+          const startWordGlobal = bb.startWordIdx + i;
+          const endWordGlobal = bb.startWordIdx + i + n - 1;
+          const startW = words[startWordGlobal];
+          const endW = words[endWordGlobal];
+          let startS, endS;
+          if (startW && endW) {
+            startS = startW.startS;
+            endS = endW.endS;
+          } else {
+            // fallback: even-time within the beat boundary.
+            const beatStart = bb.startS || 0;
+            const beatEnd = bb.endS || beatStart;
+            const beatLen = Math.max(0.001, beatEnd - beatStart);
+            const slice = tokens.length / Math.max(1, beatTokens.length);
+            const offset = i / Math.max(1, beatTokens.length);
+            startS = beatStart + beatLen * offset;
+            endS = beatStart + beatLen * (offset + slice);
+          }
+          phrases.push({
+            phraseIdx,
+            beatIdx: bi,
+            isFirstOfBeat,
+            tokens,
+            startWordGlobal,
+            endWordGlobal,
+            startS,
+            endS,
+            emphSet,
+            marker: beat.marker || null,
+          });
+          phraseIdx++;
+          isFirstOfBeat = false;
+          i += n;
+        }
+      }
+      return phrases;
+    }
+
+    // marker → rough-notation annotation type + colour. soft pink for the
+    // strawberry palette; warning-shaped markers go orange/red. keys cover
+    // both the design vocab (INSIGHT/BE_CAREFUL/STEP/NOTE) and the story
+    // vocab (PUNCHLINE/GOTCHA/PIVOT/ASIDE) — same shape across pairs.
+    const ROUGH_MARKER_ANNOTATION = {
+      INSIGHT:    { type: "circle",    color: "#e91e63" },
+      PUNCHLINE:  { type: "circle",    color: "#e91e63" },
+      BE_CAREFUL: { type: "underline", color: "#ef4444" },
+      GOTCHA:     { type: "underline", color: "#ef4444" },
+      STEP:       { type: "bracket",   color: "#3b82f6" },
+      PIVOT:      { type: "bracket",   color: "#3b82f6" },
+      NOTE:       { type: "underline", color: "#94a3b8" },
+      ASIDE:      { type: "underline", color: "#94a3b8" },
+    };
+    // default emphasis annotation when the beat has no marker — sketchy
+    // highlight in soft pink.
+    const ROUGH_DEFAULT_EMPHASIS = { type: "highlight", color: "#ffc1d8" };
+
     // empty-pane render: no script yet, just show the voice picker so the user
     // can pre-set their preference. tears down any stale runtime to be safe.
     function renderVideoPaneEmpty(sessionKey) {
@@ -4477,6 +4760,9 @@
       if (existing) {
         if (existing.rafId) cancelAnimationFrame(existing.rafId);
         if (existing.audio) { try { existing.audio.pause(); } catch {} }
+        // tear down rough-notation handles before we delete the runtime —
+        // detached SVG nodes outlive their script DOM otherwise.
+        if (typeof teardownAnnotations === "function") teardownAnnotations(existing);
         videoRuntime.delete(sessionKey);
       }
       dVideoPane.hidden = false;
@@ -4577,50 +4863,97 @@
         }
       }
 
-      // build beat html. words wrap in <span class="vb-word" data-word-idx>;
-      // emphasis words add .emph (compared case-insensitively, stripped of
-      // punctuation on both sides for fuzzier matches).
-      // marker chip is only rendered inline when markerStyle === "pill"; the
-      // banner / corner / stamp / ticker / halo styles render the marker
-      // indicator elsewhere (overlay, head-row glyph, inline svg stamp,
-      // bottom ticker, or pulsing box-shadow on the beat itself).
+      // build phrase list — each phrase is one tiktok-style "card" of 3-4 words.
+      // word spans within a phrase carry the original global word index so the
+      // existing audio.currentTime-driven karaoke loop can still find the active
+      // word in O(words). emphasis words get .emph; rough-notation annotates them
+      // when the phrase becomes current.
       const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const normalize = w => String(w || "").toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
-      const inlinePill = markerStyle === "pill";
-      // active bookmark indices for this script — drives the "is-on" state on
-      // each per-beat icon and the chips row below.
+      const phrases = sliceBeatsToPhrases(beats, beatBoundaries, words);
+      // per-script bookmark set keyed by beat (not phrase) — anchors are stable
+      // across phrase reslicing. drives the .is-on class on the single phrase-
+      // bookmark icon (set dynamically by paintKaraokeFrame as the active beat
+      // shifts) and the bookmark chip row below.
       const bookmarkSet = new Set(bookmarksForKey(sessionKey, script.turnId));
-      // small ribbon icon. outline by default; the .is-on class on the button
-      // flips colour to accent (full state).
       const BOOKMARK_SVG_OUTLINE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
       const BOOKMARK_SVG_FILLED  = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
+
+      // active pill plan for this script — keyed by sessionKey + turnId.
+      const pillPlanMap = pillsByKey.get(sessionKey);
+      const pillPlan = (pillPlanMap && pillPlanMap.get(script.turnId)) || null;
+      const pills = (pillPlan && Array.isArray(pillPlan.pills)) ? pillPlan.pills : [];
+      // assign pill sides — explicit side wins, otherwise auto-balance
+      // alternating left/right based on emit order.
+      let leftCount = 0, rightCount = 0;
+      const pillsWithSide = pills.map((p, idx) => {
+        let side = (p.side === "left" || p.side === "right") ? p.side : null;
+        if (!side) side = (idx % 2 === 0) ? "right" : "left";
+        if (side === "left") leftCount++; else rightCount++;
+        return { ...p, _side: side };
+      });
+
+      function pillHtml(p, pillIdx) {
+        const startBeat = typeof p.startBeat === "number" ? p.startBeat : 0;
+        const endBeat = typeof p.endBeat === "number" ? p.endBeat : startBeat;
+        return '<div class="video-pill" data-kind="' + escAttr(p.kind || "note") + '"' +
+                 ' data-pill-idx="' + pillIdx + '"' +
+                 ' data-start-beat="' + startBeat + '"' +
+                 ' data-end-beat="' + endBeat + '">' +
+                 '<span class="vp-dot" aria-hidden="true"></span>' +
+                 '<span class="vp-text">' + escapeHtml(p.text || "") + '</span>' +
+               '</div>';
+      }
+      const leftPillsHtml = pillsWithSide
+        .map((p, i) => p._side === "left" ? pillHtml(p, i) : "")
+        .filter(Boolean).join("");
+      const rightPillsHtml = pillsWithSide
+        .map((p, i) => p._side === "right" ? pillHtml(p, i) : "")
+        .filter(Boolean).join("");
+
+      // phrase rendering: spans for words. populated globalWordIdx mirrors the
+      // legacy mapping so the karaoke loop's word-based painting still works.
       let globalWordIdx = 0;
-      const beatsHtml = beats.map((b, i) => {
-        const tokens = beatTokens[i];
-        const emphSet = new Set((Array.isArray(b.emphasis) ? b.emphasis : []).map(normalize).filter(Boolean));
-        const wordSpans = tokens.map(tok => {
-          const isEmph = emphSet.size > 0 && emphSet.has(normalize(tok));
+      const phrasesHtml = phrases.map((ph) => {
+        const wordSpans = ph.tokens.map((tok) => {
+          const norm = String(tok || "").toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+          const isEmph = ph.emphSet.size > 0 && ph.emphSet.has(norm);
           const cls = "vb-word" + (isEmph ? " emph" : "");
           const html = '<span class="' + cls + '" data-word-idx="' + globalWordIdx + '">' + escapeHtml(tok) + '</span>';
           globalWordIdx++;
           return html;
         }).join(" ");
-        const showInlinePill = inlinePill && !!b.marker;
-        // marker text is mapped through markerLabelFor() so the active vocab
-        // controls which token name displays — even if the inbound beat carries
-        // the other vocab's token (e.g. server still on design while UI prefers
-        // story). class still uses the raw token so the per-marker CSS hits.
-        const markerHtml = showInlinePill
-          ? '<span class="video-marker ' + escAttr(b.marker) + '">' + escapeHtml(markerLabelFor(b.marker).toLowerCase().replace(/_/g, " ")) + '</span>'
-          : "";
-        const markerCls = showInlinePill ? " has-marker" : "";
-        const isOn = bookmarkSet.has(i);
-        const bookmarkBtnHtml = '<button type="button" class="vb-bookmark' + (isOn ? ' is-on' : '') + '" data-bookmark-idx="' + i + '" aria-label="' + (isOn ? 'remove bookmark' : 'bookmark beat') + '" aria-pressed="' + (isOn ? 'true' : 'false') + '">' + (isOn ? BOOKMARK_SVG_FILLED : BOOKMARK_SVG_OUTLINE) + '</button>';
-        const inner = showInlinePill ? markerHtml + '<div class="vb-line">' + wordSpans + '</div>' : wordSpans;
-        return '<div class="video-beat future' + markerCls + '" data-beat-idx="' + i + '" data-marker="' + (b.marker ? escAttr(b.marker) : '') + '">' +
-                 inner + bookmarkBtnHtml +
-               '</div>';
+        // initial state: first phrase is current, rest are future. paintKaraoke
+        // -Frame will adjust as audio plays.
+        const initialState = ph.phraseIdx === 0 ? "current" : "future";
+        const markerAttr = ph.marker ? ' data-marker="' + escAttr(ph.marker) + '"' : "";
+        return '<div class="video-phrase ' + initialState + '"' +
+                 ' data-phrase-idx="' + ph.phraseIdx + '"' +
+                 ' data-beat-idx="' + ph.beatIdx + '"' +
+                 ' data-first-of-beat="' + (ph.isFirstOfBeat ? "1" : "0") + '"' +
+                 markerAttr + '>' + wordSpans + '</div>';
       }).join("");
+
+      // single-icon bookmark, sits at the top-right of the stage. the data-
+      // -bookmark-idx is updated in real time by paintKaraokeFrame so it always
+      // refers to whichever beat is currently being narrated. starts pointing
+      // at beat 0.
+      const beat0IsOn = bookmarkSet.has(0);
+      const phraseBookmarkHtml =
+        '<button type="button" class="video-phrase-bookmark' + (beat0IsOn ? ' is-on' : '') + '"' +
+          ' data-bookmark-idx="0" aria-label="bookmark this beat" aria-pressed="' + (beat0IsOn ? 'true' : 'false') + '">' +
+          (beat0IsOn ? BOOKMARK_SVG_FILLED : BOOKMARK_SVG_OUTLINE) +
+        '</button>';
+
+      const stageId = "vp-stage-" + cssIdSafe(sessionKey);
+      const ctrlsId = "vp-controls-" + cssIdSafe(sessionKey);
+
+      const tiktokStageHtml =
+        '<div class="video-tiktok-stage" id="' + stageId + '">' +
+          phraseBookmarkHtml +
+          '<div class="video-tiktok-pills-left" aria-hidden="true">' + leftPillsHtml + '</div>' +
+          '<div class="video-tiktok-pills-right" aria-hidden="true">' + rightPillsHtml + '</div>' +
+          '<div class="video-phrase-stack">' + phrasesHtml + '</div>' +
+        '</div>';
 
       // chip row above the controls: one chip per bookmarked beat, with a tiny
       // "clear" link at the right end. hidden when zero bookmarks. chip click
@@ -4638,9 +4971,6 @@
             '<button type="button" class="video-bookmark-clear" aria-label="clear all bookmarks">clear</button>' +
           '</div>'
         : '';
-
-      const stageId = "vp-stage-" + cssIdSafe(sessionKey);
-      const ctrlsId = "vp-controls-" + cssIdSafe(sessionKey);
 
       const errorHtml = (script.status === "error" && script.errorMessage)
         ? '<div class="video-error-msg">' + escapeHtml(script.errorMessage) + '</div>'
@@ -4668,30 +4998,9 @@
           exportHtml +
         '</div>';
 
-      // marker-style picker lives in the head row (right side, before the
-      // duration pill). hidden if the active script has no markers — the
-      // setting is irrelevant for a marker-less script.
-      const hasAnyMarker = beats.some(b => !!b.marker);
-      const tourBtnHtml = hasAnyMarker
-        ? '<button type="button" class="vmp-btn vmp-tour-btn" data-marker-tour="' + (markerTourActive ? '1' : '0') + '" title="cycle through every marker treatment while the karaoke plays">' +
-            (markerTourActive ? 'stop tour' : 'tour') +
-          '</button>'
-        : '';
-      const pickerHtml = hasAnyMarker
-        ? '<div class="video-marker-picker" role="group" aria-label="marker style">' +
-            VIDEO_MARKER_STYLES.map((opt, idx) => (
-              (idx > 0 ? '<span class="vmp-divider" aria-hidden="true"></span>' : '') +
-              '<button type="button" class="vmp-btn" data-marker-style="' + opt + '" aria-pressed="' + (opt === markerStyle ? 'true' : 'false') + '">' + opt + '</button>'
-            )).join('') +
-            '<span class="vmp-divider" aria-hidden="true"></span>' +
-            tourBtnHtml +
-          '</div>'
-        : '';
-
       // script-style picker — controls the scriptifier prompt preset for the
-      // NEXT closed turn. shown unconditionally (unlike the marker picker)
-      // because the user might want to pre-set the style before the next
-      // turn lands. shares .vmp-btn styling, keyed by data-script-style.
+      // NEXT closed turn. shown unconditionally because the user might want
+      // to pre-set the style before the next turn lands.
       const scriptStylePickerHtml =
         '<div class="video-marker-picker video-script-style-picker" role="group" aria-label="script style">' +
           VIDEO_SCRIPT_STYLES.map((opt, idx) => (
@@ -4701,10 +5010,8 @@
         '</div>';
 
       // marker-vocab picker — controls which marker vocabulary the scriptifier
-      // is asked for and which token names the client surfaces in chips +
-      // banners. orthogonal to script-style + marker-style (treatments). lives
-      // alongside the marker-style picker; shown unconditionally so the user
-      // can pre-set vocab before the next turn lands.
+      // is asked for and which token names the client surfaces. shown
+      // unconditionally so the user can pre-set vocab before the next turn lands.
       const markerVocabPickerHtml =
         '<div class="video-marker-picker video-marker-vocab-picker" role="group" aria-label="marker vocab">' +
           VIDEO_MARKER_VOCABS.map((opt, idx) => (
@@ -4725,36 +5032,15 @@
           voicePickerHtml +
           scriptStylePickerHtml +
           markerVocabPickerHtml +
-          pickerHtml +
           '<span class="video-duration">' + durStr + '</span>' +
         '</div>' +
-        '<div class="video-pane-stage" id="' + stageId + '">' + beatsHtml + '</div>' +
+        tiktokStageHtml +
         bookmarksRowHtml +
         controlsHtml +
         '<div class="video-attribution">narrated by scriptifier · ' + escapeHtml(currentVoiceId) + '</div>';
 
-      // clear any stale --marker-tint on the pane container; paintKaraokeFrame
-      // will re-set it for the corner style when sitting on a marked beat.
+      // legacy marker-treatment css var no longer applies in tiktok mode.
       try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
-
-      // wire picker click → applyMarkerStyle.
-      const pickerBtns = dVideoPane.querySelectorAll(".vmp-btn[data-marker-style]");
-      pickerBtns.forEach(btn => {
-        btn.addEventListener("click", () => {
-          const next = btn.getAttribute("data-marker-style");
-          if (next) {
-            // if the user picks a marker manually, end any active tour first
-            if (markerTourActive) applyMarkerTour(false);
-            applyMarkerStyle(next);
-          }
-        });
-      });
-
-      // wire tour button → applyMarkerTour. cycles every TOUR_INTERVAL_MS.
-      const tourBtn = dVideoPane.querySelector(".vmp-tour-btn");
-      if (tourBtn) {
-        tourBtn.addEventListener("click", () => applyMarkerTour(!markerTourActive));
-      }
 
       // wire marker-vocab picker click → applyMarkerVocab (POSTs + repaints).
       const markerVocabBtns = dVideoPane.querySelectorAll(".vmp-btn[data-marker-vocab]");
@@ -4793,6 +5079,7 @@
         if (existing) {
           if (existing.rafId) cancelAnimationFrame(existing.rafId);
           if (existing.audio) { try { existing.audio.pause(); } catch {} }
+          if (typeof teardownAnnotations === "function") teardownAnnotations(existing);
           videoRuntime.delete(sessionKey);
         }
         return;
@@ -4818,11 +5105,24 @@
         rt.fillEl = fillEl;
         rt.timeEl = timeEl;
         rt.beats = beats;
+        rt.phrases = phrases;
+        rt.pills = pillsWithSide;
         rt.lastBeatIdx = -1;
         rt.lastWordIdx = -1;
-        // marker-style trackers need a fresh start: the stage was just rebuilt
-        // so any banner / stamp / ticker DOM is gone, and the corner glyph
-        // hangs off the head row which was also re-emitted.
+        rt.lastPhraseIdx = -1;
+        // tear down any prior rough-notation annotations attached to old DOM —
+        // the stage was just rebuilt so the old nodes are gone anyway, but the
+        // map references would be stale.
+        if (rt.activeAnnotations) {
+          for (const ann of rt.activeAnnotations.values()) {
+            try { ann.remove(); } catch {}
+          }
+          rt.activeAnnotations.clear();
+        } else {
+          rt.activeAnnotations = new Map();
+        }
+        // legacy trackers retained as no-ops in tiktok mode (referenced by the
+        // old paintKaraokeFrame branches; harmless to leave initialised).
         rt.lastBannerBeatIdx = -1;
         rt.lastCornerBeatIdx = -1;
         rt.lastStampBeatIdx = -1;
@@ -4834,6 +5134,7 @@
         if (rt) {
           if (rt.rafId) cancelAnimationFrame(rt.rafId);
           if (rt.audio) { try { rt.audio.pause(); } catch {} }
+          if (typeof teardownAnnotations === "function") teardownAnnotations(rt);
         }
         const audio = document.createElement("audio");
         audio.preload = "metadata";
@@ -4846,15 +5147,15 @@
           totalTokenCount,
           words,
           beats,
+          phrases,
+          pills: pillsWithSide,
           rafId: 0,
           stageEl, ctrlsEl, playBtn, scrubEl, fillEl, timeEl,
           lastBeatIdx: -1,
           lastWordIdx: -1,
-          // marker-style trackers — initialised so the first beat-change after
-          // mount triggers a fresh banner / corner-glyph / stamp / ticker /
-          // halo entry. tickerQueueEndAt holds the timestamp at which the most
-          // recently scheduled ticker pill finished its entrance, used to
-          // stagger queued pills ~700ms apart.
+          lastPhraseIdx: -1,
+          activeAnnotations: new Map(),
+          // legacy marker-treatment trackers retained as no-ops.
           lastBannerBeatIdx: -1,
           lastCornerBeatIdx: -1,
           lastStampBeatIdx: -1,
@@ -4973,15 +5274,13 @@
     // bookmarksByKey + triggers a refresh. optimistic local update keeps the
     // icon snappy; on http error we revert.
     function wireBookmarkControls(sessionKey, turnId, beatBoundaries) {
-      // icon click → toggle. delegate from .video-pane-stage so we don't have
-      // to attach one listener per beat (and so re-renders don't leak handlers).
-      const stage = dVideoPane.querySelector(".video-pane-stage");
-      if (stage) {
-        stage.onclick = (ev) => {
-          const btn = ev.target && ev.target.closest ? ev.target.closest(".vb-bookmark") : null;
-          if (!btn) return;
+      // tiktok mode: a single bookmark icon overlays the stage. its data-
+      // -bookmark-idx is kept in sync with the active beat by paintKaraokeFrame.
+      const phraseBookmarkBtn = dVideoPane.querySelector(".video-phrase-bookmark[data-bookmark-idx]");
+      if (phraseBookmarkBtn) {
+        phraseBookmarkBtn.onclick = (ev) => {
           ev.stopPropagation();
-          const idxStr = btn.getAttribute("data-bookmark-idx");
+          const idxStr = phraseBookmarkBtn.getAttribute("data-bookmark-idx");
           if (idxStr === null) return;
           const idx = Number(idxStr);
           if (!Number.isFinite(idx) || idx < 0) return;
@@ -5120,10 +5419,9 @@
         rt.rafId = 0;
       }
     }
-    // single repaint of the karaoke state at audio.currentTime. updates word
-    // classes within the active beat, beat-level past/current/future classes,
-    // scrub fill, and time label. only smooth-scrolls when the active beat
-    // changes (debounced via rt.lastBeatIdx).
+    // single repaint of the karaoke state at audio.currentTime. tiktok mode:
+    // tracks the current PHRASE (3-4 words) rather than the current beat, and
+    // anchors pill visibility + the bookmark icon to the current beat.
     function paintKaraokeFrame(sessionKey) {
       const rt = videoRuntime.get(sessionKey);
       if (!rt || !rt.audio || !rt.stageEl) return;
@@ -5140,49 +5438,58 @@
         if (t >= w.startS && t < w.endS) { wordIdx = i; break; }
         if (i === ws.length - 1 && t >= w.endS) { wordIdx = ws.length - 1; }
       }
-      // find current beat index from boundaries.
-      let beatIdx = -1;
-      const bbs = rt.beatBoundaries || [];
-      if (wordIdx >= 0) {
-        for (let i = 0; i < bbs.length; i++) {
-          if (wordIdx >= bbs[i].startWordIdx && wordIdx < bbs[i].endWordIdx) { beatIdx = i; break; }
-        }
-      } else if (ws.length === 0 && bbs.length > 0 && dur > 0) {
-        // fallback: even-time distribution when word timings are missing.
-        for (let i = 0; i < bbs.length; i++) {
-          if (t >= bbs[i].startS && t < bbs[i].endS) { beatIdx = i; break; }
+      // current phrase index. preferred path: pin from wordIdx via the
+      // phrase's word-range. fallback: time-based scan via phrases[i].startS/
+      // endS — kicks in whenever the word-based path didn't land on a real
+      // phrase (no whisper words at all, or partial timing mismatch where
+      // wordIdx ends up outside every phrase's range).
+      let phraseIdx = -1;
+      const phrases = rt.phrases || [];
+      if (wordIdx >= 0 && phrases.length) {
+        for (let i = 0; i < phrases.length; i++) {
+          const ph = phrases[i];
+          if (wordIdx >= ph.startWordGlobal && wordIdx <= ph.endWordGlobal) { phraseIdx = i; break; }
+          if (wordIdx > ph.endWordGlobal) phraseIdx = i; // sticky to last passed phrase
         }
       }
-      if (beatIdx < 0) beatIdx = 0;
+      if (phraseIdx < 0 && phrases.length && dur > 0) {
+        for (let i = 0; i < phrases.length; i++) {
+          if (t >= phrases[i].startS && t < phrases[i].endS) { phraseIdx = i; break; }
+          if (t >= phrases[i].endS) phraseIdx = i;
+        }
+      }
+      if (phraseIdx < 0) phraseIdx = 0;
+      const curPhrase = phrases[phraseIdx];
+      const beatIdx = curPhrase ? curPhrase.beatIdx : 0;
 
-      // paint beats — only touch classes that need to change. (full reset is
-      // cheap at our beat counts but we use targeted updates to avoid
-      // restarting css transitions every frame.)
-      const beatEls = rt.stageEl.querySelectorAll(".video-beat");
-      for (let i = 0; i < beatEls.length; i++) {
-        const el = beatEls[i];
-        const wantState = i < beatIdx ? "past" : (i === beatIdx ? "current" : "future");
+      // paint phrase position classes. phrases more than one step away from
+      // current are display:none so the stack stays uncluttered.
+      const phraseEls = rt.stageEl.querySelectorAll(".video-phrase");
+      for (let i = 0; i < phraseEls.length; i++) {
+        const el = phraseEls[i];
+        const wantState = i < phraseIdx ? "past" : (i === phraseIdx ? "current" : "future");
         const has = el.classList.contains("past") ? "past"
                   : (el.classList.contains("current") ? "current" : "future");
         if (has !== wantState) {
           el.classList.remove("past", "current", "future");
           el.classList.add(wantState);
         }
+        const visible = i >= phraseIdx - 1 && i <= phraseIdx + 1;
+        const wantDisplay = visible ? "" : "none";
+        if (el.style.display !== wantDisplay) el.style.display = wantDisplay;
       }
 
-      // paint words within the current beat. clear played/active on all words
-      // outside the current beat range; inside, mark earlier words .played and
-      // the wordIdx-th .active.
+      // paint words within the current phrase only. clear played/active on all
+      // outside words.
       const allWordEls = rt.stageEl.querySelectorAll(".vb-word");
-      const cur = bbs[beatIdx] || { startWordIdx: 0, endWordIdx: 0 };
+      const curStart = curPhrase ? curPhrase.startWordGlobal : 0;
+      const curEnd = curPhrase ? curPhrase.endWordGlobal + 1 : 0;
       for (let i = 0; i < allWordEls.length; i++) {
         const el = allWordEls[i];
-        const isInCurrent = i >= cur.startWordIdx && i < cur.endWordIdx;
+        const isInCurrent = i >= curStart && i < curEnd;
         let want = "";
         if (i < wordIdx) want = "played";
         else if (i === wordIdx) want = "active";
-        // outside the current beat we don't show played/active highlights;
-        // beat-level dim styling carries the past/future signal.
         if (!isInCurrent) want = "";
         const hasPlayed = el.classList.contains("played");
         const hasActive = el.classList.contains("active");
@@ -5198,75 +5505,20 @@
         }
       }
 
-      // beat-change side effects: scroll into view + marker pulse.
+      // phrase change: tear down old rough-notation annotations and apply
+      // fresh ones for the new active phrase. annotations target only the
+      // .vb-word.emph spans inside the .video-phrase.current node.
+      if (phraseIdx !== rt.lastPhraseIdx) {
+        rt.lastPhraseIdx = phraseIdx;
+        applyPhraseAnnotations(rt, phraseIdx);
+      }
+
+      // beat change: update pill visibility + bookmark icon's data-attr +
+      // is-on class. beats are coarser than phrases so this fires less often.
       if (beatIdx !== rt.lastBeatIdx) {
         rt.lastBeatIdx = beatIdx;
-        const beatEl = beatEls[beatIdx];
-        if (beatEl) {
-          if (reduceMotionOn()) {
-            beatEl.scrollIntoView({ block: "center" });
-          } else {
-            beatEl.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-          // marker pulse — only when reduced-motion is OFF and gsap available.
-          // pill-style only; banner/corner have their own entry animation.
-          if (markerStyle === "pill") {
-            const markerEl = beatEl.querySelector(".video-marker");
-            if (markerEl && typeof gsap !== "undefined" && !reduceMotionOn()) {
-              gsap.fromTo(markerEl,
-                { scale: 1.0 },
-                { scale: 1.08, duration: 0.14, ease: "back.out(2)", yoyo: true, repeat: 1, transformOrigin: "center" }
-              );
-            }
-          }
-        }
-        // marker-style-specific hooks: fire only when crossing into a marked
-        // beat (lastBannerBeatIdx / lastCornerBeatIdx track the previous fire
-        // so the same beat doesn't re-trigger on rAF re-renders).
-        const curBeat = (rt.beats || [])[beatIdx];
-        const curMarker = curBeat && curBeat.marker;
-        if (markerStyle === "banner") {
-          if (curMarker && rt.lastBannerBeatIdx !== beatIdx) {
-            rt.lastBannerBeatIdx = beatIdx;
-            triggerMarkerBanner(sessionKey, beatIdx, curBeat);
-          } else if (!curMarker) {
-            rt.lastBannerBeatIdx = -1;
-          }
-        }
-        if (markerStyle === "corner") {
-          if (curMarker && rt.lastCornerBeatIdx !== beatIdx) {
-            rt.lastCornerBeatIdx = beatIdx;
-            triggerMarkerCorner(sessionKey, beatIdx, curBeat);
-          } else if (!curMarker) {
-            rt.lastCornerBeatIdx = -1;
-            clearMarkerCorner(sessionKey);
-          }
-        }
-        if (markerStyle === "stamp") {
-          if (curMarker && rt.lastStampBeatIdx !== beatIdx) {
-            rt.lastStampBeatIdx = beatIdx;
-            triggerMarkerStamp(rt, beatIdx, curBeat);
-          } else if (!curMarker) {
-            rt.lastStampBeatIdx = -1;
-          }
-        }
-        if (markerStyle === "ticker") {
-          if (curMarker && rt.lastTickerBeatIdx !== beatIdx) {
-            rt.lastTickerBeatIdx = beatIdx;
-            triggerMarkerTicker(rt, curBeat, curBeat.text);
-          } else if (!curMarker) {
-            rt.lastTickerBeatIdx = -1;
-          }
-        }
-        if (markerStyle === "halo") {
-          if (curMarker && rt.lastHaloBeatIdx !== beatIdx) {
-            rt.lastHaloBeatIdx = beatIdx;
-            applyMarkerHalo(rt, beatIdx, curBeat);
-          } else if (!curMarker) {
-            rt.lastHaloBeatIdx = -1;
-            clearMarkerHalo(rt);
-          }
-        }
+        paintPillsForBeat(rt, beatIdx);
+        paintPhraseBookmark(rt, sessionKey, beatIdx);
       }
       // word-advance flourish — tiny 3-sprinkle pop from the active word's
       // center. throttled to 320ms so fast stretches don't strobe. uses the
@@ -5312,6 +5564,105 @@
         const dStr = dur > 0 ? vbFmtTime(dur) : "—:—";
         rt.timeEl.textContent = vbFmtTime(t) + " / " + dStr;
       }
+    }
+
+    // ---- tiktok helpers --------------------------------------------------
+    // tear down rough-notation handles attached to a runtime. shared by phrase
+    // changes (the inner active set is replaced) and by full-runtime teardown
+    // (the .video-tiktok-stage DOM is about to be wiped). safe to call on a
+    // runtime without an activeAnnotations Map.
+    function teardownAnnotations(rt) {
+      if (!rt || !rt.activeAnnotations || rt.activeAnnotations.size === 0) return;
+      for (const ann of rt.activeAnnotations.values()) {
+        try { ann.hide(); } catch {}
+        try { ann.remove(); } catch {}
+      }
+      rt.activeAnnotations.clear();
+    }
+
+    // tear down the previous phrase's rough-notation handles and instantiate
+    // fresh ones for the new active phrase. RoughNotation requires inline-block
+    // targets — our .vb-word.emph spans are styled accordingly. when the active
+    // beat has a marker, every emphasis span on the phrase gets that marker's
+    // annotation type/colour. when no marker, default highlight in soft pink.
+    // when the phrase has a marker but no explicit emphasis words, the whole
+    // phrase line is annotated with the marker's type.
+    function applyPhraseAnnotations(rt, phraseIdx) {
+      if (!rt) return;
+      teardownAnnotations(rt);
+      if (typeof RoughNotation === "undefined" || reduceMotionOn()) return;
+      const phrase = (rt.phrases || [])[phraseIdx];
+      if (!phrase) return;
+      const stageEl = rt.stageEl;
+      if (!stageEl) return;
+      const phraseEl = stageEl.querySelector('.video-phrase[data-phrase-idx="' + phraseIdx + '"]');
+      if (!phraseEl) return;
+
+      // resolve the annotation shape. marker-driven mapping wins; fall back to
+      // soft-pink highlight for default emphasis.
+      const markerCfg = phrase.marker ? ROUGH_MARKER_ANNOTATION[phrase.marker] : null;
+      const emphCfg = markerCfg || ROUGH_DEFAULT_EMPHASIS;
+
+      const emphEls = phraseEl.querySelectorAll(".vb-word.emph");
+      if (emphEls.length > 0) {
+        emphEls.forEach((el, idx) => {
+          const ann = RoughNotation.annotate(el, {
+            type: emphCfg.type,
+            color: emphCfg.color,
+            padding: 4,
+            strokeWidth: 1.6,
+            animationDuration: 600,
+          });
+          rt.activeAnnotations.set("emph_" + idx, ann);
+          ann.show();
+        });
+      } else if (markerCfg) {
+        // marker but no explicit emphasis — annotate the entire phrase line.
+        const ann = RoughNotation.annotate(phraseEl, {
+          type: markerCfg.type,
+          color: markerCfg.color,
+          padding: 6,
+          strokeWidth: 1.6,
+          animationDuration: 700,
+        });
+        rt.activeAnnotations.set("_phrase", ann);
+        ann.show();
+      }
+    }
+
+    // toggle .is-active on each pill DOM node based on whether the current
+    // beat is in [pill.startBeat, pill.endBeat]. pure class manipulation; CSS
+    // transitions handle the slide-in/slide-out.
+    function paintPillsForBeat(rt, beatIdx) {
+      if (!rt || !rt.stageEl) return;
+      const pillEls = rt.stageEl.querySelectorAll(".video-pill");
+      for (let i = 0; i < pillEls.length; i++) {
+        const el = pillEls[i];
+        const start = Number(el.getAttribute("data-start-beat") || "0");
+        const end = Number(el.getAttribute("data-end-beat") || "0");
+        const want = beatIdx >= start && beatIdx <= end;
+        const has = el.classList.contains("is-active");
+        if (want && !has) el.classList.add("is-active");
+        else if (!want && has) el.classList.remove("is-active");
+      }
+    }
+
+    // keep the single phrase-bookmark icon in sync with the active beat:
+    // updates data-bookmark-idx (so a click toggles the right beat) and the
+    // is-on / aria-pressed state from bookmarksByKey.
+    function paintPhraseBookmark(rt, sessionKey, beatIdx) {
+      if (!rt || !rt.stageEl) return;
+      const btn = dVideoPane.querySelector(".video-phrase-bookmark[data-bookmark-idx]");
+      if (!btn) return;
+      btn.setAttribute("data-bookmark-idx", String(beatIdx));
+      const turnId = rt.turnId;
+      const isOn = (bookmarksForKey(sessionKey, turnId) || []).includes(beatIdx);
+      btn.setAttribute("aria-pressed", isOn ? "true" : "false");
+      if (isOn) btn.classList.add("is-on");
+      else btn.classList.remove("is-on");
+      const fillSvg = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
+      const outlineSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>';
+      btn.innerHTML = isOn ? fillSvg : outlineSvg;
     }
 
     // ---- marker-style triggers (banner + corner) ---------------------------
@@ -5646,6 +5997,15 @@
         }
         scriptsByKey.set(key, m);
       }
+      // hydrate per-session pill plans — same turnId-keyed shape as scripts.
+      // pillPlans on the snapshot is { turnId: PillPlanPayload, … }.
+      if (snap.pillPlans && typeof snap.pillPlans === "object") {
+        const pm = pillsByKey.get(key) || new Map();
+        for (const [turnId, plan] of Object.entries(snap.pillPlans)) {
+          pm.set(turnId, plan);
+        }
+        pillsByKey.set(key, pm);
+      }
       // hydrate per-session mp4 export status (from snapshot.exports). same
       // turnId-keyed shape as scripts; lets a reload pick up an in-flight
       // render without re-POSTing /debug/export-script.
@@ -5794,6 +6154,12 @@
           let m = scriptsByKey.get(msg.sessionKey);
           if (!m) { m = new Map(); scriptsByKey.set(msg.sessionKey, m); }
           m.set(msg.script.turnId, msg.script);
+          refresh();
+        } else if (msg.kind === "pills:beats") {
+          if (!msg.plan || typeof msg.plan.turnId !== "string") return;
+          let m = pillsByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); pillsByKey.set(msg.sessionKey, m); }
+          m.set(msg.plan.turnId, msg.plan);
           refresh();
         } else if (msg.kind === "script:error") {
           const m = scriptsByKey.get(msg.sessionKey);
