@@ -743,6 +743,150 @@
       #d-chart, #d-code-chart { grid-column: 1; }
     }
 
+    /* composer-pane — agent-authored hyperframes composition embedded as an
+       iframe. sits ABOVE the (now legacy) video-pane and shows the latest
+       turn's composition once the composer agent reports ready. status header
+       on top: running → linting → ready, or error. iframe is the composition
+       running standalone in a sandboxed frame. */
+    .composer-pane {
+      background: linear-gradient(180deg, color-mix(in oklab, var(--accent) 6%, var(--surface)) 0%, var(--surface) 60%);
+      border: 1px solid color-mix(in oklab, var(--accent) 20%, transparent);
+      border-radius: var(--r-panel);
+      padding: 14px 18px 18px;
+      margin-bottom: 12px;
+    }
+    .composer-pane-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    .composer-pane-title {
+      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .composer-pane-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: color-mix(in oklab, var(--accent) 12%, transparent);
+      color: color-mix(in oklab, var(--text) 80%, transparent);
+      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      font-size: 11px;
+    }
+    .composer-pane-status[data-status="ready"]    { background: color-mix(in oklab, #56c596 22%, transparent); color: #1e6c4a; }
+    .composer-pane-status[data-status="running"],
+    .composer-pane-status[data-status="linting"]  { background: color-mix(in oklab, var(--accent) 18%, transparent); color: var(--accent); }
+    .composer-pane-status[data-status="error"]    { background: color-mix(in oklab, #d65a5a 18%, transparent); color: #a23030; }
+    .composer-pane-status .cps-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+    .composer-pane-status[data-status="running"] .cps-dot,
+    .composer-pane-status[data-status="linting"] .cps-dot {
+      animation: cps-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes cps-pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+    .composer-pane-actions { display: inline-flex; gap: 8px; align-items: center; }
+    .composer-pane-actions a {
+      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      font-size: 11px;
+      color: color-mix(in oklab, var(--text) 65%, transparent);
+      text-decoration: none;
+    }
+    .composer-pane-actions a:hover { color: var(--accent); }
+    .composer-pane-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1280 / 720;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff5f8;
+      border: 1px solid color-mix(in oklab, var(--accent) 18%, transparent);
+    }
+    .composer-pane-frame iframe {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+    .composer-pane-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: color-mix(in oklab, var(--text) 55%, transparent);
+      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      font-size: 12px;
+      letter-spacing: 0.05em;
+      text-align: center;
+      padding: 24px;
+    }
+    .composer-pane-error {
+      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      font-size: 11px;
+      color: #a23030;
+      padding: 6px 10px;
+      background: color-mix(in oklab, #d65a5a 10%, transparent);
+      border-radius: 6px;
+      margin-top: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* video-pane-legacy — wraps the original karaoke video pane in a
+       collapsible <details>, kept for review while the composer pane becomes
+       the primary path. closed by default; opens on click of the summary. */
+    .video-pane-legacy {
+      margin-bottom: 12px;
+      border-radius: var(--r-panel);
+      border: 1px dashed color-mix(in oklab, var(--text) 22%, transparent);
+      background: color-mix(in oklab, var(--surface) 90%, transparent);
+    }
+    .video-pane-legacy[open] { background: var(--surface); }
+    .video-pane-legacy > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      color: color-mix(in oklab, var(--text) 60%, transparent);
+      user-select: none;
+    }
+    .video-pane-legacy > summary::-webkit-details-marker { display: none; }
+    .video-pane-legacy > summary .vpl-arrow {
+      display: inline-block;
+      transition: transform 0.18s ease;
+    }
+    .video-pane-legacy[open] > summary .vpl-arrow { transform: rotate(90deg); }
+    .video-pane-legacy > summary .vpl-title { text-transform: uppercase; }
+    .video-pane-legacy > summary .vpl-hint {
+      margin-left: auto;
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      opacity: 0.7;
+    }
+    /* once expanded, the inner video-pane occupies the full body of the
+       <details>; remove its outer margin so it sits flush. */
+    .video-pane-legacy > .video-pane { margin: 0 14px 14px; }
+
     /* video-pane — karaoke playback of the latest scriptifier turn. lives between
        the charts-band and the conversation strip and offers an alternative way
        to consume the same turn. soft pink wash on top so it reads as its own
@@ -2595,7 +2739,16 @@
           <div id="d-code-chart"></div>
         </div>
 
-        <div class="video-pane" id="d-video-pane" hidden></div>
+        <div class="composer-pane" id="d-composer-pane" hidden></div>
+
+        <details class="video-pane-legacy" id="d-video-pane-legacy">
+          <summary>
+            <span class="vpl-arrow">▸</span>
+            <span class="vpl-title">previous video pane</span>
+            <span class="vpl-hint">legacy · for review</span>
+          </summary>
+          <div class="video-pane" id="d-video-pane" hidden></div>
+        </details>
 
         <div class="conversation" id="d-conversation"></div>
         <div class="chat-thread" id="d-chat-thread"></div>
@@ -2625,6 +2778,8 @@
     const dChartsBand = document.getElementById("d-charts-band");
     const dConversation = document.getElementById("d-conversation");
     const dVideoPane = document.getElementById("d-video-pane");
+    const dComposerPane = document.getElementById("d-composer-pane");
+    const dVideoPaneLegacy = document.getElementById("d-video-pane-legacy");
     const dChatThread = document.getElementById("d-chat-thread");
     const dChatInput = document.getElementById("d-chat-input");
     const autoSendToggle = document.getElementById("autosend-toggle");
@@ -3767,6 +3922,7 @@
         dUntouched.hidden = true;
       }
 
+      renderComposerPane(sess);
       renderVideoPane(sess);
       renderConversation(sess, turns);
       renderChatThread(sess);
@@ -3853,6 +4009,12 @@
     //   { turnId, status: "rendering"|"ready"|"error", hash?, mp4Url?, durationS?,
     //     bytes?, errorMessage?, ts, startedTs }
     const exportsByKey = new Map();
+    // composer state — sessionKey → Map<turnId, ComposerPayload>. each
+    // payload looks like { turnId, status: "running"|"linting"|"ready"|"error",
+    // url?, attempt?, errorMessage?, ts, startedTs }. populated by hello /
+    // session:upsert snapshots and the composer:* ws msgs. drives the new
+    // Composer Preview pane (above the legacy video-pane).
+    const composersByKey = new Map();
     // per-session beat bookmarks — sessionKey → Map<turnId, sorted asc number[]>.
     // populated by hello/session:upsert snapshots and bookmark:setting ws msgs.
     // server is the source of truth; clicks POST /debug/bookmark and the
@@ -5687,6 +5849,85 @@
     // storyboard / explorer click. cleared after consume.
     const pendingSeekBeat = new Map();
 
+    // pick the latest composer payload for the active session — by ts. ready
+    // beats running beats nothing — but we don't need to filter by status, the
+    // pane shows whatever's freshest and lets the status pill explain itself.
+    function latestComposerFor(sessionKey) {
+      const m = composersByKey.get(sessionKey);
+      if (!m || m.size === 0) return null;
+      let best = null;
+      for (const cp of m.values()) {
+        if (!best || (cp.ts || 0) > (best.ts || 0)) best = cp;
+      }
+      return best;
+    }
+
+    // remember which iframe url is currently mounted per session, so refresh()
+    // doesn't re-mount the iframe (which would reload the composition and
+    // restart the timeline) when nothing material changed.
+    const composerMountedUrl = new Map();
+
+    function renderComposerPane(sess) {
+      const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+      const cp = latestComposerFor(sessionKey);
+      if (!cp) {
+        // hide the pane entirely if this session has never had a composer run.
+        dComposerPane.hidden = true;
+        dComposerPane.innerHTML = "";
+        composerMountedUrl.delete(sessionKey);
+        return;
+      }
+      dComposerPane.hidden = false;
+      const status = cp.status || "running";
+      const turnIdShort = (cp.turnId || "").slice(0, 8);
+      const elapsed = cp.startedTs ? Math.max(0, Math.round((Date.now() - cp.startedTs) / 1000)) : 0;
+      let statusText;
+      if (status === "ready") statusText = "ready · " + turnIdShort;
+      else if (status === "linting") statusText = "linting" + (cp.attempt ? " · attempt " + cp.attempt : "") + " · " + elapsed + "s";
+      else if (status === "running") statusText = "composing · " + elapsed + "s";
+      else statusText = "error · " + turnIdShort;
+
+      const headHtml =
+        '<div class="composer-pane-head">' +
+          '<span class="composer-pane-title">composer preview</span>' +
+          '<span class="composer-pane-status" data-status="' + escapeHtml(status) + '">' +
+            '<span class="cps-dot"></span>' +
+            '<span>' + escapeHtml(statusText) + '</span>' +
+          '</span>' +
+          '<span class="composer-pane-actions">' +
+            (status === "ready" && cp.url ? '<a href="' + escapeHtml(cp.url) + '" target="_blank" rel="noopener">open ↗</a>' : '') +
+          '</span>' +
+        '</div>';
+
+      let bodyHtml;
+      if (status === "ready" && cp.url) {
+        // mount iframe lazily — only re-mount when the URL changes, otherwise
+        // a refresh() tick (every 5s) would keep restarting the composition.
+        const prev = composerMountedUrl.get(sessionKey);
+        if (prev === cp.url) {
+          // keep existing DOM. paint head only.
+          dComposerPane.querySelector(".composer-pane-head")?.replaceWith(
+            new DOMParser().parseFromString(headHtml, "text/html").body.firstChild
+          );
+          return;
+        }
+        bodyHtml = '<div class="composer-pane-frame"><iframe src="' + escapeHtml(cp.url) + '" sandbox="allow-scripts" loading="lazy"></iframe></div>';
+        composerMountedUrl.set(sessionKey, cp.url);
+      } else if (status === "error") {
+        bodyHtml =
+          '<div class="composer-pane-frame"><div class="composer-pane-placeholder">composition failed — see error below</div></div>' +
+          '<div class="composer-pane-error">' + escapeHtml(cp.errorMessage || "unknown error") + '</div>';
+        composerMountedUrl.delete(sessionKey);
+      } else {
+        bodyHtml = '<div class="composer-pane-frame"><div class="composer-pane-placeholder">' +
+          (status === "linting" ? "running hyperframes lint…" : "agent composing the next preview…") +
+          '</div></div>';
+        composerMountedUrl.delete(sessionKey);
+      }
+
+      dComposerPane.innerHTML = headHtml + bodyHtml;
+    }
+
     function renderVideoPane(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       pauseOtherVideoRuntimes(sessionKey);
@@ -6953,6 +7194,16 @@
         }
         exportsByKey.set(key, em);
       }
+      // hydrate per-session composer payloads (one per turnId). same shape
+      // as exports/scripts — includes the iframe url for ready entries so a
+      // reload pops the composition straight back in without waiting for ws.
+      if (snap.composers && typeof snap.composers === "object") {
+        const cm = composersByKey.get(key) || new Map();
+        for (const [turnId, cp] of Object.entries(snap.composers)) {
+          cm.set(turnId, cp);
+        }
+        composersByKey.set(key, cm);
+      }
       // hydrate per-session voice override. snapshot.voice always carries the
       // resolved voice (override OR server default), so unconditional set is
       // fine — picker stays in sync with whichever voice the next turn'll use.
@@ -7144,6 +7395,49 @@
             turnId: msg.turnId,
             status: "error",
             errorMessage: typeof msg.message === "string" ? msg.message : "render failed",
+            ts: Date.now(),
+            startedTs: prev ? prev.startedTs : Date.now(),
+          });
+          refresh();
+        } else if (msg.kind === "composer:running") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          let m = composersByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); composersByKey.set(msg.sessionKey, m); }
+          const startedTs = typeof msg.startedTs === "number" ? msg.startedTs : Date.now();
+          m.set(msg.turnId, { turnId: msg.turnId, status: "running", ts: Date.now(), startedTs });
+          refresh();
+        } else if (msg.kind === "composer:linting") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          const m = composersByKey.get(msg.sessionKey);
+          if (!m) return;
+          const existing = m.get(msg.turnId);
+          if (!existing) return;
+          existing.status = "linting";
+          if (typeof msg.attempt === "number") existing.attempt = msg.attempt;
+          existing.ts = Date.now();
+          refresh();
+        } else if (msg.kind === "composer:ready") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          let m = composersByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); composersByKey.set(msg.sessionKey, m); }
+          const prev = m.get(msg.turnId);
+          m.set(msg.turnId, {
+            turnId: msg.turnId,
+            status: "ready",
+            url: typeof msg.url === "string" ? msg.url : (prev?.url),
+            ts: Date.now(),
+            startedTs: prev ? prev.startedTs : Date.now(),
+          });
+          refresh();
+        } else if (msg.kind === "composer:error") {
+          if (typeof msg.sessionKey !== "string" || typeof msg.turnId !== "string") return;
+          let m = composersByKey.get(msg.sessionKey);
+          if (!m) { m = new Map(); composersByKey.set(msg.sessionKey, m); }
+          const prev = m.get(msg.turnId);
+          m.set(msg.turnId, {
+            turnId: msg.turnId,
+            status: "error",
+            errorMessage: typeof msg.message === "string" ? msg.message : "composer failed",
             ts: Date.now(),
             startedTs: prev ? prev.startedTs : Date.now(),
           });
