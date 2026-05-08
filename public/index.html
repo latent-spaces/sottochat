@@ -1620,6 +1620,428 @@
       }
     }
 
+    /* ---------- alternate intake modes ---------- */
+    /* glance — single big strapline + 1-2 priority pills + meta line. coarsest
+       granularity, ≤3s read. flat single-surface, no nesting. */
+    .video-glance-stage {
+      width: 100%;
+      padding: 28px 26px;
+      background: linear-gradient(
+        180deg,
+        color-mix(in oklab, var(--accent-soft, #ffd6e3) 28%, var(--bg)) 0%,
+        color-mix(in oklab, var(--accent-soft, #ffd6e3) 10%, var(--bg)) 100%
+      );
+      border: 1px solid color-mix(in oklab, var(--accent) 18%, transparent);
+      border-radius: 18px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .video-glance-marker {
+      display: inline-flex;
+      align-self: flex-start;
+      align-items: center;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .video-glance-marker.INSIGHT,
+    .video-glance-marker.PUNCHLINE   { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-glance-marker.BE_CAREFUL,
+    .video-glance-marker.GOTCHA      { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-glance-marker.STEP,
+    .video-glance-marker.PIVOT       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-glance-marker.NOTE,
+    .video-glance-marker.ASIDE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-glance-headline {
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      color: var(--fg);
+    }
+    .video-glance-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .video-glance-pills .video-pill {
+      opacity: 1;
+      transform: none;
+    }
+    .video-glance-meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--fg-muted);
+      margin-top: 4px;
+    }
+    .video-glance-observer {
+      padding: 10px 12px;
+      border-left: 3px solid var(--accent);
+      background: color-mix(in oklab, var(--accent) 6%, var(--surface, #fff));
+      border-radius: 0 8px 8px 0;
+      font-family: var(--sans);
+      font-size: 12px;
+      color: var(--fg);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .video-glance-observer .vgo-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    /* headlines — vertical list of marker beats. each row clickable, color-
+       coded by marker type. side aside hosts pills compactly. */
+    .video-headlines-stage {
+      display: grid;
+      grid-template-columns: 1fr 200px;
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 720px) {
+      .video-headlines-stage { grid-template-columns: 1fr; }
+    }
+    .video-headlines-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .video-headline-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--surface, #fff);
+      border: 1px solid color-mix(in oklab, var(--accent) 12%, transparent);
+      border-radius: 8px;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      color: var(--fg);
+      transition: background-color 140ms ease-out, border-color 140ms ease-out, transform 140ms ease-out;
+    }
+    .video-headline-row:hover {
+      background: color-mix(in oklab, var(--accent-soft, #ffd6e3) 18%, var(--surface, #fff));
+      border-color: color-mix(in oklab, var(--accent) 28%, transparent);
+      transform: translateX(2px);
+    }
+    .video-headline-marker {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      min-width: 56px;
+      justify-content: center;
+    }
+    .video-headline-marker.is-plain {
+      background: var(--bg);
+      color: var(--fg-muted);
+      border: 1px dashed color-mix(in oklab, var(--fg-muted) 30%, transparent);
+      font-weight: 500;
+    }
+    .video-headline-marker.INSIGHT,
+    .video-headline-marker.PUNCHLINE   { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-headline-marker.BE_CAREFUL,
+    .video-headline-marker.GOTCHA      { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-headline-marker.STEP,
+    .video-headline-marker.PIVOT       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-headline-marker.NOTE,
+    .video-headline-marker.ASIDE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-headline-text {
+      flex: 1 1 auto;
+      font-family: var(--sans);
+      font-size: 13px;
+      line-height: 1.4;
+      color: var(--fg);
+    }
+    .video-headlines-pills {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px;
+      background: color-mix(in oklab, var(--accent-soft, #ffd6e3) 14%, var(--bg));
+      border: 1px solid color-mix(in oklab, var(--accent) 14%, transparent);
+      border-radius: 12px;
+    }
+
+    /* storyboard — beat tile grid. each tile is one beat, compact, click to
+       seek+flip to tiktok. responsive grid auto-fills 200-260px tiles. */
+    .video-storyboard-stage {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+    .video-storyboard-panel {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 14px;
+      background: var(--surface, #fff);
+      border: 1px solid color-mix(in oklab, var(--accent) 14%, transparent);
+      border-radius: 12px;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+      color: var(--fg);
+      min-height: 92px;
+      transition: background-color 160ms ease-out, border-color 160ms ease-out, transform 160ms ease-out;
+    }
+    .video-storyboard-panel:hover {
+      background: color-mix(in oklab, var(--accent-soft, #ffd6e3) 22%, var(--surface, #fff));
+      border-color: color-mix(in oklab, var(--accent) 32%, transparent);
+      transform: translateY(-1px);
+    }
+    .video-storyboard-panel.has-marker {
+      border-color: color-mix(in oklab, var(--accent) 36%, transparent);
+      box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 14%, transparent) inset;
+    }
+    .video-storyboard-num {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      color: var(--fg-muted);
+    }
+    .video-storyboard-marker {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .video-storyboard-marker.INSIGHT,
+    .video-storyboard-marker.PUNCHLINE   { background: #fde68a; color: #78350f; border: 1px solid #fbbf24; }
+    .video-storyboard-marker.BE_CAREFUL,
+    .video-storyboard-marker.GOTCHA      { background: #fed7aa; color: #7c2d12; border: 1px solid #fb923c; }
+    .video-storyboard-marker.STEP,
+    .video-storyboard-marker.PIVOT       { background: #dbeafe; color: #1e3a8a; border: 1px solid #60a5fa; }
+    .video-storyboard-marker.NOTE,
+    .video-storyboard-marker.ASIDE       { background: var(--bg); color: var(--fg-muted); border: 1px dashed color-mix(in oklab, var(--fg-muted) 40%, transparent); }
+    .video-storyboard-text {
+      font-family: var(--sans);
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--fg);
+      flex: 1 1 auto;
+    }
+    .video-storyboard-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .video-storyboard-pills .video-pill {
+      font-size: 9px;
+      padding: 3px 7px;
+      height: auto;
+    }
+
+    /* explorer — horizontal crumb timeline. lanes stacked vertically:
+       beat blocks (sized by duration) → marker pins → pills + events beads.
+       hover dot = reveal detail card; click = seek+flip. */
+    .video-explorer-stage {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px 14px;
+      background: var(--surface, #fff);
+      border: 1px solid color-mix(in oklab, var(--accent) 14%, transparent);
+      border-radius: 14px;
+    }
+    .video-explorer-track {
+      position: relative;
+      width: 100%;
+      height: 56px;
+      padding: 18px 0;
+      box-sizing: border-box;
+    }
+    .video-explorer-rail-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 2px;
+      background: color-mix(in oklab, var(--accent) 22%, transparent);
+      border-radius: 1px;
+      transform: translateY(-50%);
+    }
+    /* explorer right-rail (aside) — model/counters/observer flags column. */
+    .video-explorer-shell {
+      display: grid;
+      grid-template-columns: 1fr 220px;
+      gap: 14px;
+      align-items: start;
+    }
+    @media (max-width: 720px) {
+      .video-explorer-shell { grid-template-columns: 1fr; }
+    }
+    aside.video-explorer-rail {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--surface, #fff);
+      border: 1px solid color-mix(in oklab, var(--accent) 14%, transparent);
+      border-radius: 12px;
+      font-family: var(--mono);
+    }
+    .video-explorer-rail-section {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .vxr-label {
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+    .vxr-value {
+      font-size: 12px;
+      color: var(--fg);
+      font-family: var(--mono);
+    }
+    .vxr-flag {
+      padding: 6px 8px;
+      background: color-mix(in oklab, var(--accent) 6%, transparent);
+      border-left: 2px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .vxr-flag-tags {
+      font-size: 9px;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+    .vxr-flag-text {
+      font-family: var(--sans);
+      font-size: 11px;
+      color: var(--fg);
+      line-height: 1.4;
+    }
+    .video-explorer-dot {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--surface, #fff);
+      border: 2px solid color-mix(in oklab, var(--accent) 50%, transparent);
+      cursor: pointer;
+      padding: 0;
+      font-family: var(--mono);
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--fg);
+      letter-spacing: 0.04em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 140ms ease-out, background-color 140ms ease-out, border-color 140ms ease-out;
+    }
+    .video-explorer-dot:hover {
+      transform: translate(-50%, -50%) scale(1.25);
+    }
+    .video-explorer-dot.has-marker {
+      width: 26px;
+      height: 26px;
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 18%, transparent);
+    }
+    .video-explorer-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .video-explorer-pills .video-pill {
+      opacity: 1;
+      transform: none;
+    }
+    .video-explorer-details {
+      min-height: 80px;
+    }
+    .video-explorer-detail {
+      padding: 12px 14px;
+      background: color-mix(in oklab, var(--accent-soft, #ffd6e3) 14%, var(--bg));
+      border: 1px solid color-mix(in oklab, var(--accent) 18%, transparent);
+      border-radius: 10px;
+    }
+    .video-explorer-detail-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .video-explorer-detail-num {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      color: var(--fg-muted);
+    }
+    .video-explorer-detail-time {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--accent);
+      margin-left: auto;
+    }
+    .video-explorer-detail-text {
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--fg);
+    }
+    .video-explorer-detail-emph {
+      margin-top: 6px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-muted);
+    }
+    .video-explorer-detail-emph em {
+      font-style: normal;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* mode picker — same .vmp-btn family as the existing pickers, adds a
+       small accent on the active mode. */
+    .video-mode-picker .vmp-btn[aria-pressed="true"] {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
     /* export-mp4 button — small action chip in the video-pane-controls row.
        three states share one slot: "export mp4" (idle, clickable),
        "rendering 0:23" (mid-render with elapsed timer), "download mp4" (anchor).
@@ -3685,6 +4107,56 @@
       }
     }
 
+    // video-pane intake mode. the same script + pills + words can be rendered
+    // five ways, each picking a different point on the granularity axis (3-sec
+    // glance → 1-3min deep dive). swap is local-only (UI preference, no server
+    // state); persisted to localStorage so a reload keeps the chosen mode.
+    // each mode's render fn lives near the bottom of renderVideoPane and is
+    // dispatched on `videoMode`. default = tiktok (the audio-paced karaoke).
+    const VIDEO_MODE_KEY = "cutCakeVideoMode";
+    const VIDEO_MODES = [
+      { id: "glance",     label: "glance",     hint: "≤3s — strapline + key chips" },
+      { id: "headlines",  label: "headlines",  hint: "~10s — marker beats only" },
+      { id: "tiktok",     label: "tiktok",     hint: "~30-60s — audio-paced karaoke" },
+      { id: "storyboard", label: "storyboard", hint: "~20s — beat panels at a glance" },
+      { id: "explorer",   label: "explorer",   hint: "1-3min — interactive timeline" },
+    ];
+    const VIDEO_MODE_IDS = VIDEO_MODES.map(m => m.id);
+    let videoMode = (function () {
+      try {
+        const fromUrl = new URLSearchParams(window.location.search).get("mode");
+        if (fromUrl && VIDEO_MODE_IDS.includes(fromUrl)) {
+          localStorage.setItem(VIDEO_MODE_KEY, fromUrl);
+          return fromUrl;
+        }
+        const stored = localStorage.getItem(VIDEO_MODE_KEY);
+        if (stored && VIDEO_MODE_IDS.includes(stored)) return stored;
+      } catch {}
+      return "tiktok";
+    })();
+    function setVideoModeLocal(mode) {
+      if (!VIDEO_MODE_IDS.includes(mode)) return false;
+      if (mode === videoMode) return true;
+      videoMode = mode;
+      try { localStorage.setItem(VIDEO_MODE_KEY, mode); } catch {}
+      return true;
+    }
+    function applyVideoMode(mode) {
+      if (!setVideoModeLocal(mode)) return;
+      // mode change tears down any active runtime so the next render mounts
+      // fresh. without this, paintKaraokeFrame looks for tiktok-shape DOM that
+      // a non-tiktok render didn't emit.
+      for (const [k, rt] of videoRuntime.entries()) {
+        if (rt) {
+          if (rt.rafId) cancelAnimationFrame(rt.rafId);
+          if (rt.audio) { try { rt.audio.pause(); } catch {} }
+          if (typeof teardownAnnotations === "function") teardownAnnotations(rt);
+        }
+      }
+      videoRuntime.clear();
+      refresh();
+    }
+
     // per-session TTS voice preference. authoritative value lives on the server
     // (snapshot.voice + voice:setting ws msgs). the local Map mirrors what we
     // know so the picker paints without a round-trip. unknown sessionKeys fall
@@ -4753,6 +5225,29 @@
     // highlight in soft pink.
     const ROUGH_DEFAULT_EMPHASIS = { type: "highlight", color: "#ffc1d8" };
 
+    // shared mode-picker HTML — emitted in every mode's head row so the user
+    // can flip granularity at any time. uses .vmp-btn styling alongside the
+    // existing script-style / marker-vocab pickers.
+    function buildVideoModePickerHtml() {
+      return '<div class="video-marker-picker video-mode-picker" role="group" aria-label="intake mode">' +
+        VIDEO_MODES.map((m, idx) => (
+          (idx > 0 ? '<span class="vmp-divider" aria-hidden="true"></span>' : '') +
+          '<button type="button" class="vmp-btn" data-video-mode="' + m.id + '"' +
+            ' aria-pressed="' + (m.id === videoMode ? 'true' : 'false') + '"' +
+            ' title="' + m.hint + '">' + m.label + '</button>'
+        )).join('') +
+        '</div>';
+    }
+    function wireVideoModePicker() {
+      const btns = dVideoPane.querySelectorAll(".vmp-btn[data-video-mode]");
+      btns.forEach(btn => {
+        btn.addEventListener("click", () => {
+          const next = btn.getAttribute("data-video-mode");
+          if (next) applyVideoMode(next);
+        });
+      });
+    }
+
     // empty-pane render: no script yet, just show the voice picker so the user
     // can pre-set their preference. tears down any stale runtime to be safe.
     function renderVideoPaneEmpty(sessionKey) {
@@ -4770,11 +5265,427 @@
         '<div class="video-pane-head">' +
           '<span class="video-label">video</span>' +
           '<span class="video-status-pill"><span class="vsp-dot"></span><span>waiting for first turn…</span></span>' +
+          buildVideoModePickerHtml() +
           buildVoicePickerHtml(sessionKey) +
         '</div>';
       try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
+      wireVideoModePicker();
       wireVoicePicker(sessionKey);
     }
+
+    // ---------- alternate intake modes -------------------------------------
+    // each mode renders its own complete pane content for a script that has
+    // already been resolved by renderVideoPane. they all share the head-row
+    // mode picker so the user can flip granularity at any time.
+
+    // GLANCE — coarsest. ~3 second read. codex's "signal wafer" framing:
+    // should I interrupt this turn? answer with the headline, the observer
+    // flag (if open=true), 1-2 priority pills, and a quiet pewter rail of
+    // model + counters. one flat surface — no nested cards.
+    function renderVideoPaneGlance(sess, sessionKey, script) {
+      dVideoPane.hidden = false;
+      const beats = script.beats || [];
+      const headline = beats.find(b => !!b.marker) || beats[0];
+      const pillPlanMap = pillsByKey.get(sessionKey);
+      const pillPlan = (pillPlanMap && pillPlanMap.get(script.turnId)) || null;
+      const allPills = (pillPlan && Array.isArray(pillPlan.pills)) ? pillPlan.pills : [];
+      // priority order — warning + decision land first; metric/file/tool/note after.
+      const PRIORITY = { warning: 0, decision: 1, metric: 2, file: 3, tool: 4, note: 5 };
+      const topPills = allPills.slice().sort((a, b) =>
+        (PRIORITY[a.kind] ?? 9) - (PRIORITY[b.kind] ?? 9)
+      ).slice(0, 2);
+      const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const headlineText = String(headline?.text || "(no narration)");
+      const headlineMarker = headline?.marker
+        ? '<span class="video-glance-marker ' + escAttr(headline.marker) + '">' +
+            escapeHtml(markerLabelFor(headline.marker).toLowerCase().replace(/_/g, " ")) +
+          '</span>'
+        : '';
+      const pillsHtml = topPills.length
+        ? '<div class="video-glance-pills">' +
+            topPills.map(p =>
+              '<div class="video-pill is-active" data-kind="' + escAttr(p.kind || "note") + '">' +
+                '<span class="vp-dot" aria-hidden="true"></span>' +
+                '<span class="vp-text">' + escapeHtml(p.text || "") + '</span>' +
+              '</div>'
+            ).join('') +
+          '</div>'
+        : '';
+      // observer signal — surface the latest open=true decision matching this
+      // turn (or the most recent open one for the session). this is the
+      // "should I interrupt?" dial.
+      const observerDecisions = Array.isArray(sess.observerDecisions) ? sess.observerDecisions : [];
+      const flagged = observerDecisions
+        .filter(d => d.open && d.insight)
+        .sort((a, b) => (b.ts || 0) - (a.ts || 0))[0];
+      const observerHtml = flagged
+        ? '<div class="video-glance-observer">' +
+            '<span class="vgo-label">observer · ' + (Array.isArray(flagged.tags) && flagged.tags.length ? escapeHtml(flagged.tags.slice(0, 2).join(" · ")) : 'flagged') + '</span>' +
+            '<span class="vgo-text">' + escapeHtml(flagged.insight || "") + '</span>' +
+          '</div>'
+        : '';
+      const durStr = (typeof script.durationS === "number" && script.durationS > 0)
+        ? vbFmtTime(script.durationS) : "—:—";
+      const beatCount = beats.length;
+      const markerCount = beats.filter(b => !!b.marker).length;
+      const metaParts = [
+        beatCount + ' beats',
+        durStr,
+        ...(markerCount > 0 ? [markerCount + ' marker' + (markerCount === 1 ? '' : 's')] : []),
+        ...(sess.model ? [sess.model] : []),
+        ...(sess.contextTokens ? [(sess.contextTokens / 1000).toFixed(1) + 'k ctx'] : []),
+        ...(sess.totalOutputTokens ? [(sess.totalOutputTokens / 1000).toFixed(1) + 'k out'] : []),
+      ];
+      const metaText = metaParts.join(' · ');
+      let statusHtml = '';
+      if (script.status === "drafting" || script.status === "rendering") {
+        statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>' +
+          (script.status === "drafting" ? 'drafting beats…' : 'rendering audio…') +
+        '</span>';
+      } else if (script.status === "ready") {
+        statusHtml = '<span class="video-status-pill ready"><span class="vsp-dot"></span><span>ready</span></span>';
+      } else if (script.status === "error") {
+        statusHtml = '<span class="video-status-pill error"><span class="vsp-dot"></span><span>audio failed</span></span>';
+      }
+      dVideoPane.innerHTML =
+        '<div class="video-pane-head">' +
+          '<span class="video-label">video</span>' +
+          statusHtml +
+          buildVideoModePickerHtml() +
+        '</div>' +
+        '<div class="video-glance-stage">' +
+          observerHtml +
+          headlineMarker +
+          '<div class="video-glance-headline">' + escapeHtml(headlineText) + '</div>' +
+          pillsHtml +
+          '<div class="video-glance-meta">' + escapeHtml(metaText) + '</div>' +
+        '</div>';
+      try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
+      wireVideoModePicker();
+    }
+
+    // HEADLINES — quick scan. ~10 second read. just the marker beats vertically
+    // (or all beats if none have markers), each row a marker chip + the beat
+    // text. click any row to flip to tiktok mode and seek to that beat.
+    function renderVideoPaneHeadlines(sess, sessionKey, script) {
+      dVideoPane.hidden = false;
+      const beats = script.beats || [];
+      const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      // pick rows: marker beats first, then non-marker. cap at 12 rows.
+      const markerBeats = [];
+      const plainBeats = [];
+      beats.forEach((b, idx) => {
+        const row = { idx, beat: b };
+        if (b.marker) markerBeats.push(row);
+        else plainBeats.push(row);
+      });
+      const rows = (markerBeats.length > 0 ? markerBeats : plainBeats).slice(0, 12);
+
+      // pills on the side: sticky right column showing all pills (compact).
+      const pillPlanMap = pillsByKey.get(sessionKey);
+      const pillPlan = (pillPlanMap && pillPlanMap.get(script.turnId)) || null;
+      const allPills = (pillPlan && Array.isArray(pillPlan.pills)) ? pillPlan.pills : [];
+      const pillsAsideHtml = allPills.length > 0
+        ? '<aside class="video-headlines-pills" aria-label="info pills">' +
+            allPills.map(p =>
+              '<div class="video-pill is-active" data-kind="' + escAttr(p.kind || "note") + '">' +
+                '<span class="vp-dot" aria-hidden="true"></span>' +
+                '<span class="vp-text">' + escapeHtml(p.text || "") + '</span>' +
+              '</div>'
+            ).join('') +
+          '</aside>'
+        : '';
+
+      const rowsHtml = rows.map(({ idx, beat }) => {
+        const markerChip = beat.marker
+          ? '<span class="video-headline-marker ' + escAttr(beat.marker) + '">' +
+              escapeHtml(markerLabelFor(beat.marker).toLowerCase().replace(/_/g, " ")) +
+            '</span>'
+          : '<span class="video-headline-marker is-plain">' + (idx + 1) + '</span>';
+        return '<button type="button" class="video-headline-row" data-beat-idx="' + idx + '">' +
+                 markerChip +
+                 '<span class="video-headline-text">' + escapeHtml(beat.text || "") + '</span>' +
+               '</button>';
+      }).join('');
+
+      let statusHtml = '';
+      if (script.status === "drafting") statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>drafting beats…</span></span>';
+      else if (script.status === "rendering") statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>rendering audio…</span></span>';
+      else if (script.status === "ready") statusHtml = '<span class="video-status-pill ready"><span class="vsp-dot"></span><span>ready</span></span>';
+      else if (script.status === "error") statusHtml = '<span class="video-status-pill error"><span class="vsp-dot"></span><span>audio failed</span></span>';
+
+      const countLabel = (markerBeats.length > 0 ? markerBeats.length : beats.length) +
+        (markerBeats.length > 0 ? ' headlines' : ' beats');
+
+      dVideoPane.innerHTML =
+        '<div class="video-pane-head">' +
+          '<span class="video-label">video</span>' +
+          statusHtml +
+          buildVideoModePickerHtml() +
+          '<span class="video-duration">' + escapeHtml(countLabel) + '</span>' +
+        '</div>' +
+        '<div class="video-headlines-stage">' +
+          '<ol class="video-headlines-list">' + rowsHtml + '</ol>' +
+          pillsAsideHtml +
+        '</div>';
+      try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
+      wireVideoModePicker();
+
+      // row click → flip to tiktok + seek to beat. the seek hand-off is via
+      // `pendingSeekBeat`: tiktok mode reads this on its first paintKaraoke
+      // -Frame, then clears it.
+      dVideoPane.querySelectorAll(".video-headline-row[data-beat-idx]").forEach(row => {
+        row.addEventListener("click", () => {
+          const idx = Number(row.getAttribute("data-beat-idx"));
+          if (Number.isFinite(idx) && idx >= 0) {
+            pendingSeekBeat.set(sessionKey, idx);
+            applyVideoMode("tiktok");
+          }
+        });
+      });
+    }
+
+    // STORYBOARD — middle granularity. ~20 second read. beat panels in a grid,
+    // each panel shows its number + text + marker chip + any pills anchored to
+    // that beat. click a panel to seek + flip to tiktok mode. placeholder
+    // implementation for now — will refine after the creative review pass.
+    function renderVideoPaneStoryboard(sess, sessionKey, script) {
+      dVideoPane.hidden = false;
+      const beats = script.beats || [];
+      const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const pillPlanMap = pillsByKey.get(sessionKey);
+      const pillPlan = (pillPlanMap && pillPlanMap.get(script.turnId)) || null;
+      const allPills = (pillPlan && Array.isArray(pillPlan.pills)) ? pillPlan.pills : [];
+
+      const panelsHtml = beats.map((b, idx) => {
+        // pills whose start..end range covers this beat.
+        const beatPills = allPills.filter(p => idx >= p.startBeat && idx <= p.endBeat);
+        const markerChip = b.marker
+          ? '<span class="video-storyboard-marker ' + escAttr(b.marker) + '">' +
+              escapeHtml(markerLabelFor(b.marker).toLowerCase().replace(/_/g, " ")) +
+            '</span>'
+          : '';
+        const pillsHtml = beatPills.length
+          ? '<div class="video-storyboard-pills">' +
+              beatPills.map(p =>
+                '<div class="video-pill is-active" data-kind="' + escAttr(p.kind || "note") + '">' +
+                  '<span class="vp-dot" aria-hidden="true"></span>' +
+                  '<span class="vp-text">' + escapeHtml(p.text || "") + '</span>' +
+                '</div>'
+              ).join('') +
+            '</div>'
+          : '';
+        return '<button type="button" class="video-storyboard-panel' + (b.marker ? ' has-marker' : '') + '"' +
+                 ' data-beat-idx="' + idx + '">' +
+                 '<div class="video-storyboard-num">' + (idx + 1) + '</div>' +
+                 markerChip +
+                 '<div class="video-storyboard-text">' + escapeHtml(b.text || "") + '</div>' +
+                 pillsHtml +
+               '</button>';
+      }).join('');
+
+      let statusHtml = '';
+      if (script.status === "ready") statusHtml = '<span class="video-status-pill ready"><span class="vsp-dot"></span><span>ready</span></span>';
+      else if (script.status === "drafting") statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>drafting beats…</span></span>';
+      else if (script.status === "rendering") statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>rendering audio…</span></span>';
+      else if (script.status === "error") statusHtml = '<span class="video-status-pill error"><span class="vsp-dot"></span><span>audio failed</span></span>';
+
+      dVideoPane.innerHTML =
+        '<div class="video-pane-head">' +
+          '<span class="video-label">video</span>' +
+          statusHtml +
+          buildVideoModePickerHtml() +
+          '<span class="video-duration">' + beats.length + ' panels</span>' +
+        '</div>' +
+        '<div class="video-storyboard-stage">' + panelsHtml + '</div>';
+      try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
+      wireVideoModePicker();
+
+      dVideoPane.querySelectorAll(".video-storyboard-panel[data-beat-idx]").forEach(panel => {
+        panel.addEventListener("click", () => {
+          const idx = Number(panel.getAttribute("data-beat-idx"));
+          if (Number.isFinite(idx) && idx >= 0) {
+            pendingSeekBeat.set(sessionKey, idx);
+            applyVideoMode("tiktok");
+          }
+        });
+      });
+    }
+
+    // EXPLORER — finest granularity. 1-3 minute deep dive. codex's "crumb
+    // timeline" + "evidence drawer" merged: horizontal beat track with marker
+    // pins → pills row → active-beat detail card → right-rail counters
+    // (model, context tokens, total output, observer flags). hover any dot to
+    // pin its detail; click to seek+flip to tiktok.
+    function renderVideoPaneExplorer(sess, sessionKey, script) {
+      dVideoPane.hidden = false;
+      const beats = script.beats || [];
+      const dur = (typeof script.durationS === "number" && script.durationS > 0)
+        ? script.durationS : Math.max(1, beats.length * 4);
+      const words = Array.isArray(script.words) ? script.words : [];
+      const escAttr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const beatTokens = beats.map(b => vbTokenize(b.text));
+      const beatStarts = [];
+      const beatEnds = [];
+      let cursor = 0;
+      for (let i = 0; i < beats.length; i++) {
+        const startW = words[cursor];
+        const endW = words[cursor + beatTokens[i].length - 1];
+        beatStarts.push(startW ? startW.startS : (i / beats.length) * dur);
+        beatEnds.push(endW ? endW.endS : ((i + 1) / beats.length) * dur);
+        cursor += beatTokens[i].length;
+      }
+      const dotsHtml = beats.map((b, i) => {
+        const pct = Math.max(0, Math.min(100, (beatStarts[i] / dur) * 100));
+        return '<button type="button" class="video-explorer-dot' + (b.marker ? ' has-marker' : '') + '"' +
+                 ' data-beat-idx="' + i + '"' +
+                 ' style="left:' + pct.toFixed(2) + '%"' +
+                 ' title="' + escAttr((b.marker ? markerLabelFor(b.marker) + ' · ' : '') + (b.text || '')) + '">' +
+                 (b.marker ? escapeHtml(markerLabelFor(b.marker).slice(0, 2)) : '') +
+               '</button>';
+      }).join('');
+
+      const pillPlanMap = pillsByKey.get(sessionKey);
+      const pillPlan = (pillPlanMap && pillPlanMap.get(script.turnId)) || null;
+      const allPills = (pillPlan && Array.isArray(pillPlan.pills)) ? pillPlan.pills : [];
+      const pillsRowHtml = allPills.length > 0
+        ? '<div class="video-explorer-pills">' +
+            allPills.map(p =>
+              '<div class="video-pill is-active" data-kind="' + escAttr(p.kind || "note") + '">' +
+                '<span class="vp-dot" aria-hidden="true"></span>' +
+                '<span class="vp-text">' + escapeHtml(p.text || "") + '</span>' +
+              '</div>'
+            ).join('') +
+          '</div>'
+        : '';
+
+      // per-beat detail cards. each card includes the beat text (emphasis
+      // words bolded inline), associated pills, and nearest tool events from
+      // the surrounding session events (looked up by ts proximity).
+      const evs = Array.isArray(sess.events) ? sess.events : [];
+      const turnEvents = evs.filter(e => e.kind === "tool_use" || e.kind === "user_message" || e.kind === "assistant_text").slice(-30);
+      const detailHtml = beats.map((b, i) => {
+        const beatPills = allPills.filter(p => i >= p.startBeat && i <= p.endBeat);
+        const emphList = (Array.isArray(b.emphasis) && b.emphasis.length)
+          ? '<div class="video-explorer-detail-emph">emphasis: <em>' +
+              b.emphasis.map(escapeHtml).join('</em>, <em>') + '</em></div>'
+          : '';
+        const pillsInline = beatPills.length > 0
+          ? '<div class="video-storyboard-pills">' +
+              beatPills.map(p =>
+                '<div class="video-pill is-active" data-kind="' + escAttr(p.kind || "note") + '">' +
+                  '<span class="vp-dot" aria-hidden="true"></span>' +
+                  '<span class="vp-text">' + escapeHtml(p.text || "") + '</span>' +
+                '</div>'
+              ).join('') +
+            '</div>'
+          : '';
+        return '<div class="video-explorer-detail" data-beat-idx="' + i + '" hidden>' +
+          '<div class="video-explorer-detail-head">' +
+            '<span class="video-explorer-detail-num">beat ' + (i + 1) + '/' + beats.length + '</span>' +
+            (b.marker ? '<span class="video-headline-marker ' + escAttr(b.marker) + '">' +
+              escapeHtml(markerLabelFor(b.marker).toLowerCase().replace(/_/g, " ")) +
+            '</span>' : '') +
+            '<span class="video-explorer-detail-time">' + vbFmtTime(beatStarts[i]) + ' – ' + vbFmtTime(beatEnds[i]) + '</span>' +
+          '</div>' +
+          '<div class="video-explorer-detail-text">' + escapeHtml(b.text || "") + '</div>' +
+          emphList +
+          pillsInline +
+        '</div>';
+      }).join('');
+
+      // right rail — model + counters + observer flags (deep-dive context).
+      const flaggedDecisions = (Array.isArray(sess.observerDecisions) ? sess.observerDecisions : [])
+        .filter(d => d.open && d.insight);
+      const observerListHtml = flaggedDecisions.length
+        ? '<div class="video-explorer-rail-section">' +
+            '<div class="vxr-label">observer flags</div>' +
+            flaggedDecisions.slice(0, 3).map(d =>
+              '<div class="vxr-flag">' +
+                '<span class="vxr-flag-tags">' + escapeHtml((d.tags || []).slice(0, 2).join(" · ") || "flagged") + '</span>' +
+                '<span class="vxr-flag-text">' + escapeHtml(d.insight) + '</span>' +
+              '</div>'
+            ).join('') +
+          '</div>'
+        : '';
+      const countersHtml =
+        '<div class="video-explorer-rail-section">' +
+          '<div class="vxr-label">model</div>' +
+          '<div class="vxr-value">' + escapeHtml(sess.model || "—") + '</div>' +
+        '</div>' +
+        '<div class="video-explorer-rail-section">' +
+          '<div class="vxr-label">context · output</div>' +
+          '<div class="vxr-value">' +
+            (sess.contextTokens ? (sess.contextTokens / 1000).toFixed(1) + 'k' : '—') +
+            ' · ' +
+            (sess.totalOutputTokens ? (sess.totalOutputTokens / 1000).toFixed(1) + 'k' : '—') +
+          '</div>' +
+        '</div>' +
+        '<div class="video-explorer-rail-section">' +
+          '<div class="vxr-label">script</div>' +
+          '<div class="vxr-value">' + beats.length + ' beats · ' + vbFmtTime(dur) + '</div>' +
+        '</div>';
+      const railHtml = '<aside class="video-explorer-rail" aria-label="metrics">' +
+        countersHtml + observerListHtml +
+      '</aside>';
+
+      let statusHtml = '';
+      if (script.status === "ready") statusHtml = '<span class="video-status-pill ready"><span class="vsp-dot"></span><span>ready</span></span>';
+      else if (script.status === "drafting") statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>drafting beats…</span></span>';
+      else if (script.status === "rendering") statusHtml = '<span class="video-status-pill rendering"><span class="vsp-dot"></span><span>rendering audio…</span></span>';
+
+      dVideoPane.innerHTML =
+        '<div class="video-pane-head">' +
+          '<span class="video-label">video</span>' +
+          statusHtml +
+          buildVideoModePickerHtml() +
+          '<span class="video-duration">' + vbFmtTime(dur) + '</span>' +
+        '</div>' +
+        '<div class="video-explorer-shell">' +
+          '<div class="video-explorer-stage">' +
+            '<div class="video-explorer-track">' +
+              '<div class="video-explorer-rail-line"></div>' +
+              dotsHtml +
+            '</div>' +
+            pillsRowHtml +
+            '<div class="video-explorer-details">' + detailHtml + '</div>' +
+          '</div>' +
+          railHtml +
+        '</div>';
+      try { dVideoPane.style.removeProperty("--marker-tint"); } catch {}
+      wireVideoModePicker();
+
+      // hover dot → reveal that beat's detail; click → flip to tiktok and seek.
+      const details = dVideoPane.querySelectorAll(".video-explorer-detail");
+      const showDetail = (idx) => {
+        details.forEach(d => {
+          const want = String(idx) === d.getAttribute("data-beat-idx");
+          if (want) d.removeAttribute("hidden");
+          else d.setAttribute("hidden", "");
+        });
+      };
+      const firstMarkerIdx = beats.findIndex(b => !!b.marker);
+      showDetail(firstMarkerIdx >= 0 ? firstMarkerIdx : 0);
+      dVideoPane.querySelectorAll(".video-explorer-dot[data-beat-idx]").forEach(dot => {
+        dot.addEventListener("mouseenter", () => {
+          const idx = Number(dot.getAttribute("data-beat-idx"));
+          if (Number.isFinite(idx)) showDetail(idx);
+        });
+        dot.addEventListener("click", () => {
+          const idx = Number(dot.getAttribute("data-beat-idx"));
+          if (Number.isFinite(idx) && idx >= 0) {
+            pendingSeekBeat.set(sessionKey, idx);
+            applyVideoMode("tiktok");
+          }
+        });
+      });
+    }
+
+    // pendingSeekBeat: sessionKey → beatIdx. consumed by tiktok mode on first
+    // paintKaraokeFrame after a mode-flip + seek hand-off from headlines /
+    // storyboard / explorer click. cleared after consume.
+    const pendingSeekBeat = new Map();
 
     function renderVideoPane(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
@@ -4804,6 +5715,14 @@
         renderVideoPaneEmpty(sessionKey);
         return;
       }
+
+      // mode dispatch. each non-tiktok mode renders its own complete head +
+      // body and returns. tiktok mode falls through to the existing render
+      // (audio runtime + phrase-stack + pills overlay + etc).
+      if (videoMode === "glance") return renderVideoPaneGlance(sess, sessionKey, script);
+      if (videoMode === "headlines") return renderVideoPaneHeadlines(sess, sessionKey, script);
+      if (videoMode === "storyboard") return renderVideoPaneStoryboard(sess, sessionKey, script);
+      if (videoMode === "explorer") return renderVideoPaneExplorer(sess, sessionKey, script);
 
       dVideoPane.hidden = false;
 
@@ -5029,6 +5948,7 @@
         '<div class="video-pane-head">' +
           '<span class="video-label">video</span>' +
           statusHtml +
+          buildVideoModePickerHtml() +
           voicePickerHtml +
           scriptStylePickerHtml +
           markerVocabPickerHtml +
@@ -5064,6 +5984,7 @@
       // buttons POST to /debug/voice. menu opens with a 140ms fade+y:-4 unless
       // prefers-reduced-motion.
       wireVoicePicker(sessionKey);
+      wireVideoModePicker();
 
       // wire bookmark controls — runs in every render path (icons exist on
       // every beat regardless of audio readiness; chips/clear only render
@@ -5227,6 +6148,22 @@
       // session (post-reload + reconnect flow). idempotent; no-op when nothing
       // is rendering.
       scheduleExportElapsedTick(sessionKey);
+
+      // honor a hand-off seek from another mode: headlines / storyboard /
+      // explorer click sets pendingSeekBeat[sessionKey]=beatIdx then flips to
+      // tiktok. consume it once, seek the audio, autoplay if reduced-motion
+      // is off and the user gesture chain permits (best-effort, ignore reject).
+      const seekBeat = pendingSeekBeat.get(sessionKey);
+      if (typeof seekBeat === "number" && seekBeat >= 0 && rt.audio) {
+        const bb = (rt.beatBoundaries || [])[seekBeat];
+        if (bb && typeof bb.startS === "number") {
+          try { rt.audio.currentTime = Math.max(0, bb.startS); } catch {}
+        }
+        pendingSeekBeat.delete(sessionKey);
+        if (!reduceMotionOn()) {
+          rt.audio.play().catch(() => { /* user gesture may not chain — fine */ });
+        }
+      }
 
       // initial paint reflects current audio.currentTime (may be 0 on first
       // mount, may be nonzero after a re-render mid-playback).
