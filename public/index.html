@@ -372,6 +372,7 @@
     .sidebar.collapsed .section-label,
     .sidebar.collapsed .ambient-quiet,
     .sidebar.collapsed .inbox-separator-label,
+    .sidebar.collapsed .inbox-separator-chevron,
     .sidebar.collapsed .empty-inbox { display: none; }
     .sidebar.collapsed .sidebar-head { justify-content: center; }
     .sidebar.collapsed .sidebar-toggle { transform: rotate(180deg); margin-bottom: 6px; }
@@ -433,7 +434,11 @@
       font-size: 10px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s var(--ease-out);
     }
+    .inbox-separator:hover { color: var(--accent); }
     .inbox-separator::before,
     .inbox-separator::after {
       content: "";
@@ -445,6 +450,17 @@
       flex: 0 0 auto;
       white-space: nowrap;
     }
+    .inbox-separator-chevron {
+      display: inline-block;
+      transition: transform 0.15s var(--ease-out);
+    }
+    .inbox-separator.expanded .inbox-separator-chevron { transform: rotate(90deg); }
+
+    /* internal cards are collapsed (hidden) by default — see
+       ctc-internal-collapsed in localStorage. kept in the DOM so the
+       insertBefore reconciliation in renderInbox stays untouched; only
+       display is toggled here. */
+    .cards.internal-collapsed .card.internal { display: none; }
 
     /* sidebar inbox */
     .cards { display: grid; gap: 8px; }
@@ -2275,6 +2291,19 @@
       return slug.includes('--cut-the-cake') || slug.includes('--chunk-to-chat');
     }
 
+    // collapsed state for the "internal · sdk subprocesses" section — persisted
+    // so it stays out of the way across reloads. absence of the key (first
+    // visit) defaults to collapsed; only an explicit "0" expands it.
+    const INTERNAL_COLLAPSED_KEY = "ctc-internal-collapsed";
+    function isInternalCollapsed() {
+      try {
+        return localStorage.getItem(INTERNAL_COLLAPSED_KEY) !== "0";
+      } catch { return true; }
+    }
+    function setInternalCollapsed(collapsed) {
+      try { localStorage.setItem(INTERNAL_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch {}
+    }
+
     // stable display order: a session's slot is fixed by when it was FIRST seen
     // (newest-first-seen on top), so background activity never reshuffles the
     // list under the user. new sessions slide in at the top once, then stay put.
@@ -2391,6 +2420,7 @@
       card.classList.toggle("live", state === "live");
       card.classList.toggle("idle", state === "idle");
       card.classList.toggle("selected", !!opts.selected);
+      card.classList.toggle("internal", isInternalSession(sess));
     }
 
     function cardSig(sess) {
@@ -2550,6 +2580,8 @@
       const internalList = list.filter(s => isInternalSession(s));
       const orderedList = realList.concat(internalList);
       const internalCount = internalList.length;
+      const internalCollapsed = isInternalCollapsed();
+      cardsEl.classList.toggle("internal-collapsed", internalCollapsed);
 
       // upsert + reorder
       let anchor = null;        // last placed card; new cards insert after it
@@ -2581,9 +2613,16 @@
             separatorEl = document.createElement("div");
             separatorEl.id = SEPARATOR_ID;
             separatorEl.className = "inbox-separator";
-            separatorEl.innerHTML =
-              '<span class="inbox-separator-label">internal · sdk subprocesses</span>';
+            separatorEl.addEventListener("click", () => {
+              setInternalCollapsed(!isInternalCollapsed());
+              renderInbox();
+            });
           }
+          separatorEl.classList.toggle("expanded", !internalCollapsed);
+          separatorEl.innerHTML =
+            '<span class="inbox-separator-label">internal · sdk subprocesses (' +
+            internalCount + ')</span>' +
+            '<span class="inbox-separator-chevron">&#9656;</span>';
           const sepTarget = anchor ? anchor.nextSibling : cardsEl.firstChild;
           if (separatorEl !== sepTarget) cardsEl.insertBefore(separatorEl, sepTarget);
           anchor = separatorEl;
@@ -3423,6 +3462,17 @@
       // you ask about the latest output in your own language; no prefill.
       const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : "";
 
+      // a background refresh() (observer/live-session events firing over the
+      // websocket, etc.) rebuilds this whole pane on a cadence the user can't
+      // control. if they're mid-keystroke in the textarea below, blowing away
+      // dChatInput.innerHTML destroys that DOM node and steals focus/caret out
+      // from under them. capture the in-flight focus + selection here, before
+      // the rebuild, so we can restore it once the new textarea exists.
+      const prevTa = dChatInput.querySelector('textarea');
+      const hadFocus = !!prevTa && document.activeElement === prevTa;
+      const prevSelStart = hadFocus ? prevTa.selectionStart : null;
+      const prevSelEnd = hadFocus ? prevTa.selectionEnd : null;
+
       // localized preset chips (always shown) + a per-session stepper for how
       // many recent turns seed the assistant. clicking a chip sends its text
       // through the same /chat/send path; the stepper tunes buildChatSeed depth.
@@ -3458,6 +3508,15 @@
       const ta = dChatInput.querySelector('textarea');
       const btn = dChatInput.querySelector('.send-btn');
       const pills = Array.from(dChatInput.querySelectorAll('.quick-pill'));
+
+      // restore focus/caret onto the freshly-built textarea so a background
+      // rebuild is invisible to whoever was mid-sentence. the draft text
+      // itself already round-trips via chatDrafts → `initial` above; this
+      // just keeps the cursor from jumping away.
+      if (hadFocus && ta) {
+        ta.focus();
+        try { ta.setSelectionRange(prevSelStart, prevSelEnd); } catch {}
+      }
 
       // shared send path. caller passes the text directly; for the textarea
       // path, we read .value here. caller can also pass a control to disable
