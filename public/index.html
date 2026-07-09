@@ -318,6 +318,68 @@
       margin: 0 0 12px;
     }
 
+    /* sessions rail — the header carries a chevron that collapses the sidebar
+       to a thin strip of session color-dots. glanceable from across the desk;
+       state persists in localStorage. */
+    .sidebar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .sidebar-toggle {
+      border: none;
+      background: transparent;
+      color: var(--fg-muted);
+      cursor: pointer;
+      font-size: 10px;
+      line-height: 1;
+      padding: 4px 5px;
+      margin: 0 0 12px;
+      border-radius: 6px;
+      transition: color 0.15s var(--ease-out), background 0.15s var(--ease-out);
+    }
+    .sidebar-toggle:hover { color: var(--accent); background: var(--chip-tint); }
+
+    .sidebar.collapsed { flex-basis: 52px; padding-right: 10px; }
+    .sidebar.collapsed .section-label,
+    .sidebar.collapsed .ambient-quiet,
+    .sidebar.collapsed .inbox-separator-label,
+    .sidebar.collapsed .empty-inbox { display: none; }
+    .sidebar.collapsed .sidebar-head { justify-content: center; }
+    .sidebar.collapsed .sidebar-toggle { transform: rotate(180deg); margin-bottom: 6px; }
+    .sidebar.collapsed .inbox-separator { margin: 8px 0; }
+
+    /* each card shrinks to a single accent dot (accent var comes from
+       sessionColorVars). live = full opacity, others dimmed, selected = ring. */
+    .sidebar.collapsed .card {
+      padding: 0;
+      min-height: 0;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      background: transparent;
+      box-shadow: none;
+    }
+    .sidebar.collapsed .card > * { display: none; }
+    .sidebar.collapsed .card::before {
+      content: '';
+      display: block;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: var(--accent);
+      opacity: 0.5;
+      transition: transform 0.15s var(--ease-out);
+    }
+    .sidebar.collapsed .card:hover::before { transform: scale(1.25); }
+    .sidebar.collapsed .card:has(.live-word)::before { opacity: 1; }
+    .sidebar.collapsed .card.selected::before {
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+    }
+
     /* detail empty — italic prompt, no illustration */
     .detail-empty {
       padding: 64px 24px;
@@ -1200,7 +1262,10 @@
 
   <main class="layout">
     <aside class="sidebar">
-      <h2 class="section-label">sessions</h2>
+      <div class="sidebar-head">
+        <h2 class="section-label">sessions</h2>
+        <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="collapse sessions" aria-expanded="true">◀</button>
+      </div>
       <p class="ambient-quiet" id="ambient-quiet" hidden>quiet</p>
       <div class="cards" id="cards">
         <div class="empty-inbox" id="inbox-empty">no active session detected — start claude code in a project</div>
@@ -1287,6 +1352,30 @@
           console.warn("[autosend] toggle error", err);
           autoSendEnabled = !next; paintAutoSend();
         }
+      });
+    }
+
+    // sessions sidebar collapse — thin rail of session color-dots. state
+    // persists in localStorage so a reload keeps the chosen width.
+    const sidebarEl = document.querySelector(".sidebar");
+    const sidebarToggle = document.getElementById("sidebar-toggle");
+    const SIDEBAR_KEY = "cutCakeSidebarCollapsed";
+    function paintSidebar(collapsed) {
+      if (!sidebarEl || !sidebarToggle) return;
+      sidebarEl.classList.toggle("collapsed", collapsed);
+      sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      sidebarToggle.setAttribute("aria-label", collapsed ? "expand sessions" : "collapse sessions");
+    }
+    (function () {
+      let collapsed = false;
+      try { collapsed = localStorage.getItem(SIDEBAR_KEY) === "1"; } catch {}
+      paintSidebar(collapsed);
+    })();
+    if (sidebarToggle) {
+      sidebarToggle.addEventListener("click", () => {
+        const collapsed = !sidebarEl.classList.contains("collapsed");
+        try { localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0"); } catch {}
+        paintSidebar(collapsed);
       });
     }
 
@@ -2068,6 +2157,7 @@
       card.dataset.sessionId = sess.info.sessionId;
       card.dataset.sig = cardSig(sess);
       card.style.cssText = sessionColorVars(sess.info.sessionId);
+      card.title = sessionName(sess);
       card.innerHTML = buildCardInnerHtml(sess, opts);
       applyCardClasses(card, sess, opts);
       return card;
