@@ -1961,13 +1961,15 @@
     // but they aren't user-driven work — render them grouped under a divider
     // at the bottom of the inbox so the user-driven cards are never
     // interleaved with our own machinery.
+    //
+    // match the sandbox roots directly rather than enumerating each subprocess
+    // role, so any current or future subprocess is caught. the leading '--'
+    // is the tell of a hidden dir in cc's slug encoding: ~/.cut-the-cake/…
+    // encodes to '…--cut-the-cake-…', whereas a real repo cloned as
+    // 'cut-the-cake' is single-dash ('…-cut-the-cake') and stays user-driven.
     function isInternalSession(sess) {
       const slug = sess?.info?.slug || '';
-      return slug.includes('cut-the-cake-chat') ||
-             slug.includes('chunk-to-chat-observer') ||
-             slug.includes('cut-the-cake-observer') ||
-             slug.includes('cut-the-cake-scriptifier') ||
-             slug.includes('cut-the-cake-infographer');
+      return slug.includes('--cut-the-cake') || slug.includes('--chunk-to-chat');
     }
 
     function sortedSessions() {
