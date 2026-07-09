@@ -832,6 +832,26 @@
       transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
     }
     .charts-toggle:hover { background: var(--chip-tint); color: var(--accent); border-color: var(--accent-soft); }
+    /* reset button in the title row — always visible; wipes the whole discussion
+       (as if the session were untouched). mirrors the charts-toggle chrome. */
+    .d-reset-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 22px;
+      padding: 0 10px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--fg-soft);
+      cursor: pointer;
+      transition: background 0.15s var(--ease-out), color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+    }
+    .d-reset-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+    .d-reset-btn .reset-glyph { font-size: 13px; line-height: 1; }
     .charts-toggle .chev { transition: transform 0.2s var(--ease-out); display: block; }
     .charts-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
     .charts-toggle[aria-expanded="true"] { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
@@ -1276,27 +1296,14 @@
       color: var(--accent);
       border-color: var(--accent);
     }
-    /* header row above the discussion: history toggle on the left, clear on the
-       right. clear reuses the muted-mono micro-control look (not a new button type). */
+    /* header row above the discussion: carries the "show N earlier" history
+       toggle. clear/reset moved to the always-visible reset button in the title row. */
     .chat-thread-head {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-start;
       gap: 8px;
     }
-    .chat-clear-btn {
-      padding: 4px 10px;
-      font-family: var(--mono);
-      font-size: 11px;
-      letter-spacing: 0.04em;
-      color: var(--fg-muted);
-      background: none;
-      border: 1px dashed var(--border);
-      border-radius: 999px;
-      cursor: pointer;
-    }
-    .chat-clear-btn:hover { color: var(--accent); border-color: var(--accent); }
-    .chat-clear-btn:disabled { opacity: 0.5; cursor: default; }
     .chat-row {
       display: flex;
       flex-direction: column;
@@ -1484,6 +1491,9 @@
           <button class="charts-toggle" id="d-charts-toggle" type="button" aria-expanded="false" aria-controls="d-charts-band" title="show charts">
             <svg class="chev" viewBox="0 0 12 8" width="10" height="7" aria-hidden="true"><path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <button class="d-reset-btn" id="d-chat-reset" type="button" title="reset this discussion — clears everything you've asked, as if untouched">
+            <span class="reset-glyph" aria-hidden="true">↺</span>reset
+          </button>
         </div>
 
         <p class="untouched-line" id="d-untouched" hidden>untouched for <span id="d-untouched-mins">—</span></p>
@@ -1561,6 +1571,31 @@
         if (!res.ok) console.warn('[chat] context-turns set failed', res.status);
       } catch (err) {
         console.warn('[chat] context-turns set error', err);
+      }
+    }
+
+    // reset a session's discussion to pristine — wipes the whole conversation and
+    // the assistant's memory (as if untouched). used by the reset button in the
+    // detail title row. the server drops the subprocess + broadcasts chat:cleared.
+    async function resetChat(sessionKey) {
+      if (!sessionKey) return;
+      try {
+        const res = await fetch('/chat/clear', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionKey }),
+        });
+        if (res.ok) {
+          chatThreadByKey.delete(sessionKey);
+          chatStatusByKey.delete(sessionKey);
+          expandedThreads.delete(sessionKey);
+          chatDrafts.delete(sessionKey);
+          refresh();
+        } else {
+          console.warn('[chat] reset failed', res.status);
+        }
+      } catch (err) {
+        console.warn('[chat] reset error', err);
       }
     }
 
@@ -2742,6 +2777,14 @@
         const t = fmtTokens(sess.contextTokens);
         tokEl.textContent = t ? " · " + t + " ctx" : "";
       }
+      // always-visible reset button in the title row — clears the whole
+      // discussion for the open session. rebind (property, not addEventListener)
+      // each render so it targets the currently-open session without stacking.
+      const resetBtn = document.getElementById("d-chat-reset");
+      if (resetBtn) {
+        const sk = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+        resetBtn.onclick = () => resetChat(sk);
+      }
       const turns = deriveTurns(events);
 
       dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, CHART_TURNS) : "";
@@ -3674,41 +3717,12 @@
       } else if (status && status.status === "error") {
         statusHtml = '<div class="chat-status error">error: ' + escapeHtml(status.message || "agent stopped") + '</div>';
       }
-      // a "clear" micro-button (mono, `show full` vocabulary — not a new button
-      // type) tears down the discussion and the assistant's memory for a fresh start.
-      const headHtml = thread.length > 0
-        ? '<div class="chat-thread-head">' +
-            (toggleHtml || '<span></span>') +
-            '<button class="chat-clear-btn" type="button" title="clear this discussion and start fresh">clear</button>' +
-          '</div>'
-        : toggleHtml;
+      // clear/reset now lives in the detail title row (the always-visible reset
+      // button); the thread-head only carries the "show N earlier" toggle.
+      const headHtml = toggleHtml
+        ? '<div class="chat-thread-head">' + toggleHtml + '</div>'
+        : '';
       dChatThread.innerHTML = headHtml + visibleHtml + statusHtml;
-
-      const clearBtn = dChatThread.querySelector('.chat-clear-btn');
-      if (clearBtn) {
-        clearBtn.addEventListener('click', async () => {
-          clearBtn.disabled = true;
-          try {
-            const res = await fetch('/chat/clear', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ sessionKey }),
-            });
-            if (res.ok) {
-              chatThreadByKey.delete(sessionKey);
-              chatStatusByKey.delete(sessionKey);
-              expandedThreads.delete(sessionKey);
-              chatDrafts.delete(sessionKey);
-              refresh();
-            } else {
-              clearBtn.disabled = false;
-            }
-          } catch (err) {
-            console.warn('[chat] clear failed', err);
-            clearBtn.disabled = false;
-          }
-        });
-      }
 
       const toggleBtn = dChatThread.querySelector('.chat-history-toggle');
       if (toggleBtn) {
