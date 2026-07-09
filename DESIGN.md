@@ -26,15 +26,15 @@ register: product
 
 ## North Star
 
-**The prep table.** sottochat is a local work surface beside the terminal. It keeps the original agent run in view while the user discusses it in their own language and prepares a precise reply.
+**The back-channel.** sottochat is the quiet side-channel beside the terminal. The agent runs at full voice in its own session; sottochat is where the user follows along, thinks it through in their own language, and prepares a precise reply to send back.
 
 Scene: one developer, two monitors, afternoon or late-night ambient light, several agents running in parallel. The product must stay calm until the user opens a run, then make the meta conversation feel focused and aware of the original session.
 
 ## Visual Direction
 
-Light mode is intentional. The app lives next to terminals, but it is not terminal cosplay. The surface is warm paper, not black glass. The culinary trace remains through strawberry accent, a small cake mark, frosting caps on charts, and a few mascots, but the default read should be "precise local tool" before "dessert toy."
+Light mode is intentional. The app lives next to terminals, but it is not terminal cosplay. The surface is warm paper, not black glass. A light culinary touch runs through the strawberry accent, a small cake mark, frosting caps on charts, and a few mascots, but the default read should be "precise local tool" before "dessert toy."
 
-The old cut-the-cake visual layer is allowed to survive only where it earns its keep:
+The playful visual layer is kept only where it earns its keep:
 
 - logo mark
 - selected-session mascot
@@ -209,7 +209,6 @@ Avoid:
 
 ## Implementation Drift To Track
 
-- Runtime writes now use `~/.sottochat`; the legacy `~/.cut-the-cake` and `~/.chunk-to-chat` dirs remain on disk and are still matched so older internal sessions stay classified.
 - `public/index.html` still contains literal control bytes used as separators; replace them with printable constants.
 - Some controls are below 44px touch target size.
 - External CDN scripts are loaded at runtime.

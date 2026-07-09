@@ -10,8 +10,6 @@ product
 
 From *sotto voce* ("under the voice") + chat: the quiet back-channel where you talk about an agent run before speaking back on the main line. The agent monologues at full voice in the terminal; sottochat is your undertone conversation on the side — you follow along in your own language, then prepare a targeted reply to paste back. The name keeps the register the project has been converging on (short, quiet, sits beside terminals all day) while naming the product story directly: the second-order conversation.
 
-Legacy names still exist in storage paths, commit history, and older notes: `claude-meta`, `chunk-to-chat`, `cut-the-cake`, and `mise`. New user-facing copy and new docs should use `sottochat`.
-
 ## Users
 
 Primary user: the author, a solo developer running several autonomous coding agents at once.
