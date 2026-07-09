@@ -231,8 +231,8 @@
     }
     .gh-pill .gh-star { color: #f4b942; }
 
-    /* global auto-break-down toggle in the top nav. server-authoritative state,
-       broadcast over ws so all connected clients stay in sync. */
+    /* language pill in the top nav — picks the explanation language. persisted
+       in localStorage and synced to the server over ws. */
     .nav-toggle {
       display: inline-flex;
       align-items: center;
@@ -269,6 +269,33 @@
       font-family: var(--mono);
       font-size: 13px;
     }
+    /* language pill: the .nav-toggle chrome (border, radius, surface) wraps a
+       bare <select> so it reads as the same pill vocabulary, not a new button. */
+    .lang-pill { position: relative; padding: 0; }
+    .lang-pill::after {
+      content: "▾";
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      font-size: 10px;
+      color: var(--fg-muted);
+    }
+    .lang-pill select {
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--fg);
+      padding: 6px 26px 6px 12px;
+      cursor: pointer;
+    }
+    .lang-pill select option { color: var(--fg); }
 
     main.layout {
       max-width: 1280px;
@@ -528,6 +555,15 @@
     }
     .card-foot .live-word { color: var(--accent); font-weight: 600; }
     .card-foot .sep { opacity: 0.55; }
+    .card-foot .card-cwd { overflow: hidden; text-overflow: ellipsis; }
+    /* detail-header working directory — full path, mono, under the source line. */
+    .d-cwd-line {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+      margin: 2px 0 0;
+      word-break: break-all;
+    }
 
     /* chart cards — turn complexity + code changes, panel-style with header pills */
     .chart-card {
@@ -993,15 +1029,20 @@
       overflow: hidden;
       transition: max-height 280ms var(--ease-out);
     }
-    .conv-body.is-truncated::after {
+    /* tail fade lives on the (non-scrolling) bubble, not the scrolled conv-body:
+       an ::after inside the overflow container scrolls away with the content when
+       we pin to the bottom. this overlay stays put at the top edge. */
+    .conv-msg.from-agent .conv-bubble.is-truncated::before {
       content: "";
       position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 70px;
-      background: linear-gradient(to bottom, transparent, oklch(98% 0.014 340) 90%);
+      top: 1px;
+      left: 1px;
+      right: 1px;
+      height: 66px;
+      border-radius: 14px 14px 0 0;
+      background: linear-gradient(to top, transparent, oklch(98% 0.014 340) 88%);
       pointer-events: none;
+      z-index: 1;
     }
     .conv-body.is-expanded { max-height: none; }
     .conv-body.is-expanded::after { display: none; }
@@ -1205,6 +1246,59 @@
       border-radius: 14px 14px 4px 14px;
       white-space: pre-wrap;
     }
+    /* suggested-reply card — the message to paste back to the coding agent.
+       always LTR (the agent's language, usually english), one-click copy. */
+    .to-agent-card {
+      margin-top: 8px;
+      align-self: stretch;
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .to-agent-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 10px;
+      background: var(--chip-tint);
+      border-bottom: 1px solid var(--border);
+    }
+    .to-agent-label {
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+    .to-agent-copy {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--accent);
+      background: none;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      padding: 2px 10px;
+      cursor: pointer;
+      transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+    }
+    .to-agent-copy:hover { border-color: var(--accent); }
+    .to-agent-copy.copied { color: var(--diff-green); border-color: var(--diff-green); }
+    .to-agent-body {
+      margin: 0;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--fg);
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+      direction: ltr;
+      text-align: left;
+    }
     /* status row — paper-bubble with a typing dots animation while the
        chat-agent is generating, plain hairline note for respawn / error. */
     .chat-status {
@@ -1248,11 +1342,18 @@
     </div>
     <div class="nav-right">
       <span class="reconnect-indicator" id="reconnect-indicator" hidden>reconnecting…</span>
-      <button class="nav-toggle" id="autosend-toggle" type="button" aria-pressed="true" aria-label="auto break-down">
-        <span class="toggle-dot" aria-hidden="true"></span>
-        <span class="toggle-glyph">⚡</span>
-        <span class="toggle-label">auto break-down</span>
-      </button>
+      <label class="nav-toggle lang-pill" title="explanation language">
+        <select id="lang-select" aria-label="explanation language">
+          <option value="he">עברית</option>
+          <option value="en">english</option>
+          <option value="ar">العربية</option>
+          <option value="es">español</option>
+          <option value="fr">français</option>
+          <option value="ru">русский</option>
+          <option value="de">deutsch</option>
+          <option value="zh">中文</option>
+        </select>
+      </label>
       <a class="gh-pill" href="https://github.com/oronanschel/cut-the-cake" target="_blank" rel="noreferrer noopener" aria-label="GitHub repo">
         <span class="gh-glyph">★</span>
         <span class="gh-star" id="gh-star">—</span>
@@ -1280,6 +1381,7 @@
         <div class="session-head">
           <h2 id="d-name">—</h2>
           <p class="source"><span class="src-glyph">◆</span><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span></p>
+          <p class="d-cwd-line" id="d-cwd" hidden></p>
           <button class="charts-toggle" id="d-charts-toggle" type="button" aria-expanded="false" aria-controls="d-charts-band" title="show charts">
             <svg class="chev" viewBox="0 0 12 8" width="10" height="7" aria-hidden="true"><path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
@@ -1321,38 +1423,55 @@
     const dConversation = document.getElementById("d-conversation");
     const dChatThread = document.getElementById("d-chat-thread");
     const dChatInput = document.getElementById("d-chat-input");
-    const autoSendToggle = document.getElementById("autosend-toggle");
+    const langSelect = document.getElementById("lang-select");
+    const LANG_KEY = "cutCakeLang";
+    // the explanation language. localStorage is the source of truth for this
+    // browser; the choice is pushed to the server (which threads it into the
+    // assistant + observer prompts) and mirrored to other clients over ws.
+    let explainLang = localStorage.getItem(LANG_KEY) || "he";
 
-    // global state for the auto-break-down toggle. authoritative value comes from
-    // the server's hello payload + autosend:setting ws msgs; the local optimistic
-    // flip on click is just snappier than waiting for the ws round-trip.
-    let autoSendEnabled = true;
-    function paintAutoSend() {
-      if (!autoSendToggle) return;
-      autoSendToggle.setAttribute("aria-pressed", autoSendEnabled ? "true" : "false");
-      const lbl = autoSendToggle.querySelector(".toggle-label");
-      if (lbl) lbl.textContent = autoSendEnabled ? "auto break-down" : "auto break-down · off";
+    // localized UI strings for the conversational surface. chrome elsewhere
+    // stays english; only the ask box, quick-replies, and the copy card follow
+    // the chosen language. the assistant answers in the language regardless.
+    const UI_STRINGS = {
+      he: { ask: "שאל משהו על הפלט…", next: "המשך", more: "הסבר עוד", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק" },
+      en: { ask: "ask about the output…", next: "next", more: "explain more", toAgent: "reply to agent", copy: "copy", copied: "copied" },
+      ar: { ask: "اسأل عن المخرجات…", next: "التالي", more: "اشرح أكثر", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ" },
+      es: { ask: "pregunta sobre la salida…", next: "siguiente", more: "explica más", toAgent: "responder al agente", copy: "copiar", copied: "copiado" },
+      fr: { ask: "posez une question sur la sortie…", next: "suite", more: "expliquer plus", toAgent: "répondre à l'agent", copy: "copier", copied: "copié" },
+      ru: { ask: "спросите о выводе…", next: "далее", more: "подробнее", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано" },
+      de: { ask: "frag zur ausgabe…", next: "weiter", more: "mehr erklären", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert" },
+      zh: { ask: "询问输出内容…", next: "继续", more: "详细解释", toAgent: "回复给智能体", copy: "复制", copied: "已复制" },
+    };
+    function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.he; }
+
+    function paintLang() {
+      if (langSelect && langSelect.value !== explainLang) langSelect.value = explainLang;
     }
-    paintAutoSend();
-    if (autoSendToggle) {
-      autoSendToggle.addEventListener("click", async () => {
-        const next = !autoSendEnabled;
-        autoSendEnabled = next; paintAutoSend(); // optimistic
-        try {
-          const res = await fetch("/chat/auto-send", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ enabled: next }),
-          });
-          if (!res.ok) {
-            console.warn("[autosend] toggle failed", res.status);
-            autoSendEnabled = !next; paintAutoSend(); // revert on failure
-          }
-        } catch (err) {
-          console.warn("[autosend] toggle error", err);
-          autoSendEnabled = !next; paintAutoSend();
-        }
+    async function pushLang(code) {
+      try {
+        const res = await fetch("/settings/language", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ language: code }),
+        });
+        if (!res.ok) console.warn("[lang] set failed", res.status);
+      } catch (err) {
+        console.warn("[lang] set error", err);
+      }
+    }
+    if (langSelect) {
+      langSelect.value = explainLang;
+      langSelect.addEventListener("change", () => {
+        explainLang = langSelect.value;
+        localStorage.setItem(LANG_KEY, explainLang);
+        pushLang(explainLang);
+        refresh(); // re-render placeholder / quick-replies in the new language
       });
+      // only sync to the server when THIS browser has an explicit saved choice.
+      // a fresh browser has no choice — it must adopt the server's language (via
+      // the hello handler), not clobber it (and every other client) with "he".
+      if (localStorage.getItem(LANG_KEY)) pushLang(explainLang);
     }
 
     // sessions sidebar collapse — thin rail of session color-dots. state
@@ -1500,14 +1619,6 @@
     function keyForSnapshot(sess) {
       return sess.key || (sess.info ? (sess.info.source + ":" + sess.info.path) : "");
     }
-    function latestOpenInsight(decisions) {
-      if (!Array.isArray(decisions)) return null;
-      for (let i = decisions.length - 1; i >= 0; i--) {
-        if (decisions[i].open && decisions[i].insight) return decisions[i];
-      }
-      return null;
-    }
-
     function sessionState(sess) {
       const ts = sess?.lastEventTs || 0;
       const age = Date.now() - ts;
@@ -2061,6 +2172,21 @@
       return slug.includes('--cut-the-cake') || slug.includes('--chunk-to-chat');
     }
 
+    // stable display order: a session's slot is fixed by when it was FIRST seen
+    // (newest-first-seen on top), so background activity never reshuffles the
+    // list under the user. new sessions slide in at the top once, then stay put.
+    const sessionOrderRank = new Map();
+    let sessionOrderSeq = 1;
+    function applyStableOrder(list) {
+      const unranked = list.filter(s => !sessionOrderRank.has(s.key));
+      // oldest-activity-first, so the most-recent unranked session gets the
+      // highest rank and thus sorts to the top on first appearance.
+      unranked.sort((a, b) => (a.lastEventTs || 0) - (b.lastEventTs || 0));
+      for (const s of unranked) sessionOrderRank.set(s.key, sessionOrderSeq++);
+      return list.slice().sort((a, b) =>
+        (sessionOrderRank.get(b.key) || 0) - (sessionOrderRank.get(a.key) || 0));
+    }
+
     function sortedSessions() {
       const all = Array.from(sessionsByKey.values())
         .sort((a, b) => (b.lastEventTs || 0) - (a.lastEventTs || 0));
@@ -2073,7 +2199,7 @@
         if (ts > cur) freshestByLineage.set(key, ts);
       }
 
-      return all.filter(s => {
+      const visible = all.filter(s => {
         const key = (s.info?.source || "") + " " + (s.info?.slug || "");
         const my = s.lastEventTs || 0;
         const fresh = freshestByLineage.get(key) || 0;
@@ -2081,6 +2207,7 @@
         // had activity recently (parallel sessions / just-cleared edge cases).
         return my >= fresh || (Date.now() - my) < LINEAGE_FRESH_MS;
       });
+      return applyStableOrder(visible);
     }
 
     function findSessionBySessionId(sessionId) {
@@ -2090,11 +2217,19 @@
       return null;
     }
 
+    // last two path segments of a working dir, e.g. "…/workspace/claude-meta".
+    // the real cwd comes from the jsonl (info.cwd); never derive it from the slug.
+    function shortCwd(cwd) {
+      if (!cwd || typeof cwd !== "string") return "";
+      const segs = cwd.split("/").filter(Boolean);
+      if (segs.length <= 2) return "/" + segs.join("/");
+      return "…/" + segs.slice(-2).join("/");
+    }
+
     function buildCardInnerHtml(sess, opts) {
       const modelLabel = shortModel(sess.model);
-      const latest = latestOpenInsight(sess.observerDecisions);
-      const insightHtml = latest
-        ? '<p class="card-insight">' + escapeHtml(latest.insight) + '</p>'
+      const summaryHtml = sess.summary
+        ? '<p class="card-insight" dir="auto">' + escapeHtml(sess.summary) + '</p>'
         : '';
       const state = sessionState(sess);
       const ts = sess?.lastEventTs || 0;
@@ -2104,11 +2239,10 @@
         : state === "idle"
           ? 'idle ' + fmtAge(age)
           : fmtAge(age) + ' ago';
-      const tagsStr = latest && latest.tags && latest.tags.length
-        ? latest.tags.join(" · ")
-        : '';
+      const cwdStr = shortCwd(sess?.info?.cwd);
+      const cwdHtml = cwdStr ? '<span class="card-cwd">' + escapeHtml(cwdStr) + '</span>' : '';
       const sourceStr = opts.showSource ? (sess?.info?.source || 'claude-code') : '';
-      const footParts = [sourceStr, tagsStr, elapsedHtml].filter(Boolean);
+      const footParts = [sourceStr, cwdHtml, elapsedHtml].filter(Boolean);
       const footHtml = footParts.join(' <span class="sep">·</span> ');
 
       const miniStats = miniStatsHtmlForSession(sess);
@@ -2121,7 +2255,7 @@
             (modelLabel ? '<span class="model-tag">' + escapeHtml(modelLabel) + '</span>' : '') +
           '</div>' +
         '</div>' +
-        insightHtml +
+        summaryHtml +
         '<p class="card-foot">' + footHtml + '</p>';
 
       if (opts.selected) {
@@ -2142,10 +2276,10 @@
       // signature of "did the meaningful content change?" — avoids flashing
       // on every minute-tick or selection change. covers new events, new
       // observer insights.
-      const ins = latestOpenInsight(sess.observerDecisions);
       return [
         sess.lastEventTs || 0,
-        ins?.insight || "",
+        sess.summaryTs || 0,
+        sess.summary || "",
       ].join("");
     }
 
@@ -2235,8 +2369,10 @@
 
       if (shouldQuiet(list, sel)) {
         clearAllCards();
-        const newest = list[0];
-        const age = Date.now() - (newest.lastEventTs || 0);
+        // list is now in stable (first-seen) order, so list[0] isn't necessarily
+        // the most-recently-active — take the max activity across the list.
+        const newestTs = list.reduce((m, s) => Math.max(m, s.lastEventTs || 0), 0);
+        const age = Date.now() - newestTs;
         const n = list.length;
         ambientQuiet.textContent =
           "quiet — " + n + " agent" + (n === 1 ? "" : "s") +
@@ -2434,10 +2570,14 @@
       dName.textContent = sessionName(sess);
       const sourceEl = document.getElementById("d-source");
       if (sourceEl) sourceEl.textContent = sess?.info?.source || "claude-code";
+      const cwdEl = document.getElementById("d-cwd");
+      if (cwdEl) {
+        const cwd = sess?.info?.cwd || "";
+        cwdEl.textContent = cwd;
+        cwdEl.hidden = !cwd;
+      }
       dElapsed.textContent = fmtElapsed(sess);
       const turns = deriveTurns(events);
-
-      const latestFlag = latestOpenInsight(sess.observerDecisions);
 
       dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, CHART_TURNS) : "";
       dCodeChart.innerHTML = renderCodeChartHtml(turns, CHART_TURNS);
@@ -2495,7 +2635,7 @@
       const lastTurn = turns.length ? turns[turns.length - 1] : null;
       const waitingForAgent = !!(lastTurn && lastTurn.userText && !lastTurn.agentText);
       dChatInput.hidden = waitingForAgent;
-      if (!waitingForAgent) renderChatInput(sess, latestFlag);
+      if (!waitingForAgent) renderChatInput(sess);
 
       // the cake perch is re-mounted every refresh tick (chart/chat-input
       // innerHTML wipes wreck DOM nodes inside them every 5s). animate only on
@@ -2543,7 +2683,6 @@
       }
     }
 
-    const DEFAULT_PREFILL = "walk me through, one piece at a time. pause for my take after each turn";
     const chatDrafts = new Map();
     // chat thread state — sessionKey → array of {role, text, ts}.
     // populated by ws "chat:chunk" messages (the server echoes user sends and streams assistant replies).
@@ -2644,14 +2783,19 @@
         const idx = body.dataset.convIdx;
         const toggle = dConversation.querySelector('.conv-toggle[data-conv-idx="' + idx + '"]');
         const expandKey = body.dataset.expandKey;
+        // the fade lives on the bubble (parent) so it doesn't scroll away when we
+        // pin the body to its tail.
+        const bubble = body.closest('.conv-bubble');
         const alreadyExpanded = body.classList.contains('is-expanded');
         if (alreadyExpanded) {
+          if (bubble) bubble.classList.remove('is-truncated');
           if (toggle) {
             toggle.classList.remove('hidden');
             toggle.textContent = 'show less';
             toggle.addEventListener('click', () => {
               body.classList.remove('is-expanded');
-              body.classList.add('is-truncated');
+              if (bubble) bubble.classList.add('is-truncated');
+              body.scrollTop = body.scrollHeight; // re-pin to the tail
               expandedBodies.delete(expandKey);
               toggle.textContent = 'show full';
             });
@@ -2660,17 +2804,22 @@
         }
         const overflow = body.scrollHeight > body.clientHeight + 4;
         if (overflow) {
-          body.classList.add('is-truncated');
+          if (bubble) bubble.classList.add('is-truncated');
+          // show the END of the exchange (the conclusion / next step), not the
+          // start — pin the clipped view to the bottom. re-applied every render.
+          body.scrollTop = body.scrollHeight;
           if (toggle) {
             toggle.classList.remove('hidden');
             toggle.textContent = 'show full';
             toggle.addEventListener('click', () => {
               body.classList.add('is-expanded');
-              body.classList.remove('is-truncated');
+              if (bubble) bubble.classList.remove('is-truncated');
               expandedBodies.add(expandKey);
               toggle.textContent = 'show less';
             });
           }
+        } else if (bubble) {
+          bubble.classList.remove('is-truncated');
         }
       });
 
@@ -3142,30 +3291,27 @@
       });
     });
 
-    function renderChatInput(sess, latestFlag) {
+    function renderChatInput(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
-      // prefill is a one-shot suggestion for the FIRST send only. once the
-      // chat-thread has any activity, the textarea stays clean — the user is
-      // mid-conversation and shouldn't see the same starter text on every tick.
+      // the ask box starts empty (or restores the user's in-progress draft) —
+      // you ask about the latest output in your own language; no prefill.
       const threadStarted = (chatThreadByKey.get(sessionKey) || []).length > 0;
-      const prefill = (latestFlag && latestFlag.prefill) || DEFAULT_PREFILL;
-      const fallback = threadStarted ? "" : prefill;
-      const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : fallback;
+      const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : "";
 
       // quick-reply pills appear once the conversation is live so the user can
-      // nudge it forward without typing the same one-liners ("next" /
-      // "explain more") every time.
+      // nudge it forward without retyping ("next" / "explain more"), localized
+      // to the chosen language (the pill text is what gets sent).
       const quickHtml = threadStarted
         ? '<div class="chat-quickreplies">' +
-            '<button type="button" class="quick-pill" data-quick="next">next</button>' +
-            '<button type="button" class="quick-pill" data-quick="explain more">explain more</button>' +
+            '<button type="button" class="quick-pill" data-quick="' + escapeHtml(ui().next) + '">' + escapeHtml(ui().next) + '</button>' +
+            '<button type="button" class="quick-pill" data-quick="' + escapeHtml(ui().more) + '">' + escapeHtml(ui().more) + '</button>' +
           '</div>'
         : '';
 
       dChatInput.innerHTML =
         quickHtml +
         '<div class="chat-input-row">' +
-          '<textarea rows="2" placeholder="message…">' + escapeHtml(initial) + '</textarea>' +
+          '<textarea rows="2" dir="auto" placeholder="' + escapeHtml(ui().ask) + '">' + escapeHtml(initial) + '</textarea>' +
           '<button class="send-btn" title="send" aria-label="send">' +
             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
               '<line x1="12" y1="19" x2="12" y2="5"/>' +
@@ -3232,6 +3378,32 @@
       });
     }
 
+    // pull the first ```to-agent … ``` fenced block out of the assistant text.
+    // returns { body: text without the block, reply: the drafted message | null }.
+    // the fence must sit at the start of a line (optionally indented) so an
+    // inline mention of `to-agent` inside the explanation never false-matches.
+    function extractToAgent(text) {
+      const re = /(?:^|\n)[ \t]*```to-agent[^\n]*\n([\s\S]*?)\n[ \t]*```/;
+      const m = re.exec(text || "");
+      if (!m) return { body: text || "", reply: null };
+      const reply = m[1].replace(/\s+$/, "");
+      const body = ((text.slice(0, m.index) + text.slice(m.index + m[0].length)) || "").trim();
+      return { body, reply };
+    }
+
+    // the suggested reply → a copyable card the user pastes into their terminal.
+    let toAgentSeq = 0;
+    function renderToAgentCard(reply) {
+      const id = "ta-" + (++toAgentSeq);
+      return '<div class="to-agent-card">' +
+               '<div class="to-agent-head">' +
+                 '<span class="to-agent-label">' + escapeHtml(ui().toAgent) + '</span>' +
+                 '<button type="button" class="to-agent-copy" data-copy-target="' + id + '">' + escapeHtml(ui().copy) + '</button>' +
+               '</div>' +
+               '<pre class="to-agent-body" id="' + id + '" dir="ltr">' + escapeHtml(reply) + '</pre>' +
+             '</div>';
+    }
+
     function renderChatThread(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       const thread = chatThreadByKey.get(sessionKey) || [];
@@ -3241,17 +3413,24 @@
         return;
       }
       const renderRow = (c) => {
-        const role = c.role === "user" ? "you" : "agent";
-        const cls = c.role === "user" ? "chat-row you" : "chat-row agent";
-        const autoBadge = c.role === "user" && c.kind === "auto"
-          ? '<span class="chat-auto-tag" title="auto-sent by observer flag">auto</span>'
+        if (c.role === "assistant") {
+          const parsed = extractToAgent(c.text || "");
+          const mdHtml = typeof marked !== "undefined"
+            ? marked.parse(parsed.body || "", { breaks: true, gfm: true })
+            : escapeHtml(parsed.body || "");
+          let inner = '<div class="chat-body conv-md" dir="auto">' + mdHtml + '</div>';
+          if (parsed.reply) inner += renderToAgentCard(parsed.reply);
+          return '<div class="chat-row agent">' +
+                   '<div class="chat-role">agent</div>' +
+                   inner +
+                 '</div>';
+        }
+        const autoBadge = c.kind === "auto"
+          ? '<span class="chat-auto-tag" title="auto-sent">auto</span>'
           : '';
-        const body = c.role === "assistant" && typeof marked !== "undefined"
-          ? '<div class="chat-body conv-md">' + marked.parse(c.text || "", { breaks: true, gfm: true }) + '</div>'
-          : '<div class="chat-body">' + escapeHtml(c.text || "") + '</div>';
-        return '<div class="' + cls + '">' +
-                 '<div class="chat-role">' + role + autoBadge + '</div>' +
-                 body +
+        return '<div class="chat-row you">' +
+                 '<div class="chat-role">you' + autoBadge + '</div>' +
+                 '<div class="chat-body" dir="auto">' + escapeHtml(c.text || "") + '</div>' +
                '</div>';
       };
 
@@ -3300,11 +3479,37 @@
           renderChatThread(sess);
         });
       }
+
+      dChatThread.querySelectorAll('.to-agent-copy').forEach(b => {
+        b.addEventListener('click', () => {
+          const el = document.getElementById(b.dataset.copyTarget);
+          if (!el) return;
+          const txt = el.textContent || "";
+          const done = () => {
+            const orig = b.textContent;
+            b.textContent = ui().copied;
+            b.classList.add('copied');
+            setTimeout(() => { b.textContent = orig; b.classList.remove('copied'); }, 1200);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).then(done).catch(() => {});
+          } else {
+            const r = document.createRange(); r.selectNode(el);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+            try { document.execCommand('copy'); done(); } catch (e) {}
+            sel.removeAllRanges();
+          }
+        });
+      });
     }
 
     function refresh() {
+      // preserve scroll across a re-render so a background sidebar/detail update
+      // never yanks the page position out from under the user.
+      const sy = window.scrollY;
       renderInbox();
       renderDetail();
+      if (window.scrollY !== sy) window.scrollTo(0, sy);
     }
     window.addEventListener("hashchange", () => {
       const sid = selectedSessionId();
@@ -3327,7 +3532,8 @@
         model: snap.model,
         contextTokens: snap.contextTokens || 0,
         totalOutputTokens: snap.totalOutputTokens || 0,
-        observerDecisions: Array.isArray(snap.observerDecisions) ? snap.observerDecisions.slice() : [],
+        summary: snap.summary || "",
+        summaryTs: snap.summaryTs || 0,
         displayName: snap.displayName || null,
       });
       // chat thread + status come alongside the snapshot — restore on hello
@@ -3386,9 +3592,10 @@
       ws.addEventListener("message", e => {
         let msg; try { msg = JSON.parse(e.data); } catch { return; }
         if (msg.kind === "hello") {
-          if (typeof msg.autoSendEnabled === "boolean") {
-            autoSendEnabled = msg.autoSendEnabled;
-            paintAutoSend();
+          // adopt the server's language only if this browser has no saved choice.
+          if (typeof msg.language === "string" && !localStorage.getItem(LANG_KEY)) {
+            explainLang = msg.language;
+            paintLang();
           }
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
@@ -3402,13 +3609,11 @@
           if (appendEvent(msg.sessionKey, msg.event)) refresh();
         } else if (msg.kind === "thread:new") {
           if (appendThread(msg.sessionKey, msg.thread)) refresh();
-        } else if (msg.kind === "observer:decision") {
+        } else if (msg.kind === "session:summary") {
           const s = sessionsByKey.get(msg.sessionKey);
-          if (s) {
-            if (!Array.isArray(s.observerDecisions)) s.observerDecisions = [];
-            const idx = s.observerDecisions.findIndex(d => d.turnId === msg.decision.turnId);
-            if (idx >= 0) s.observerDecisions[idx] = msg.decision;
-            else s.observerDecisions.push(msg.decision);
+          if (s && typeof msg.summary === "string") {
+            s.summary = msg.summary;
+            s.summaryTs = msg.summaryTs || Date.now();
             refresh();
           }
         } else if (msg.kind === "chat:chunk") {
@@ -3424,10 +3629,12 @@
             chatStatusByKey.set(msg.sessionKey, { status: msg.status, message: msg.message, ts: msg.ts || Date.now() });
             refresh();
           }
-        } else if (msg.kind === "autosend:setting") {
-          if (typeof msg.enabled === "boolean") {
-            autoSendEnabled = msg.enabled;
-            paintAutoSend();
+        } else if (msg.kind === "settings:language") {
+          if (typeof msg.language === "string") {
+            explainLang = msg.language;
+            localStorage.setItem(LANG_KEY, explainLang);
+            paintLang();
+            refresh();
           }
         }
       });

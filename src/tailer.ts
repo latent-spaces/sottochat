@@ -36,6 +36,9 @@ export type SessionInfo = {
   path: string;
   slug: string;
   source: string;
+  /** the agent's real working directory, lifted from the raw jsonl `cwd` field.
+   *  authoritative — the slug can't be reversed to a path (dashes are ambiguous). */
+  cwd?: string;
 };
 
 export type TailerOptions = {
@@ -247,6 +250,12 @@ export function startTailer(opts: TailerOptions): { stop: () => void } {
           raw = JSON.parse(line);
         } catch {
           continue;
+        }
+        // lift the agent's real working directory off the raw record (claude
+        // code writes `cwd` on every message record). stable per session.
+        const recCwd = (raw as { cwd?: unknown })?.cwd;
+        if (typeof recCwd === "string" && recCwd && state.info.cwd !== recCwd) {
+          state.info.cwd = recCwd;
         }
         // claude records carry a uuid we dedup against; codex rollouts have
         // no per-record uuid and rely on the offset-based reader to skip

@@ -57,7 +57,19 @@ const DISALLOWED_TOOLS = [
 
 const CHAT_ROOT = join(homedir(), ".cut-the-cake", "chat");
 
-const SYSTEM_INTRO = `You are the "break it down" companion in cut-the-cake. The user just watched another agent finish a long, multi-piece run; they want to walk through what was done one piece at a time, with space to react after each. Reply concisely. Pause for the user's reply between pieces — never race ahead. Match their tone (lowercase, terminal-flavoured, dry). When you don't know what they're referring to, ask one clarifying question rather than guessing.`;
+function systemIntro(answerLanguage: string): string {
+  return `You are the companion inside cut-the-cake. The user is watching another coding agent (Claude Code / Codex) work through a long, multi-piece run in their terminal, and they want help understanding it and deciding what to do next.
+
+Always answer in ${answerLanguage}. Explain, in ${answerLanguage}, what the agent's output actually says or did — plainly and concisely, so the user can make their next move. When you're unsure what they're referring to, ask one short clarifying question in ${answerLanguage} rather than guessing.
+
+Sometimes the user is deciding what to tell the agent next — e.g. "what should I answer", "reply to this", "tell it to…", or clearly asking you to compose a message back to the agent. ONLY in that case, after your explanation, ALSO draft the message for them to send. Write that message in the agent's OWN language — the language the agent is writing in (usually English), NOT ${answerLanguage} — and put it, and nothing else, inside a single fenced code block whose info string is exactly \`to-agent\`, like:
+
+\`\`\`to-agent
+<the message to paste back to the agent>
+\`\`\`
+
+If the user only wants an explanation or is just discussing, do NOT include a to-agent block. Never put your ${answerLanguage} explanation inside the to-agent block, and never wrap normal code samples in a \`to-agent\` block.`;
+}
 
 function findClaudeExecutable(): string {
   try {
@@ -79,16 +91,18 @@ function sandboxFor(sessionKey: string): string {
 }
 
 export type ChatSendOptions = {
-  /** prepended to the first prompt of a session as context (alongside SYSTEM_INTRO).
-   *  ignored on follow-up sends. used by the server to pre-seed auto-fired chats
-   *  with the observer's insight + recent turn excerpts. */
+  /** prepended to the first prompt of a session as context (alongside the system
+   *  intro). ignored on follow-up sends. used by the server to seed the chat with
+   *  the latest exchange so the assistant can answer questions about it. */
   seed?: string;
   /** tag for the echoed user chunk. "auto" = server-fired, "user" = typed. */
   userKind?: "auto" | "user";
+  /** language (english name, e.g. "Hebrew") the assistant should answer in. */
+  language?: string;
 };
 
 type AgentHandle = {
-  push: (text: string, seed?: string) => void;
+  push: (text: string, seed?: string, language?: string) => void;
   stop: () => void;
 };
 
@@ -127,16 +141,23 @@ export function startChatHost(opts: ChatAgentOptions): {
       }
     }
 
-    function push(text: string, seed?: string) {
+    let lastLanguage: string | null = null;
+    function push(text: string, seed?: string, language?: string) {
+      const lang = language && language.trim() ? language.trim() : "Hebrew";
       let content: string;
       if (firstPrompt) {
+        const intro = systemIntro(lang);
         const seedBlock = seed && seed.trim()
-          ? `${SYSTEM_INTRO}\n\n---\nSession context:\n${seed.trim()}\n---\n\n`
-          : `${SYSTEM_INTRO}\n\n---\n\n`;
+          ? `${intro}\n\n---\nSession context:\n${seed.trim()}\n---\n\n`
+          : `${intro}\n\n---\n\n`;
         content = `${seedBlock}${text}`;
+      } else if (lang !== lastLanguage) {
+        // language changed mid-conversation — re-assert it for this and future replies.
+        content = `(from now on, answer in ${lang}.)\n\n${text}`;
       } else {
         content = text;
       }
+      lastLanguage = lang;
       firstPrompt = false;
       pushRaw(content);
       opts.onStatus?.({ sessionKey, status: "thinking" });
@@ -172,6 +193,10 @@ export function startChatHost(opts: ChatAgentOptions): {
     void (async () => {
       let consecutiveFailures = 0;
       while (!stopped && consecutiveFailures < 5) {
+        // a respawned subprocess has no memory of the prior conversation — re-send
+        // the persona + language on the next message (mirrors the observer loop).
+        firstPrompt = true;
+        lastLanguage = null;
         const ac = new AbortController();
         abort = ac;
         try {
@@ -250,7 +275,7 @@ export function startChatHost(opts: ChatAgentOptions): {
       const h = ensureAgent(sessionKey);
       const kind: "auto" | "user" = sendOpts?.userKind ?? "user";
       opts.onChunk?.({ sessionKey, role: "user", text: trimmed, ts: Date.now(), kind });
-      h.push(trimmed, sendOpts?.seed);
+      h.push(trimmed, sendOpts?.seed, sendOpts?.language);
     },
     stop(sessionKey) {
       if (sessionKey) {

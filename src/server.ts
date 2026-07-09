@@ -22,20 +22,30 @@ const CHAT_MODEL = Bun.env.META_CHAT_MODEL ?? "claude-sonnet-4-6";
 const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
-// when the observer flags a turn open=true with a prefill, the server fires
-// that prefill into the chat agent automatically — no waiting on user input.
-// these guards keep auto-fires from spamming a chatty session:
-//   - per-session cooldown after each auto-send (default 5min)
-//   - skip if the chat thread already has activity within the cooldown window
-//     (no point opening a second front while the first is unread)
-const AUTO_SEND_COOLDOWN_MS = Number(Bun.env.META_AUTO_SEND_COOLDOWN_MS ?? 5 * 60 * 1000);
-// global on/off for auto-send, runtime-mutable via POST /chat/auto-send.
-// default off — opt in by setting META_AUTO_SEND_ENABLED=1 or by clicking
-// the top-nav toggle. off-by-default keeps a fresh server quiet until the
-// user explicitly turns it on.
-let autoSendEnabled = Bun.env.META_AUTO_SEND_ENABLED === "1";
-// last N closed turns we keep per session, used to seed the auto-fired chat.
+// last N closed turns we keep per session, used to seed the chat with the
+// latest exchange(s) so the assistant can answer questions about them.
 const RECENT_CLOSED_TURNS = 5;
+// the user-facing explanation language. everything the app says TO the user —
+// the assistant's answers and the observer's glance-insight — is written in this
+// language. the suggested reply back to the coding agent stays in the agent's
+// own language. runtime-mutable via POST /settings/language.
+const LANGUAGE_NAMES: Record<string, string> = {
+  he: "Hebrew",
+  en: "English",
+  ar: "Arabic",
+  es: "Spanish",
+  fr: "French",
+  ru: "Russian",
+  de: "German",
+  zh: "Chinese",
+};
+function isKnownLang(code: string): boolean {
+  return Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, code);
+}
+let explainLang = isKnownLang(Bun.env.META_EXPLAIN_LANG ?? "") ? Bun.env.META_EXPLAIN_LANG! : "he";
+function explainLanguageName(): string {
+  return isKnownLang(explainLang) ? LANGUAGE_NAMES[explainLang]! : "Hebrew";
+}
 // shadow mode for the abtop-style PID-driven discovery (src/registry.ts).
 // when off (default), the registry still runs every 2s and is exposed at
 // /diag/discovery for parity verification — it just doesn't drive the inbox
@@ -56,15 +66,6 @@ export type Thread = {
   createdTs: number;
 };
 
-type ObserverInsight = {
-  turnId: string;
-  open: boolean;
-  insight?: string;
-  tags?: string[];
-  prefill?: string;
-  ts: number;
-};
-
 type SessionState = {
   info: SessionInfo;
   events: MetaEvent[];
@@ -75,9 +76,10 @@ type SessionState = {
   model?: string;
   contextTokens: number;       // latest assistant message's input total (= current conversation size)
   totalOutputTokens: number;   // cumulative output across all assistant messages
-  observerDecisions: ObserverInsight[];
-  observerByTurn: Map<string, number>;
-  recentClosedTurns: Turn[];        // ring buffer (RECENT_CLOSED_TURNS) used to seed auto-fired chats
+  summary?: string;            // one-sentence session summary, refreshed every few closed turns
+  summaryTs?: number;          // when the summary last changed (drives the card update pulse)
+  closedTurnCount: number;     // total closed turns — the summary regenerates every 4th
+  recentClosedTurns: Turn[];   // ring buffer (RECENT_CLOSED_TURNS) — feeds the summary + chat seed
 };
 
 const sessions = new Map<string, SessionState>();
@@ -86,8 +88,6 @@ const sockets = new Set<Bun.ServerWebSocket<unknown>>();
 // kept separate so observed-data state stays focused on tailer-sourced facts.
 const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
-// per-session cooldown for observer-driven auto-sends; see AUTO_SEND_COOLDOWN_MS.
-const lastAutoSendTs = new Map<string, number>();
 
 function pushChatChunk(c: ChatChunk) {
   let arr = chatThreads.get(c.sessionKey);
@@ -116,8 +116,7 @@ function getOrCreate(info: SessionInfo): SessionState {
       lastEventTs: 0,
       contextTokens: 0,
       totalOutputTokens: 0,
-      observerDecisions: [],
-      observerByTurn: new Map(),
+      closedTurnCount: 0,
       recentClosedTurns: [],
     };
     sessions.set(k, s);
@@ -162,7 +161,8 @@ function snapshot(s: SessionState) {
     model: s.model,
     contextTokens: s.contextTokens,
     totalOutputTokens: s.totalOutputTokens,
-    observerDecisions: s.observerDecisions,
+    ...(s.summary ? { summary: s.summary } : {}),
+    ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
@@ -222,56 +222,66 @@ function clip(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n)}…` : s;
 }
 
-// build the seed block for the chat-agent: a one-shot context envelope (session
-// name + observer insight if any + last RECENT_CLOSED_TURNS turn excerpts).
-// fed once into the chat-agent so the model has real context for its first
-// reply, without us doing a session fork. shared by auto-fires and manual sends
-// — the chat-agent ignores `seed` on follow-up prompts in the same session.
-function buildChatSeed(s: SessionState, decision?: ObserverInsight | null): string {
-  const k = keyFor(s.info);
+function assistantTextOf(turn: Turn): string {
+  const parts: string[] = [];
+  for (const ev of turn.events) {
+    if (ev.kind === "assistant_text") parts.push(ev.text);
+  }
+  return parts.join("\n\n");
+}
+
+// build the seed block for the chat-agent: a one-shot context envelope fed once
+// into the chat subprocess so the model has the real latest exchange to answer
+// about, without a session fork. the chat-agent ignores `seed` on follow-ups.
+// the most recent turn is included generously (so "what does it say at the end"
+// works); earlier turns are brief context.
+function buildChatSeed(s: SessionState): string {
   const lines: string[] = [];
-  lines.push(`The user just watched session "${s.info.slug}" finish a turn.`);
-  if (decision?.insight) lines.push(`Observer flagged: ${decision.insight}`);
-  if (decision?.tags?.length) lines.push(`Tags: ${decision.tags.join(", ")}`);
-  if (s.recentClosedTurns.length) {
-    lines.push("");
-    lines.push(`Recent ${s.recentClosedTurns.length} closed turn(s) (oldest first):`);
-    for (const turn of s.recentClosedTurns) {
-      const feed = buildTurnFeed(k, s.info, turn);
+  lines.push(`The user is watching the coding-agent session "${s.info.slug}".`);
+  if (s.info.cwd) lines.push(`Working directory: ${s.info.cwd}`);
+  if (s.summary) lines.push(`Session summary so far: ${s.summary}`);
+  const turns = s.recentClosedTurns;
+  if (turns.length) {
+    const prior = turns.slice(0, -1);
+    const latest = turns[turns.length - 1]!;
+    if (prior.length) {
       lines.push("");
-      lines.push("---");
-      lines.push(
-        `metrics: ${feed.outputTokens} tok · ${feed.toolUseCount} tools · +${feed.linesAdded}/-${feed.linesRemoved} lines`
-      );
-      if (feed.userPrompt) lines.push(`user: ${feed.userPrompt}`);
-      if (feed.assistantExcerpt) lines.push(`assistant: ${feed.assistantExcerpt}`);
+      lines.push(`Earlier turns in this session (oldest first, brief):`);
+      for (const turn of prior) {
+        const txt = clip(assistantTextOf(turn), 400);
+        if (!txt) continue;
+        lines.push("---");
+        lines.push(txt);
+      }
     }
+    lines.push("");
+    lines.push(`THE LATEST AGENT OUTPUT (this is what "it" / "this" refers to):`);
+    lines.push("---");
+    const up = clip(latest.userPromptText ?? "", 1000);
+    if (up) lines.push(`[the user's request that opened this turn]: ${up}`);
+    lines.push(clip(assistantTextOf(latest), 8000) || "(no assistant text in the latest turn)");
+    lines.push("---");
   }
   return lines.join("\n");
 }
 
-// fired from onDecision when the observer flags open=true with a prefill.
-// guards against spamming chatty sessions: per-session cooldown + skip if the
-// chat thread already has activity within that window.
-function maybeAutoSendChat(s: SessionState, decision: ObserverInsight) {
-  if (!autoSendEnabled) return;
-  if (!decision.open || !decision.prefill) return;
-  if (!isVisible(s)) return; // never auto-fire for ephemeral helpers / our own subprocesses
-  const key = keyFor(s.info);
-  const now = Date.now();
-  const last = lastAutoSendTs.get(key) ?? 0;
-  if (now - last < AUTO_SEND_COOLDOWN_MS) return;
-  const thread = chatThreads.get(key);
-  if (thread && thread.length > 0) {
-    const lastChatTs = thread[thread.length - 1]!.ts;
-    if (now - lastChatTs < AUTO_SEND_COOLDOWN_MS) return;
-  }
-  lastAutoSendTs.set(key, now);
-  const seed = buildChatSeed(s, decision);
-  console.log(
-    `[auto-send] ${s.info.slug} · prefill="${clip(decision.prefill, 80)}"`
-  );
-  chatHost.send(key, decision.prefill, { seed, userKind: "auto" });
+// build the observer feed for a session summary: the latest turn's ids/metrics
+// (buildTurnFeed) with the assistantExcerpt swapped for a digest of the recent
+// closed turns, so the summarizer sees the session's arc, not one snippet.
+let summaryFeedSeq = 0;
+function buildSummaryFeed(s: SessionState): TurnFeed {
+  const turns = s.recentClosedTurns;
+  const latest = turns[turns.length - 1]!;
+  const digest = turns
+    .map((t) => clip(assistantTextOf(t), 600))
+    .filter(Boolean)
+    .join("\n\n· · ·\n\n");
+  const base = buildTurnFeed(keyFor(s.info), s.info, latest);
+  // give each request a globally-unique echo id: codex per-session turn ids
+  // (cx-<seq>) can collide across sessions batched together, which would map a
+  // summary back to the wrong session. this id is opaque — only used to re-pair
+  // the model's reply with its request.
+  return { ...base, turnId: `sum-${summaryFeedSeq++}`, assistantExcerpt: clip(digest, 4000) };
 }
 
 const server = Bun.serve({
@@ -406,16 +416,15 @@ const server = Bun.serve({
       if (!sess) {
         return Response.json({ error: "unknown sessionKey" }, { status: 404 });
       }
-      // pass the same context envelope as auto-sends — the chat-agent uses it
-      // on the first prompt of the subprocess, ignores it on follow-ups. include
-      // the latest open observer insight (if any) so the model knows what was flagged.
-      const latestOpen = [...sess.observerDecisions].reverse().find(d => d.open) ?? null;
-      const seed = buildChatSeed(sess, latestOpen);
-      chatHost.send(sessionKey, text, { seed });
+      // the chat-agent uses this seed on the first prompt of the subprocess and
+      // ignores it on follow-ups — it carries the working dir, the session
+      // summary so far, and the recent turns (latest one in full).
+      const seed = buildChatSeed(sess);
+      chatHost.send(sessionKey, text, { seed, language: explainLanguageName() });
       return Response.json({ ok: true });
     }
 
-    if (url.pathname === "/chat/auto-send" && req.method === "POST") {
+    if (url.pathname === "/settings/language" && req.method === "POST") {
       let body: unknown;
       try {
         body = await req.json();
@@ -423,13 +432,18 @@ const server = Bun.serve({
         return Response.json({ error: "invalid json" }, { status: 400 });
       }
       const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      if (typeof o.enabled !== "boolean") {
-        return Response.json({ error: "enabled boolean required" }, { status: 400 });
+      const lang = typeof o.language === "string" ? o.language : "";
+      if (!isKnownLang(lang)) {
+        return Response.json({ error: "unknown language" }, { status: 400 });
       }
-      autoSendEnabled = o.enabled;
-      console.log(`[auto-send] runtime toggle → ${autoSendEnabled ? "enabled" : "disabled"}`);
-      broadcast({ kind: "autosend:setting", enabled: autoSendEnabled });
-      return Response.json({ ok: true, enabled: autoSendEnabled });
+      // no-op guard: only mutate + broadcast on an actual change, so a client
+      // syncing its (matching) saved choice on load doesn't clobber other clients.
+      if (explainLang !== lang) {
+        explainLang = lang;
+        console.log(`[settings] explain language → ${lang} (${LANGUAGE_NAMES[lang]})`);
+        broadcast({ kind: "settings:language", language: explainLang });
+      }
+      return Response.json({ ok: true, language: explainLang });
     }
 
     return new Response("not found", { status: 404 });
@@ -441,7 +455,7 @@ const server = Bun.serve({
         JSON.stringify({
           kind: "hello",
           sessions: recentSessions(),
-          autoSendEnabled,
+          language: explainLang,
         })
       );
     },
@@ -456,8 +470,7 @@ const server = Bun.serve({
 
 console.log(`chunk-to-chat · listening on http://localhost:${server.port}`);
 
-// chat host is initialized before the observer because the observer's onDecision
-// callback dispatches into chatHost.send for auto-sends.
+// the chat host — a per-session claude subprocess the user talks to (see chat-agent.ts).
 const chatHost = startChatHost({
   model: CHAT_MODEL,
   onChunk(c) {
@@ -474,43 +487,29 @@ console.log(`[chat] enabled · model=${CHAT_MODEL}`);
 
 const observer = OBSERVER_ENABLED
   ? startObserver({
-      decisionsModel: OBSERVER_MODEL,
+      summaryModel: OBSERVER_MODEL,
       batchMs: OBSERVER_BATCH_MS,
-      onDecision(d) {
+      getLanguage: () => explainLanguageName(),
+      onSummary(d) {
         const s = sessions.get(d.sessionKey);
-        if (!s) return;
-        const decision: ObserverInsight = {
-          turnId: d.turnId,
-          open: d.open,
-          ts: Date.now(),
-          ...(d.insight ? { insight: d.insight } : {}),
-          ...(d.tags && d.tags.length ? { tags: d.tags } : {}),
-          ...(d.prefill ? { prefill: d.prefill } : {}),
-        };
-        const existingIdx = s.observerByTurn.get(d.turnId);
-        if (existingIdx !== undefined) {
-          s.observerDecisions[existingIdx] = decision;
-        } else {
-          s.observerByTurn.set(d.turnId, s.observerDecisions.length);
-          s.observerDecisions.push(decision);
-        }
+        if (!s || !d.summary) return;
+        if (s.summary === d.summary) return; // no change → no repaint/pulse
+        s.summary = d.summary;
+        s.summaryTs = Date.now();
         if (isVisible(s)) {
           broadcast({
-            kind: "observer:decision",
+            kind: "session:summary",
             sessionKey: d.sessionKey,
-            decision,
+            summary: s.summary,
+            summaryTs: s.summaryTs,
           });
         }
-        // fire-and-forget auto-send: when the observer flags the turn open with a
-        // prefill, kick off a chat-agent conversation so the user opens the
-        // session to a primed thread instead of an empty input.
-        maybeAutoSendChat(s, decision);
       },
     })
   : null;
 if (observer) {
   console.log(
-    `[observer] enabled · decisions=${OBSERVER_MODEL} · batch=${OBSERVER_BATCH_MS}ms`
+    `[observer] enabled · summarizer=${OBSERVER_MODEL} · batch=${OBSERVER_BATCH_MS}ms`
   );
 }
 
@@ -584,15 +583,21 @@ startTailer({
 
     const result = ingestEvent(s.turns, ev);
     if (result.closed) {
-      // ring buffer for the auto-send seed builder.
+      // ring buffer feeding the summary digest + the chat seed.
       s.recentClosedTurns.push(result.closed);
       if (s.recentClosedTurns.length > RECENT_CLOSED_TURNS) {
         s.recentClosedTurns.splice(0, s.recentClosedTurns.length - RECENT_CLOSED_TURNS);
       }
       maybeOpenThread(s, result.closed);
       const fresh = Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS;
+      // count only fresh (observed) turns — historical turns replayed from disk at
+      // startup must NOT advance the cadence, or a resumed session would miss its
+      // first/every-4th trigger. label regenerates on the first observed close,
+      // then every 4th, so it stays current without a call per turn.
       if (observer && !isObserverSelf && isVisible(s) && fresh) {
-        observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
+        s.closedTurnCount += 1;
+        const dueForSummary = s.closedTurnCount === 1 || s.closedTurnCount % 4 === 0;
+        if (dueForSummary) observer.feed(buildSummaryFeed(s));
       }
     }
   },

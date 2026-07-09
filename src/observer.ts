@@ -1,6 +1,6 @@
 // one long-lived sdk subprocess:
-//   - decisions: sonnet-4-6, returns per-turn {open, insight, tags, prefill}
-// keeps prior-batch context so it can adapt as activity shifts.
+//   - summarizer: sonnet-4-6, returns a per-session one-sentence summary
+// keeps prior-batch context so the summary reflects the session's arc.
 //
 // pattern: claude-mem ClaudeProvider — query() from @anthropic-ai/claude-agent-sdk,
 // async-generator prompt feed, sandboxed cwd, all tools disallowed.
@@ -32,20 +32,20 @@ export type TurnFeed = {
   events?: MetaEvent[];
 };
 
-export type GateDecision = {
+export type ObserverSummary = {
   sessionKey: string;
   turnId: string;
-  open: boolean;
-  insight?: string;
-  tags?: string[];
-  prefill?: string;
+  summary?: string;
 };
 
 export type ObserverOptions = {
-  /** model for the per-turn decisions subprocess (sonnet by default). */
-  decisionsModel?: string;
+  /** model for the summarizer subprocess (sonnet by default). */
+  summaryModel?: string;
   batchMs?: number;
-  onDecision?: (d: GateDecision) => void;
+  onSummary?: (s: ObserverSummary) => void;
+  /** english name of the language the summary should be written in (e.g. "Hebrew").
+   *  read fresh each batch so a runtime language change takes effect without a respawn. */
+  getLanguage?: () => string;
 };
 
 const DISALLOWED_TOOLS = [
@@ -67,39 +67,21 @@ const DISALLOWED_TOOLS = [
 // rename in resume queue).
 const DECISIONS_DIR = join(homedir(), ".chunk-to-chat", "observer");
 
-const DECISIONS_INTRO = `You are the observer for cut-the-cake, a tool that watches Claude Code sessions and surfaces moments worth user review.
+const SUMMARY_INTRO = `You are the observer for cut-the-cake, a tool that watches Claude Code / Codex sessions and shows a glanceable one-line label of each on a dashboard.
 
-Your only job: when shown a batch of recently-closed turns, decide for each whether to open a thread (alert the user) and, if so, produce a single-sentence insight.
+Your only job: when shown a batch of sessions (each with its recent activity), write ONE short sentence per session that says what the session is ABOUT — its subject or goal — NOT a play-by-play of the latest step. Think "what is this session for?", the label a developer would put on the tab.
 
-Initial heuristics — open a thread when ANY of these is true (these are starting defaults; you will adapt as you see more activity):
-- output > 1500 tokens
-- >5 tool calls in one turn
-- >100 lines added or removed in one turn
-- signs of trouble (third edit on the same file, errored tool result on a code-touching tool, repeated failed tests, etc.)
-
-The insight is one short sentence (max 14 words) describing what's worth attention. Examples:
-- "Third edit pass on src/auth.ts — may be stuck on the same problem."
-- "Heavy refactor across 8 files; review for unrelated changes."
-- "Errored Edit followed by another Edit attempt; original approach may be wrong."
-Avoid bland summaries ("Made some changes to the code"). Be concrete.
-
-For every turn you flag open=true, also draft a "prefill": a one-sentence message the user can edit and send to the original agent to break that turn's output into a back-and-forth. Constraints:
-- ≤14 words
-- terse, second-person to the agent (not to the user)
-- identify the multi-piece structure in the agent's output (commits, files, list items, decisions, edit attempts, etc.)
-- pattern: name what to walk through + "one at a time" + ask for the user's response after each
-- use phrases like "wait for my reply", "pause for my take", "ask me on each before moving on" — NOT "go or stop"
-- no greeting, no fluff
-For open=false turns, prefill must be null.
-
-You see prior batches in your context; use that memory to compare to earlier activity in the same session.
+Guidance:
+- Describe the topic or purpose: the feature, area, or problem the session is working on (e.g. "reworking the tab-navigation UI in the medly app", "debugging the auth token-refresh flow"). NOT the moment-to-moment action ("running a test", "editing a file", "fixing a button").
+- It should stay recognizable as the session evolves — name the subject, not the current action.
+- Keep it to roughly a dozen words — a single short phrase, no trailing period needed.
+- Write it in the user's chosen language — each batch's trailing instruction states which language.
+- You see prior batches in your context; use that memory to keep the label consistent and accurate as the session grows.
 
 Reply with ONLY a JSON object. No prose, no markdown fences. Schema:
-{"decisions": [{"turnId": "<from input>", "open": true|false, "insight": "..." | null, "tags": ["short-tag", ...], "prefill": "..." | null}, ...]}
+{"summaries": [{"turnId": "<from input>", "summary": "..."}, ...]}
 
-The decisions array is in the same order as the input batch (one entry per turn).
-
-Tags are short kebab-case labels you invent; we will use them later to learn your patterns. Examples: "loop-suspected", "scope-creep", "test-failures", "style-rewrite".`;
+The summaries array is in the same order as the input batch (one entry per session).`;
 
 function findClaudeExecutable(): string {
   try {
@@ -143,19 +125,18 @@ export function buildTurnFeed(
 }
 
 function formatBatch(batch: TurnFeed[], trailing: string): string {
-  const lines: string[] = [`New batch of ${batch.length} closed turn(s):`];
+  const lines: string[] = [`${batch.length} session(s) to summarize:`];
   for (const t of batch) {
     const sName = t.sessionInfo.slug.replace(/^-+/, "").split("-").pop() ?? "?";
     lines.push("");
     lines.push(`---`);
     lines.push(`turnId: ${t.turnId}`);
-    lines.push(`sessionKey: ${t.sessionKey}`);
     lines.push(`session: ${sName} (${t.sessionInfo.source})`);
     lines.push(
-      `metrics: ${t.outputTokens} tok · ${t.outputChars} chars · ${t.toolUseCount} tools · +${t.linesAdded}/-${t.linesRemoved} lines`
+      `latest turn metrics: ${t.outputTokens} tok · ${t.toolUseCount} tools · +${t.linesAdded}/-${t.linesRemoved} lines`
     );
-    if (t.userPrompt) lines.push(`user: ${t.userPrompt}`);
-    if (t.assistantExcerpt) lines.push(`assistant: ${t.assistantExcerpt}`);
+    if (t.userPrompt) lines.push(`latest user request: ${t.userPrompt}`);
+    if (t.assistantExcerpt) lines.push(`recent activity:\n${t.assistantExcerpt}`);
   }
   lines.push("");
   lines.push(trailing);
@@ -166,7 +147,7 @@ function stripFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
-function parseDecisionsResponse(text: string): Array<Omit<GateDecision, "sessionKey">> | null {
+function parseSummaryResponse(text: string): Array<Omit<ObserverSummary, "sessionKey">> | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripFences(text));
@@ -178,30 +159,21 @@ function parseDecisionsResponse(text: string): Array<Omit<GateDecision, "session
     raw = parsed;
   } else if (parsed && typeof parsed === "object") {
     const o = parsed as Record<string, unknown>;
-    raw = Array.isArray(o.decisions) ? o.decisions : [];
+    raw = Array.isArray(o.summaries) ? o.summaries : [];
   } else {
     return null;
   }
-  const out: Array<Omit<GateDecision, "sessionKey">> = [];
+  const out: Array<Omit<ObserverSummary, "sessionKey">> = [];
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
     const turnId = typeof o.turnId === "string" ? o.turnId : null;
     if (!turnId) continue;
-    const open = o.open === true;
-    const insight =
-      typeof o.insight === "string" && o.insight.trim().length > 0 ? o.insight.trim() : undefined;
-    const tags = Array.isArray(o.tags)
-      ? (o.tags.filter((t) => typeof t === "string") as string[])
-      : undefined;
-    const prefill =
-      typeof o.prefill === "string" && o.prefill.trim().length > 0 ? o.prefill.trim() : undefined;
+    const summary =
+      typeof o.summary === "string" && o.summary.trim().length > 0 ? o.summary.trim() : undefined;
     out.push({
       turnId,
-      open,
-      ...(insight ? { insight } : {}),
-      ...(tags && tags.length ? { tags } : {}),
-      ...(prefill ? { prefill } : {}),
+      ...(summary ? { summary } : {}),
     });
   }
   return out;
@@ -213,8 +185,9 @@ type SdkLoopOptions = {
   label: string;
   batchMs: number;
   systemIntro: string;
-  /** built once per tick; trailing line tells the model what shape to reply with. */
-  formatTrailing: string;
+  /** built each tick; trailing line tells the model what shape to reply with
+   *  (and, for the observer, which language to write insights in). */
+  formatTrailing: () => string;
   /** sessionId tag passed on synthetic SDKUserMessages (cosmetic — for the sdk's own session bookkeeping). */
   sdkSessionId: string;
   /** called with raw assistant text + the batch that produced it. */
@@ -283,7 +256,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
     if (queue.length === 0) return;
     const batch = queue.splice(0, queue.length);
     inflightBatches.push(batch);
-    const body = formatBatch(batch, opts.formatTrailing);
+    const body = formatBatch(batch, opts.formatTrailing());
     const content = firstPrompt ? `${opts.systemIntro}\n\n---\n\n${body}` : body;
     firstPrompt = false;
     pushPrompt(content);
@@ -397,19 +370,21 @@ export function startObserver(opts: ObserverOptions): {
   feed: (t: TurnFeed) => void;
   stop: () => void;
 } {
-  const decisionsModel = opts.decisionsModel ?? "claude-sonnet-4-6";
+  const summaryModel = opts.summaryModel ?? "claude-sonnet-4-6";
   const batchMs = opts.batchMs ?? 30_000;
+  const getLanguage = opts.getLanguage ?? (() => "Hebrew");
 
-  const decisions = startSdkLoop({
-    model: decisionsModel,
+  const loop = startSdkLoop({
+    model: summaryModel,
     cwd: DECISIONS_DIR,
     label: "observer",
     batchMs,
-    systemIntro: DECISIONS_INTRO,
-    formatTrailing: `Reply with a JSON object: {"decisions": [...one per turn in input order...]}. No other text.`,
+    systemIntro: SUMMARY_INTRO,
+    formatTrailing: () =>
+      `Reply with a JSON object: {"summaries": [...one per session in input order...]}. Write every summary in ${getLanguage()}. No other text.`,
     sdkSessionId: "chunk-to-chat-observer",
     onResponse(text, batch) {
-      const parsed = parseDecisionsResponse(text);
+      const parsed = parseSummaryResponse(text);
       if (!parsed) {
         console.log(`[observer] could not parse: ${clip(text, 200)}`);
         return;
@@ -422,22 +397,19 @@ export function startObserver(opts: ObserverOptions): {
           console.log(`[observer] unknown turnId in response: ${d.turnId}`);
           continue;
         }
-        const decision: GateDecision = { ...d, sessionKey: feed.sessionKey };
-        opts.onDecision?.(decision);
-        const tag = decision.open ? "OPEN" : "skip";
-        const ins = decision.insight ? ` — ${decision.insight}` : "";
-        const tags = decision.tags?.length ? ` [${decision.tags.join(",")}]` : "";
-        console.log(`[observer] ${tag} ${decision.turnId.slice(0, 8)}${ins}${tags}`);
+        const summary: ObserverSummary = { ...d, sessionKey: feed.sessionKey };
+        opts.onSummary?.(summary);
+        console.log(`[observer] ${feed.sessionKey.slice(-24)} — ${clip(summary.summary ?? "(none)", 80)}`);
       }
     },
   });
 
   return {
     feed(t) {
-      decisions.feed(t);
+      loop.feed(t);
     },
     stop() {
-      decisions.stop();
+      loop.stop();
     },
   };
 }
