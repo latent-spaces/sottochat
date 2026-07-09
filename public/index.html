@@ -1086,10 +1086,11 @@
       border-radius: var(--r-panel);
       padding: 14px 16px;
     }
-    /* quick-reply pills — sit above the textarea once the conversation is live.
-       click sends the pill's text through the same /chat/send path. */
+    /* preset chips + turns-in-context stepper — sit above the textarea, always
+       shown. click a chip to send its text through the same /chat/send path. */
     .chat-quickreplies {
       display: flex;
+      align-items: center;
       gap: 6px;
       flex-wrap: wrap;
       margin-bottom: 8px;
@@ -1111,6 +1112,59 @@
     }
     .quick-pill:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
     .quick-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+    .qr-presets {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    /* preset chips read as the primary quick-action: filled accent tint, accent
+       border, bolder text, and a solid-accent hover — clearly visible on the
+       near-white chat surface (plain quick-pills stay subtle elsewhere). */
+    .qr-presets .quick-pill {
+      height: 28px;
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .qr-presets .quick-pill:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: var(--surface);
+    }
+    /* per-session "turns in context" stepper — mono micro-control, matches the
+       quick-reply / clear chrome. sits at the end of the quick-reply row. */
+    .ctx-turns {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+    }
+    .ctx-turns-lbl { letter-spacing: 0.04em; opacity: 0.8; }
+    .ctx-turns-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1;
+      color: var(--accent);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+    }
+    .ctx-turns-btn:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-soft); }
+    .ctx-turns-btn:disabled { opacity: 0.4; cursor: default; }
+    .ctx-turns-val { min-width: 14px; text-align: center; color: var(--fg); font-variant-numeric: tabular-nums; }
     .chat-input-row {
       display: flex;
       gap: 10px;
@@ -1463,16 +1517,36 @@
     // stays english; only the ask box, quick-replies, and the copy card follow
     // the chosen language. the assistant answers in the language regardless.
     const UI_STRINGS = {
-      he: { ask: "שאל משהו על הפלט…", next: "המשך", more: "הסבר עוד", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק" },
-      en: { ask: "ask about the output…", next: "next", more: "explain more", toAgent: "reply to agent", copy: "copy", copied: "copied" },
-      ar: { ask: "اسأل عن المخرجات…", next: "التالي", more: "اشرح أكثر", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ" },
-      es: { ask: "pregunta sobre la salida…", next: "siguiente", more: "explica más", toAgent: "responder al agente", copy: "copiar", copied: "copiado" },
-      fr: { ask: "posez une question sur la sortie…", next: "suite", more: "expliquer plus", toAgent: "répondre à l'agent", copy: "copier", copied: "copié" },
-      ru: { ask: "спросите о выводе…", next: "далее", more: "подробнее", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано" },
-      de: { ask: "frag zur ausgabe…", next: "weiter", more: "mehr erklären", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert" },
-      zh: { ask: "询问输出内容…", next: "继续", more: "详细解释", toAgent: "回复给智能体", copy: "复制", copied: "已复制" },
+      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", presets: ["תסכם", "הסבר במילים פשוטות", "מה קרה כאן?", "מה לענות?"] },
+      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", presets: ["summarize", "explain simply", "what happened here?", "what should I answer?"] },
+      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", presets: ["لخّص", "اشرح ببساطة", "ماذا حدث هنا؟", "بماذا أرد؟"] },
+      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", presets: ["resume", "explícalo simple", "¿qué pasó aquí?", "¿qué respondo?"] },
+      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", presets: ["résume", "explique simplement", "que s'est-il passé ?", "que répondre ?"] },
+      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", presets: ["кратко", "объясни просто", "что здесь произошло?", "что ответить?"] },
+      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", presets: ["zusammenfassen", "einfach erklären", "was ist passiert?", "was soll ich antworten?"] },
+      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", presets: ["总结", "简单解释", "这里发生了什么？", "该怎么回复？"] },
     };
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.he; }
+
+    // per-session "turns in context" stepper bounds — mirror the server clamps.
+    const CHAT_CTX_MIN = 1, CHAT_CTX_MAX = 10, CHAT_CTX_DEFAULT = 5;
+    function clampCtxTurns(n) {
+      const v = Math.floor(Number(n));
+      if (!Number.isFinite(v)) return CHAT_CTX_DEFAULT;
+      return Math.min(CHAT_CTX_MAX, Math.max(CHAT_CTX_MIN, v));
+    }
+    async function setChatContextTurns(sessionKey, turns) {
+      try {
+        const res = await fetch('/chat/context-turns', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionKey, turns }),
+        });
+        if (!res.ok) console.warn('[chat] context-turns set failed', res.status);
+      } catch (err) {
+        console.warn('[chat] context-turns set error', err);
+      }
+    }
 
     function paintLang() {
       if (langSelect && langSelect.value !== explainLang) langSelect.value = explainLang;
@@ -3347,18 +3421,27 @@
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       // the ask box starts empty (or restores the user's in-progress draft) —
       // you ask about the latest output in your own language; no prefill.
-      const threadStarted = (chatThreadByKey.get(sessionKey) || []).length > 0;
       const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : "";
 
-      // quick-reply pills appear once the conversation is live so the user can
-      // nudge it forward without retyping ("next" / "explain more"), localized
-      // to the chosen language (the pill text is what gets sent).
-      const quickHtml = threadStarted
-        ? '<div class="chat-quickreplies">' +
-            '<button type="button" class="quick-pill" data-quick="' + escapeHtml(ui().next) + '">' + escapeHtml(ui().next) + '</button>' +
-            '<button type="button" class="quick-pill" data-quick="' + escapeHtml(ui().more) + '">' + escapeHtml(ui().more) + '</button>' +
-          '</div>'
-        : '';
+      // localized preset chips (always shown) + a per-session stepper for how
+      // many recent turns seed the assistant. clicking a chip sends its text
+      // through the same /chat/send path; the stepper tunes buildChatSeed depth.
+      const presetChips = (ui().presets || [])
+        .map(p => '<button type="button" class="quick-pill" dir="auto" data-quick="' + escapeHtml(p) + '">' + escapeHtml(p) + '</button>')
+        .join('');
+      const ctxTurns = clampCtxTurns(sess.chatContextTurns);
+      const stepperHtml =
+        '<div class="ctx-turns" title="how many recent turns the assistant sees">' +
+          '<span class="ctx-turns-lbl">ctx</span>' +
+          '<button type="button" class="ctx-turns-btn" data-step="-1" aria-label="fewer turns"' + (ctxTurns <= CHAT_CTX_MIN ? ' disabled' : '') + '>−</button>' +
+          '<span class="ctx-turns-val">' + ctxTurns + '</span>' +
+          '<button type="button" class="ctx-turns-btn" data-step="1" aria-label="more turns"' + (ctxTurns >= CHAT_CTX_MAX ? ' disabled' : '') + '>+</button>' +
+        '</div>';
+      const quickHtml =
+        '<div class="chat-quickreplies">' +
+          '<div class="qr-presets">' + presetChips + '</div>' +
+          stepperHtml +
+        '</div>';
 
       dChatInput.innerHTML =
         quickHtml +
@@ -3427,6 +3510,17 @@
       }
       pills.forEach(p => {
         p.addEventListener('click', () => sendChatText(p.dataset.quick || '', p));
+      });
+      Array.from(dChatInput.querySelectorAll('.ctx-turns-btn')).forEach(b => {
+        b.addEventListener('click', () => {
+          const step = Number(b.dataset.step) || 0;
+          const cur = clampCtxTurns(sess.chatContextTurns);
+          const next = clampCtxTurns(cur + step);
+          if (next === cur) return;
+          sess.chatContextTurns = next; // optimistic; server echoes chat:context-turns
+          setChatContextTurns(sessionKey, next);
+          renderChatInput(sess);        // repaint value + disabled bounds (draft preserved)
+        });
       });
     }
 
@@ -3621,6 +3715,7 @@
         summary: snap.summary || "",
         summaryTs: snap.summaryTs || 0,
         displayName: snap.displayName || null,
+        chatContextTurns: clampCtxTurns(snap.chatContextTurns),
       });
       // chat thread + status come alongside the snapshot — restore on hello
       // so a page reload doesn't wipe a live conversation.
@@ -3725,6 +3820,12 @@
             explainLang = msg.language;
             localStorage.setItem(LANG_KEY, explainLang);
             paintLang();
+            refresh();
+          }
+        } else if (msg.kind === "chat:context-turns") {
+          const s = sessionsByKey.get(msg.sessionKey);
+          if (s && typeof msg.turns === "number" && s.chatContextTurns !== msg.turns) {
+            s.chatContextTurns = msg.turns;
             refresh();
           }
         }

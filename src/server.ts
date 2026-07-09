@@ -23,8 +23,15 @@ const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
 // last N closed turns we keep per session, used to seed the chat with the
-// latest exchange(s) so the assistant can answer questions about them.
-const RECENT_CLOSED_TURNS = 5;
+// latest exchange(s) so the assistant can answer questions about them. the
+// chat seed slices this to a per-session, user-tunable depth (chatContextTurns,
+// clamped to CHAT_CONTEXT_TURNS_{MIN,MAX}); the summary digest keeps its own
+// fixed depth so widening the chat context never widens summaries.
+const RECENT_CLOSED_TURNS = 10;
+const SUMMARY_DIGEST_TURNS = 5;
+const CHAT_CONTEXT_TURNS_MIN = 1;
+const CHAT_CONTEXT_TURNS_MAX = 10;
+const CHAT_CONTEXT_TURNS_DEFAULT = 5;
 // the user-facing explanation language. everything the app says TO the user —
 // the assistant's answers and the observer's glance-insight — is written in this
 // language. the suggested reply back to the coding agent stays in the agent's
@@ -80,6 +87,7 @@ type SessionState = {
   summaryTs?: number;          // when the summary last changed (drives the card update pulse)
   closedTurnCount: number;     // total closed turns — the summary regenerates every 4th
   recentClosedTurns: Turn[];   // ring buffer (RECENT_CLOSED_TURNS) — feeds the summary + chat seed
+  chatContextTurns: number;    // how many recent turns the chat seed includes (user-tunable, 1..10)
 };
 
 const sessions = new Map<string, SessionState>();
@@ -118,6 +126,7 @@ function getOrCreate(info: SessionInfo): SessionState {
       totalOutputTokens: 0,
       closedTurnCount: 0,
       recentClosedTurns: [],
+      chatContextTurns: CHAT_CONTEXT_TURNS_DEFAULT,
     };
     sessions.set(k, s);
   } else {
@@ -161,6 +170,7 @@ function snapshot(s: SessionState) {
     model: s.model,
     contextTokens: s.contextTokens,
     totalOutputTokens: s.totalOutputTokens,
+    chatContextTurns: s.chatContextTurns,
     ...(s.summary ? { summary: s.summary } : {}),
     ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
     ...(displayName ? { displayName } : {}),
@@ -240,7 +250,9 @@ function buildChatSeed(s: SessionState): string {
   lines.push(`The user is watching the coding-agent session "${s.info.slug}".`);
   if (s.info.cwd) lines.push(`Working directory: ${s.info.cwd}`);
   if (s.summary) lines.push(`Session summary so far: ${s.summary}`);
-  const turns = s.recentClosedTurns;
+  // include only the last N turns the user asked for (the latest one in full,
+  // earlier ones brief). the ring buffer may hold more than that.
+  const turns = s.recentClosedTurns.slice(-s.chatContextTurns);
   if (turns.length) {
     const prior = turns.slice(0, -1);
     const latest = turns[turns.length - 1]!;
@@ -270,7 +282,9 @@ function buildChatSeed(s: SessionState): string {
 // closed turns, so the summarizer sees the session's arc, not one snippet.
 let summaryFeedSeq = 0;
 function buildSummaryFeed(s: SessionState): TurnFeed {
-  const turns = s.recentClosedTurns;
+  // the summarizer keeps a fixed look-back independent of the chat's tunable
+  // depth, so raising chatContextTurns never widens the summary.
+  const turns = s.recentClosedTurns.slice(-SUMMARY_DIGEST_TURNS);
   const latest = turns[turns.length - 1]!;
   const digest = turns
     .map((t) => clip(assistantTextOf(t), 600))
@@ -444,6 +458,36 @@ const server = Bun.serve({
       chatStatuses.delete(sessionKey);
       broadcast({ kind: "chat:cleared", sessionKey });
       return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/chat/context-turns" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
+      if (!sessionKey) {
+        return Response.json({ error: "sessionKey required" }, { status: 400 });
+      }
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
+        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
+      }
+      if (typeof o.turns !== "number" || !Number.isFinite(o.turns)) {
+        return Response.json({ error: "turns must be a number" }, { status: 400 });
+      }
+      const turns = Math.min(
+        CHAT_CONTEXT_TURNS_MAX,
+        Math.max(CHAT_CONTEXT_TURNS_MIN, Math.floor(o.turns))
+      );
+      if (sess.chatContextTurns !== turns) {
+        sess.chatContextTurns = turns;
+        broadcast({ kind: "chat:context-turns", sessionKey, turns });
+      }
+      return Response.json({ ok: true, turns });
     }
 
     if (url.pathname === "/settings/language" && req.method === "POST") {
