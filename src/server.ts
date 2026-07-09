@@ -4,10 +4,6 @@ import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
 import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver, type TurnFeed } from "./observer";
-import { startScriptifier, SCRIPT_STYLES, MARKER_VOCABS, type ScriptBeat, type ScriptStyle, type MarkerVocab } from "./scriptifier";
-import { startInfographer, type Pill } from "./infographer";
-import { generateTts, ttsAudioPath, type WordTiming } from "./tts";
-import { exportToMp4, exportMp4Path } from "./hyperframes-export";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
 
@@ -24,34 +20,8 @@ const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED !== "0";
 const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-4-6";
 const CHAT_MODEL = Bun.env.META_CHAT_MODEL ?? "claude-sonnet-4-6";
 const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
-// scriptifier: parallel sonnet subprocess that turns each closed turn into a
-// karaoke-style script for the video pane. shorter batch ceiling than the
-// observer (we want video to populate fast, not on a 30s heartbeat).
-const SCRIPTIFIER_ENABLED = Bun.env.META_SCRIPTIFIER_ENABLED !== "0";
-const SCRIPTIFIER_MODEL = Bun.env.META_SCRIPTIFIER_MODEL ?? "claude-sonnet-4-6";
-const SCRIPTIFIER_BATCH_MS = Number(Bun.env.META_SCRIPTIFIER_BATCH_MS ?? 2_000);
-// infographer: parallel sonnet subprocess that plans info-graphic pills for the
-// tiktok-style player. fired after scriptifier emits beats (so pills can anchor
-// to beat indices, not seconds — robust to tts variation). short batch ceiling
-// since pills should land close behind beats.
-const INFOGRAPHER_ENABLED = Bun.env.META_INFOGRAPHER_ENABLED !== "0";
-const INFOGRAPHER_MODEL = Bun.env.META_INFOGRAPHER_MODEL ?? "claude-sonnet-4-6";
-const INFOGRAPHER_BATCH_MS = Number(Bun.env.META_INFOGRAPHER_BATCH_MS ?? 2_000);
-const TTS_VOICE = Bun.env.META_TTS_VOICE ?? "af_heart";
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
-// per-session ring buffer for ScriptPayloads — keeps a meaningful history
-// without ballooning state. oldest by closedTs is pruned when a new one lands.
-const MAX_SCRIPTS_PER_SESSION = 12;
-// per-session ring buffer for PillPlanPayloads (one per turn). same cadence as
-// scripts — they're planned right after beats land.
-const MAX_PILL_PLANS_PER_SESSION = 12;
-// how many TurnFeeds we keep cached per `turnId` while waiting for the
-// scriptifier to return beats. cap is generous — scriptifier batches every 2s
-// and turns close at most every few seconds; 50 entries covers an entire
-// burst across all visible sessions. evicted on consume in scriptifier's
-// onScript callback or on capacity overflow (drop-oldest).
-const PENDING_TURN_FEED_CAP = 50;
 // when the observer flags a turn open=true with a prefill, the server fires
 // that prefill into the chat agent automatically — no waiting on user input.
 // these guards keep auto-fires from spamming a chatty session:
@@ -64,25 +34,6 @@ const AUTO_SEND_COOLDOWN_MS = Number(Bun.env.META_AUTO_SEND_COOLDOWN_MS ?? 5 * 6
 // the top-nav toggle. off-by-default keeps a fresh server quiet until the
 // user explicitly turns it on.
 let autoSendEnabled = Bun.env.META_AUTO_SEND_ENABLED === "1";
-// active scriptifier prompt preset. one of SCRIPT_STYLES; runtime-mutable via
-// POST /debug/script-style. seeded from META_SCRIPT_STYLE if set, else
-// "default". the picker in the video pane writes here; on each closed turn
-// we pass this to scriptifier.feed so the right per-style subprocess handles
-// the prompt. previous turns are NOT re-scripted on style change.
-let activeScriptStyle: ScriptStyle = (() => {
-  const env = Bun.env.META_SCRIPT_STYLE as ScriptStyle | undefined;
-  if (env && SCRIPT_STYLES.includes(env)) return env;
-  return "default";
-})();
-// active marker vocabulary. "design" = INSIGHT/BE_CAREFUL/STEP/NOTE (default,
-// matches the original prompts). "story" = PUNCHLINE/GOTCHA/PIVOT/ASIDE — same
-// semantic intent but a more story-shaped vocabulary. swappable at runtime via
-// POST /debug/marker-vocab. like activeScriptStyle, only affects future turns.
-let activeMarkerVocab: MarkerVocab = (() => {
-  const env = Bun.env.META_MARKER_VOCAB as MarkerVocab | undefined;
-  if (env && MARKER_VOCABS.includes(env)) return env;
-  return "design";
-})();
 // last N closed turns we keep per session, used to seed the auto-fired chat.
 const RECENT_CLOSED_TURNS = 5;
 // shadow mode for the abtop-style PID-driven discovery (src/registry.ts).
@@ -114,48 +65,6 @@ type ObserverInsight = {
   ts: number;
 };
 
-// per-turn karaoke script + tts payload. lifecycle:
-//   drafting → (model emits beats) → rendering → (tts done) → ready
-//                                  → (tts fails) → error
-type ScriptPayload = {
-  turnId: string;
-  beats: ScriptBeat[];
-  audioUrl?: string;       // /tts/<hash>.wav — set once tts is ready
-  durationS?: number;
-  words?: WordTiming[];
-  status: "drafting" | "rendering" | "ready" | "error";
-  errorMessage?: string;
-  ts: number;             // last ui mutation — used for status pill freshness
-  closedTs: number;       // turn end ts at scriptifier-feed time — used for active-script ordering
-};
-
-// per-turn infographic pill plan. mirrors ScriptPayload's lifecycle ts/closedTs
-// fields so the client can pick the active plan by closedTs (matches how the
-// active script is picked).
-type PillPlanPayload = {
-  turnId: string;
-  pills: Pill[];
-  ts: number;       // last ui mutation
-  closedTs: number; // turn end ts at infographer-feed time
-};
-
-// per-turn mp4 export status. lifecycle:
-//   rendering → ready (with hash, mp4 url, durationS, bytes)
-//             → error (with message)
-// state lives in a sessionKey-keyed Map so the snapshot can rehydrate on
-// reconnect without a server-side disk scan.
-type ExportPayload = {
-  turnId: string;
-  status: "rendering" | "ready" | "error";
-  hash?: string;
-  mp4Url?: string;
-  durationS?: number;
-  bytes?: number;
-  errorMessage?: string;
-  ts: number;             // last ui mutation
-  startedTs: number;      // when rendering kicked off (for elapsed-time UI)
-};
-
 type SessionState = {
   info: SessionInfo;
   events: MetaEvent[];
@@ -169,9 +78,6 @@ type SessionState = {
   observerDecisions: ObserverInsight[];
   observerByTurn: Map<string, number>;
   recentClosedTurns: Turn[];        // ring buffer (RECENT_CLOSED_TURNS) used to seed auto-fired chats
-  scripts: Map<string, ScriptPayload>;  // turnId → karaoke script + tts state
-  pillPlans: Map<string, PillPlanPayload>; // turnId → infographic pill plan
-  exports: Map<string, ExportPayload>;  // turnId → mp4 export status
 };
 
 const sessions = new Map<string, SessionState>();
@@ -180,76 +86,8 @@ const sockets = new Set<Bun.ServerWebSocket<unknown>>();
 // kept separate so observed-data state stays focused on tailer-sourced facts.
 const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
-// per-session beat bookmarks. key = sessionKey, value = turnId → set of beat
-// indices the user flagged as worth remembering. in-memory like chatThreads —
-// fine for v1; restart wipes them. broadcast as `bookmark:setting` events so
-// every connected tab stays in sync.
-const bookmarks = new Map<string, Map<string, Set<number>>>();
-function bookmarksFor(sessionKey: string, turnId: string): Set<number> {
-  let perTurn = bookmarks.get(sessionKey);
-  if (!perTurn) {
-    perTurn = new Map();
-    bookmarks.set(sessionKey, perTurn);
-  }
-  let set = perTurn.get(turnId);
-  if (!set) {
-    set = new Set();
-    perTurn.set(turnId, set);
-  }
-  return set;
-}
 // per-session cooldown for observer-driven auto-sends; see AUTO_SEND_COOLDOWN_MS.
 const lastAutoSendTs = new Map<string, number>();
-// turnId → TurnFeed cache. populated when we feed the scriptifier; consumed +
-// evicted in scriptifier's onScript callback when forwarding to the
-// infographer. fixes the medium-priority bug where the recentClosedTurns ring
-// (size 5) could roll over before scriptifier returned beats, silently
-// skipping pill plans for chatty sessions. ordered insertion via Map iteration
-// lets us drop-oldest when over capacity.
-const pendingTurnFeeds = new Map<string, TurnFeed>();
-function rememberTurnFeed(turnId: string, feed: TurnFeed) {
-  pendingTurnFeeds.set(turnId, feed);
-  if (pendingTurnFeeds.size > PENDING_TURN_FEED_CAP) {
-    const firstKey = pendingTurnFeeds.keys().next().value;
-    if (firstKey !== undefined) pendingTurnFeeds.delete(firstKey);
-  }
-}
-function consumeTurnFeed(turnId: string): TurnFeed | null {
-  const f = pendingTurnFeeds.get(turnId);
-  if (f) pendingTurnFeeds.delete(turnId);
-  return f ?? null;
-}
-// per-session TTS voice override. unset entries fall back to TTS_VOICE
-// (the global env-driven default). server-side allowlist defends against
-// injection of arbitrary voice ids — Kokoro will accept anything but only
-// these three are smoke-tested. updates land via POST /debug/voice and
-// affect FUTURE turns only; existing scripts keep their old wav.
-const ALLOWED_VOICES = ["af_heart", "am_michael", "bf_emma"] as const;
-type AllowedVoice = (typeof ALLOWED_VOICES)[number];
-const voicesBySession = new Map<string, string>();
-function voiceFor(sessionKey: string): string {
-  return voicesBySession.get(sessionKey) ?? TTS_VOICE;
-}
-
-// drop oldest scripts (by closedTs) when a session's ring exceeds the cap.
-function pruneScripts(s: SessionState) {
-  if (s.scripts.size <= MAX_SCRIPTS_PER_SESSION) return;
-  const entries = Array.from(s.scripts.entries()).sort(
-    (a, b) => (a[1].closedTs || 0) - (b[1].closedTs || 0)
-  );
-  const drop = entries.length - MAX_SCRIPTS_PER_SESSION;
-  for (let i = 0; i < drop; i++) s.scripts.delete(entries[i]![0]);
-}
-
-// same drop-oldest-by-closedTs treatment for pill plans.
-function prunePillPlans(s: SessionState) {
-  if (s.pillPlans.size <= MAX_PILL_PLANS_PER_SESSION) return;
-  const entries = Array.from(s.pillPlans.entries()).sort(
-    (a, b) => (a[1].closedTs || 0) - (b[1].closedTs || 0)
-  );
-  const drop = entries.length - MAX_PILL_PLANS_PER_SESSION;
-  for (let i = 0; i < drop; i++) s.pillPlans.delete(entries[i]![0]);
-}
 
 function pushChatChunk(c: ChatChunk) {
   let arr = chatThreads.get(c.sessionKey);
@@ -281,9 +119,6 @@ function getOrCreate(info: SessionInfo): SessionState {
       observerDecisions: [],
       observerByTurn: new Map(),
       recentClosedTurns: [],
-      scripts: new Map(),
-      pillPlans: new Map(),
-      exports: new Map(),
     };
     sessions.set(k, s);
   } else {
@@ -318,15 +153,6 @@ function snapshot(s: SessionState) {
   const chat = chatThreads.get(k);
   const status = chatStatuses.get(k);
   const displayName = chatDisplayNameFor(s.info);
-  // include per-turn bookmarks so a reconnect/refresh repaints the chip row +
-  // active-state on the beat icons without waiting for a fresh ws msg.
-  const bm = bookmarks.get(k);
-  const bookmarksOut: Record<string, number[]> = {};
-  if (bm) {
-    for (const [turnId, set] of bm.entries()) {
-      if (set.size > 0) bookmarksOut[turnId] = [...set].sort((a, b) => a - b);
-    }
-  }
   return {
     key: k,
     info: s.info,
@@ -337,11 +163,6 @@ function snapshot(s: SessionState) {
     contextTokens: s.contextTokens,
     totalOutputTokens: s.totalOutputTokens,
     observerDecisions: s.observerDecisions,
-    scripts: Object.fromEntries(s.scripts),
-    pillPlans: Object.fromEntries(s.pillPlans),
-    exports: Object.fromEntries(s.exports),
-    voice: voiceFor(k),
-    bookmarks: bookmarksOut,
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
@@ -429,94 +250,6 @@ function buildChatSeed(s: SessionState, decision?: ObserverInsight | null): stri
   return lines.join("\n");
 }
 
-// demo fixture used by /debug/inject-script — the same 9-beat / 2-marker
-// script we generated during the e2e test. self-bootstrapping: the first call
-// runs generateTts (15-25s), subsequent calls are instant cache hits. text +
-// beats are kept aligned by hand — keep them in lockstep if either changes.
-const DEMO_BEATS: ScriptBeat[] = [
-  { text: "three sources watched: claude projects, claude.app agent, codex sessions", emphasis: ["three"] },
-  { text: "per-file FileState tracks offset, partial line, and uuid dedupe", emphasis: ["FileState"] },
-  { text: "fs.watch fires in milliseconds; 500ms poll catches anything it missed", emphasis: ["500ms"] },
-  { text: "lines hit parseRecord or parseCodexRecord, emerge as unified MetaEvents", emphasis: ["MetaEvents"] },
-  { text: "event shapes: user_message, assistant_text, tool_use, tool_result, stop" },
-  { text: "turns.ts groups events at user_message boundaries and stop signals", emphasis: ["turns.ts"] },
-  { text: "on turn close, observer and scriptifier both receive the same events" },
-  { text: "both subprocesses fire concurrently — no shared queue between them", marker: "INSIGHT", emphasis: ["concurrently"] },
-  { text: "tailer skips files with mtime beyond 4 hours — they go dormant", marker: "BE_CAREFUL", emphasis: ["4 hours"] },
-];
-const DEMO_VOICE = "af_heart";
-
-// matching pill plan for the demo beats above. exercises every kind so the
-// tiktok pane shows all pill colors during /debug/inject-script.
-const DEMO_PILLS: Pill[] = [
-  { text: "3 sources", kind: "metric", startBeat: 0, endBeat: 1, side: "right" },
-  { text: "FileState", kind: "file", startBeat: 1, endBeat: 2, side: "left" },
-  { text: "fs.watch + 500ms poll", kind: "tool", startBeat: 2, endBeat: 3, side: "right" },
-  { text: "MetaEvent shape", kind: "decision", startBeat: 3, endBeat: 5, side: "left" },
-  { text: "concurrent subprocess", kind: "decision", startBeat: 6, endBeat: 7, side: "right" },
-  { text: "4hr mtime cap", kind: "warning", startBeat: 8, endBeat: 8, side: "left" },
-];
-
-async function injectDemoScript(s: SessionState): Promise<{ turnId: string; audioUrl: string } | null> {
-  const turnId = "demo-" + Date.now().toString(36);
-  const text = DEMO_BEATS.map((b) => b.text).join(" ");
-  const now = Date.now();
-  const payload: ScriptPayload = {
-    turnId,
-    beats: DEMO_BEATS,
-    status: "rendering",
-    ts: now,
-    closedTs: now,
-  };
-  s.scripts.set(turnId, payload);
-  pruneScripts(s);
-  const sessionKey = keyFor(s.info);
-  if (isVisible(s)) {
-    broadcast({ kind: "script:beats", sessionKey, script: payload });
-  }
-  // demo pill plan lands immediately alongside beats — the demo flow
-  // bypasses the infographer subprocess, so we fabricate a fixture here.
-  const pillPayload: PillPlanPayload = {
-    turnId,
-    pills: DEMO_PILLS,
-    ts: now,
-    closedTs: now,
-  };
-  s.pillPlans.set(turnId, pillPayload);
-  prunePillPlans(s);
-  if (isVisible(s)) {
-    broadcast({ kind: "pills:beats", sessionKey, plan: pillPayload });
-  }
-  try {
-    const tts = await generateTts({ text, voice: voiceFor(keyFor(s.info)) || DEMO_VOICE });
-    payload.audioUrl = `/tts/${tts.hash}.wav`;
-    payload.durationS = tts.durationS;
-    payload.words = tts.words;
-    payload.status = "ready";
-    payload.ts = Date.now();
-    if (isVisible(s)) {
-      broadcast({ kind: "script:ready", sessionKey, script: payload });
-    }
-    console.log(
-      `[debug] inject-script · ${s.info.slug} · ${DEMO_BEATS.length} beats · audio=${payload.audioUrl}`
-    );
-    return { turnId, audioUrl: payload.audioUrl! };
-  } catch (err) {
-    payload.status = "error";
-    payload.errorMessage = err instanceof Error ? err.message : String(err);
-    payload.ts = Date.now();
-    if (isVisible(s)) {
-      broadcast({
-        kind: "script:error",
-        sessionKey,
-        turnId,
-        message: payload.errorMessage,
-      });
-    }
-    return null;
-  }
-}
-
 // fired from onDecision when the observer flags open=true with a prefill.
 // guards against spamming chatty sessions: per-session cooldown + skip if the
 // chat thread already has activity within that window.
@@ -564,192 +297,6 @@ const server = Bun.serve({
       const file = Bun.file(`public${url.pathname}`);
       if (await file.exists()) return new Response(file);
       return new Response("not found", { status: 404 });
-    }
-
-    // /tts/<hash>.wav — serves cached tts audio from ~/.cut-the-cake/tts-cache/.
-    // hash is sha256 (exactly 64 hex), and the .wav extension is required —
-    // doubles as a path-traversal guard before we touch the filesystem.
-    if (url.pathname.startsWith("/tts/") && req.method === "GET") {
-      const tail = url.pathname.slice(5);
-      const m = tail.match(/^([a-f0-9]{64})\.wav$/);
-      if (!m) {
-        return new Response("not found", { status: 404 });
-      }
-      const file = Bun.file(ttsAudioPath(m[1]!));
-      if (await file.exists()) return new Response(file);
-      return new Response("not found", { status: 404 });
-    }
-
-    // /export/<hash>.mp4 — serves cached mp4 exports from
-    // ~/.cut-the-cake/exports/<hash>/output.mp4. hex-only filename is also our
-    // path-traversal guard. mirrors the /tts route shape.
-    if (url.pathname.startsWith("/export/") && req.method === "GET") {
-      const tail = url.pathname.slice(8);
-      const m = tail.match(/^([a-f0-9]{64})\.mp4$/);
-      if (!m) {
-        return new Response("not found", { status: 404 });
-      }
-      const file = Bun.file(exportMp4Path(m[1]!));
-      if (await file.exists()) return new Response(file);
-      return new Response("not found", { status: 404 });
-    }
-
-    // POST /debug/export-script — kick off an mp4 render of an existing
-    // ScriptPayload. body: { sessionKey, turnId }. requires the script to be
-    // status "ready" (audio + words present). returns 202 immediately and the
-    // render runs in the background, broadcasting export:rendering →
-    // export:ready / export:error over the websocket. NOT gated behind
-    // META_DEBUG (runtime feature, not a debug affordance) — same as
-    // /debug/regen-script.
-    if (url.pathname === "/debug/export-script" && req.method === "POST") {
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      const turnId = typeof o.turnId === "string" ? o.turnId : "";
-      if (!sessionKey || !turnId) {
-        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
-      }
-      const sess = sessions.get(sessionKey);
-      if (!sess) {
-        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
-      }
-      const payload = sess.scripts.get(turnId);
-      if (!payload) {
-        return Response.json({ error: "unknown turnId" }, { status: 404 });
-      }
-      if (payload.status !== "ready" || !payload.audioUrl || !payload.durationS || !payload.words) {
-        return Response.json({ error: "script not ready (audio + words required)" }, { status: 400 });
-      }
-      // pull the audio hash out of the audioUrl (/tts/<hash>.wav). this is the
-      // canonical key tts.ts already cached the wav under, so we don't need to
-      // re-hash the text here.
-      const audioMatch = String(payload.audioUrl).match(/\/tts\/([a-f0-9]{64})\.wav$/);
-      if (!audioMatch) {
-        return Response.json({ error: "audioUrl does not match expected /tts/<hash>.wav shape" }, { status: 500 });
-      }
-      const audioHash = audioMatch[1]!;
-      const audioPath = ttsAudioPath(audioHash);
-
-      const now = Date.now();
-      const exportPayload: ExportPayload = {
-        turnId,
-        status: "rendering",
-        ts: now,
-        startedTs: now,
-      };
-      sess.exports.set(turnId, exportPayload);
-      if (isVisible(sess)) {
-        broadcast({ kind: "export:rendering", sessionKey, turnId, startedTs: now });
-      }
-      const voice = voiceFor(sessionKey);
-
-      // background fire-and-forget. errors land on the payload + broadcast as
-      // export:error. never throws synchronously into the http handler.
-      void (async () => {
-        try {
-          const result = await exportToMp4({
-            turnId,
-            beats: payload.beats,
-            audioPath,
-            audioHash,
-            words: payload.words!,
-            durationS: payload.durationS!,
-            voice,
-            style: activeScriptStyle,
-          });
-          exportPayload.status = "ready";
-          exportPayload.hash = result.hash;
-          exportPayload.mp4Url = `/export/${result.hash}.mp4`;
-          exportPayload.durationS = result.durationS;
-          exportPayload.bytes = result.bytes;
-          exportPayload.ts = Date.now();
-          if (isVisible(sess)) {
-            broadcast({
-              kind: "export:ready",
-              sessionKey,
-              turnId,
-              hash: result.hash,
-              mp4Url: exportPayload.mp4Url,
-              durationS: result.durationS,
-              bytes: result.bytes,
-            });
-          }
-          console.log(
-            `[export] ${turnId.slice(0, 8)} · ${result.hash.slice(0, 8)} · ${(result.bytes / 1024).toFixed(0)} kB · ${result.durationS.toFixed(1)}s`
-          );
-        } catch (err) {
-          exportPayload.status = "error";
-          exportPayload.errorMessage = err instanceof Error ? err.message : String(err);
-          exportPayload.ts = Date.now();
-          console.error(
-            `[export] ${turnId.slice(0, 8)} failed: ${exportPayload.errorMessage}`
-          );
-          if (isVisible(sess)) {
-            broadcast({
-              kind: "export:error",
-              sessionKey,
-              turnId,
-              message: exportPayload.errorMessage,
-            });
-          }
-        }
-      })();
-
-      return Response.json({ ok: true, sessionKey, turnId }, { status: 202 });
-    }
-
-    // /debug/inject-script — inject a fully-formed demo ScriptPayload onto a
-    // visible session so the video-pane UI can be inspected without waiting
-    // for a real turn to close. dev affordance, gated behind META_DEBUG=1.
-    // body: {sessionKey: string} required. csrf-guarded via Origin check.
-    // uses the cached fixture from the e2e test (9 beats, 2 markers,
-    // 41.4s wav, 98 word timings) — beats + audio + timings all match.
-    if (url.pathname === "/debug/inject-script" && req.method === "POST") {
-      if (Bun.env.META_DEBUG !== "1") {
-        return Response.json({ error: "META_DEBUG=1 required" }, { status: 403 });
-      }
-      // csrf guard: a cross-site form post would carry an Origin header set by
-      // the browser. block anything that's not localhost. same-origin fetch and
-      // direct curl (no Origin) still work.
-      const origin = req.headers.get("origin");
-      if (origin) {
-        try {
-          const oh = new URL(origin).hostname;
-          if (oh !== "localhost" && oh !== "127.0.0.1" && oh !== "::1") {
-            return Response.json({ error: "forbidden origin" }, { status: 403 });
-          }
-        } catch {
-          return Response.json({ error: "forbidden origin" }, { status: 403 });
-        }
-      }
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      if (!sessionKey) {
-        return Response.json({ error: "sessionKey required" }, { status: 400 });
-      }
-      const sess = sessions.get(sessionKey);
-      if (!sess) {
-        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
-      }
-      const result = await injectDemoScript(sess);
-      if (!result) {
-        return Response.json({
-          error:
-            "demo fixture missing — run the e2e test once first or set META_DEBUG=1 then close any turn",
-        }, { status: 503 });
-      }
-      return Response.json({ ok: true, sessionKey, turnId: result.turnId, audioUrl: result.audioUrl });
     }
 
     if (url.pathname === "/state" && req.method === "GET") {
@@ -885,225 +432,6 @@ const server = Bun.serve({
       return Response.json({ ok: true, enabled: autoSendEnabled });
     }
 
-    // POST /debug/voice — set per-session TTS voice override.
-    // affects FUTURE turns only; the current ScriptPayload's wav was generated
-    // with the previous voice and is not re-rendered here. body:
-    // { sessionKey: string, voice: "af_heart" | "am_michael" | "bf_emma" }.
-    // not gated behind META_DEBUG (runtime feature, not a debug affordance).
-    if (url.pathname === "/debug/voice" && req.method === "POST") {
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      const voice = typeof o.voice === "string" ? o.voice : "";
-      if (!sessionKey) {
-        return Response.json({ error: "sessionKey required" }, { status: 400 });
-      }
-      if (!ALLOWED_VOICES.includes(voice as AllowedVoice)) {
-        return Response.json(
-          { error: `voice must be one of ${ALLOWED_VOICES.join(", ")}` },
-          { status: 400 }
-        );
-      }
-      // accept the sessionKey even if the session is not currently in-memory —
-      // a slow tailer might not have populated it yet, and the override should
-      // stick for when it does. cheap to keep around.
-      voicesBySession.set(sessionKey, voice);
-      console.log(`[tts] voice override · ${sessionKey} → ${voice}`);
-      broadcast({ kind: "voice:setting", sessionKey, voice });
-      return Response.json({ ok: true, sessionKey, voice });
-    }
-
-    // POST /debug/regen-script — re-run TTS for an existing ScriptPayload with
-    // the session's CURRENT voice. body: { sessionKey: string, turnId: string }.
-    // intended for the "↻" button next to the voice chip — swap audio without
-    // waiting for the next turn. status flips to "rendering" on entry, back to
-    // "ready" once the new wav lands. failures broadcast script:error and
-    // restore status to whatever it was before. NOTE: the client-side audio
-    // runtime currently keeps a pinned audio element; on regen the
-    // script:ready broadcast replaces audioUrl, but a playing audio element
-    // won't auto-swap. picker-driven UI button is deferred — see picker stretch
-    // notes in the task spec.
-    if (url.pathname === "/debug/regen-script" && req.method === "POST") {
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      const turnId = typeof o.turnId === "string" ? o.turnId : "";
-      if (!sessionKey || !turnId) {
-        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
-      }
-      const sess = sessions.get(sessionKey);
-      if (!sess) {
-        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
-      }
-      const payload = sess.scripts.get(turnId);
-      if (!payload) {
-        return Response.json({ error: "unknown turnId" }, { status: 404 });
-      }
-      if (!Array.isArray(payload.beats) || payload.beats.length === 0) {
-        return Response.json({ error: "script has no beats" }, { status: 400 });
-      }
-      const text = payload.beats.map((b) => b.text).join(" ");
-      const voice = voiceFor(sessionKey);
-      payload.status = "rendering";
-      payload.ts = Date.now();
-      if (isVisible(sess)) {
-        broadcast({ kind: "script:beats", sessionKey, script: payload });
-      }
-      try {
-        const tts = await generateTts({ text, voice });
-        payload.audioUrl = `/tts/${tts.hash}.wav`;
-        payload.durationS = tts.durationS;
-        payload.words = tts.words;
-        payload.status = "ready";
-        payload.ts = Date.now();
-        if (isVisible(sess)) {
-          broadcast({ kind: "script:ready", sessionKey, script: payload });
-        }
-        return Response.json({ ok: true, audioUrl: payload.audioUrl, voice });
-      } catch (err) {
-        payload.status = "error";
-        payload.errorMessage = err instanceof Error ? err.message : String(err);
-        payload.ts = Date.now();
-        if (isVisible(sess)) {
-          broadcast({
-            kind: "script:error",
-            sessionKey,
-            turnId,
-            message: payload.errorMessage,
-          });
-        }
-        return Response.json({ error: payload.errorMessage }, { status: 500 });
-      }
-    }
-
-    // POST /debug/script-style — set the global scriptifier prompt preset.
-    // affects FUTURE closed turns only; existing scripts are not re-rendered.
-    // body: { style: "default" | "cinematic" | "tldr" | "deep-dive" }
-    if (url.pathname === "/debug/script-style" && req.method === "POST") {
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const style = o.style;
-      if (typeof style !== "string" || !SCRIPT_STYLES.includes(style as ScriptStyle)) {
-        return Response.json(
-          { error: `style must be one of ${SCRIPT_STYLES.join(", ")}` },
-          { status: 400 }
-        );
-      }
-      activeScriptStyle = style as ScriptStyle;
-      console.log(`[scriptifier] runtime style → ${activeScriptStyle}`);
-      broadcast({ kind: "scriptstyle:setting", style: activeScriptStyle });
-      return Response.json({ ok: true, style: activeScriptStyle });
-    }
-
-    // POST /debug/marker-vocab — swap the marker vocabulary for FUTURE turns.
-    // body: { vocab: "design" | "story" }. broadcasts markervocab:setting so
-    // open clients re-paint pickers + label maps.
-    if (url.pathname === "/debug/marker-vocab" && req.method === "POST") {
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const vocab = o.vocab;
-      if (typeof vocab !== "string" || !MARKER_VOCABS.includes(vocab as MarkerVocab)) {
-        return Response.json(
-          { error: `vocab must be one of ${MARKER_VOCABS.join(", ")}` },
-          { status: 400 }
-        );
-      }
-      activeMarkerVocab = vocab as MarkerVocab;
-      console.log(`[scriptifier] runtime marker-vocab → ${activeMarkerVocab}`);
-      broadcast({ kind: "markervocab:setting", vocab: activeMarkerVocab });
-      return Response.json({ ok: true, vocab: activeMarkerVocab });
-    }
-
-    // POST /debug/bookmark — toggle/add/remove a bookmark on (sessionKey,
-    // turnId, beatIdx). NOT a debug-gated affordance — runtime feature for
-    // flagging beats during karaoke playback. body:
-    //   { sessionKey, turnId, beatIdx, action: "add"|"remove"|"toggle" }
-    // returns { ok, bookmarks: number[] } and broadcasts bookmark:setting so
-    // every connected tab stays in sync.
-    if (url.pathname === "/debug/bookmark" && req.method === "POST") {
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      const turnId = typeof o.turnId === "string" ? o.turnId : "";
-      const beatIdx = typeof o.beatIdx === "number" ? o.beatIdx : -1;
-      const action = typeof o.action === "string" ? o.action : "toggle";
-      if (!sessionKey || !turnId.length) {
-        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
-      }
-      if (!Number.isInteger(beatIdx) || beatIdx < 0) {
-        return Response.json({ error: "beatIdx must be a non-negative integer" }, { status: 400 });
-      }
-      if (action !== "add" && action !== "remove" && action !== "toggle") {
-        return Response.json({ error: "action must be add|remove|toggle" }, { status: 400 });
-      }
-      const sess = sessions.get(sessionKey);
-      if (!sess) {
-        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
-      }
-      const script = sess.scripts.get(turnId);
-      if (!script || !Array.isArray(script.beats)) {
-        return Response.json({ error: "unknown turnId" }, { status: 404 });
-      }
-      if (beatIdx >= script.beats.length) {
-        return Response.json({ error: "beatIdx out of range" }, { status: 400 });
-      }
-      const set = bookmarksFor(sessionKey, turnId);
-      if (action === "add") set.add(beatIdx);
-      else if (action === "remove") set.delete(beatIdx);
-      else if (set.has(beatIdx)) set.delete(beatIdx);
-      else set.add(beatIdx);
-      const list = [...set].sort((a, b) => a - b);
-      broadcast({ kind: "bookmark:setting", sessionKey, turnId, bookmarks: list });
-      return Response.json({ ok: true, bookmarks: list });
-    }
-
-    // POST /debug/bookmarks/clear — drop every bookmark for (sessionKey,
-    // turnId). same broadcast shape as /debug/bookmark, just with an empty
-    // array. used by the "clear" link at the right end of the chips row.
-    if (url.pathname === "/debug/bookmarks/clear" && req.method === "POST") {
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      const turnId = typeof o.turnId === "string" ? o.turnId : "";
-      if (!sessionKey || !turnId.length) {
-        return Response.json({ error: "sessionKey and turnId required" }, { status: 400 });
-      }
-      const perTurn = bookmarks.get(sessionKey);
-      if (perTurn) perTurn.delete(turnId);
-      broadcast({ kind: "bookmark:setting", sessionKey, turnId, bookmarks: [] });
-      return Response.json({ ok: true, bookmarks: [] });
-    }
-
     return new Response("not found", { status: 404 });
   },
   websocket: {
@@ -1114,8 +442,6 @@ const server = Bun.serve({
           kind: "hello",
           sessions: recentSessions(),
           autoSendEnabled,
-          scriptStyle: activeScriptStyle,
-          markerVocab: activeMarkerVocab,
         })
       );
     },
@@ -1188,136 +514,14 @@ if (observer) {
   );
 }
 
-// infographer: plans tiktok-style info-graphic pills for each closed turn.
-// fired downstream of the scriptifier so pills can anchor to real beat indices.
-// gated on SCRIPTIFIER_ENABLED — its only feed path is inside scriptifier's
-// onScript callback, so without scriptifier the subprocess just sits idle.
-const infographer = (INFOGRAPHER_ENABLED && SCRIPTIFIER_ENABLED)
-  ? startInfographer({
-      model: INFOGRAPHER_MODEL,
-      batchMs: INFOGRAPHER_BATCH_MS,
-      onPlan(p) {
-        const s = sessions.get(p.sessionKey);
-        if (!s) return;
-        const payload: PillPlanPayload = {
-          turnId: p.turnId,
-          pills: p.pills,
-          ts: Date.now(),
-          closedTs: p.closedTs,
-        };
-        s.pillPlans.set(p.turnId, payload);
-        prunePillPlans(s);
-        if (isVisible(s)) {
-          broadcast({
-            kind: "pills:beats",
-            sessionKey: p.sessionKey,
-            plan: payload,
-          });
-        }
-      },
-    })
-  : null;
-if (infographer) {
-  console.log(
-    `[infographer] enabled · model=${INFOGRAPHER_MODEL} · batch=${INFOGRAPHER_BATCH_MS}ms`
-  );
-}
-
-// scriptifier: parallel sonnet subprocess that converts each closed turn into
-// a karaoke-style script. tts is kicked off in the background as soon as the
-// beats land — clients see beats first (status: rendering), then audio +
-// timings once tts finishes (status: ready).
-const scriptifier = SCRIPTIFIER_ENABLED
-  ? startScriptifier({
-      model: SCRIPTIFIER_MODEL,
-      batchMs: SCRIPTIFIER_BATCH_MS,
-      async onScript(r) {
-        const s = sessions.get(r.sessionKey);
-        if (!s) return;
-        const payload: ScriptPayload = {
-          turnId: r.turnId,
-          beats: r.beats,
-          status: "rendering",
-          ts: Date.now(),
-          closedTs: r.closedTs,
-        };
-        s.scripts.set(r.turnId, payload);
-        pruneScripts(s);
-        if (isVisible(s)) {
-          broadcast({
-            kind: "script:beats",
-            sessionKey: r.sessionKey,
-            script: payload,
-          });
-        }
-        // hand the same beats off to the infographer so it can plan pills
-        // anchored to those beat indices. preferred path: the cached TurnFeed
-        // from when we fed the scriptifier (covers chatty sessions where the
-        // 5-turn ring may have rolled over). fallback: rebuild from the ring
-        // for late-arriving scripts (rare; e.g. infographer started after a
-        // hot-reload while a prior batch was inflight).
-        if (infographer) {
-          const cached = consumeTurnFeed(r.turnId);
-          if (cached) {
-            infographer.feed(cached, r.beats);
-          } else {
-            const turn = s.recentClosedTurns.find((t) => t.id === r.turnId);
-            if (turn) infographer.feed(buildTurnFeed(r.sessionKey, s.info, turn), r.beats);
-          }
-        }
-        // background tts: full script → wav + per-word timings. errors don't
-        // crash the loop — we surface them on the payload and broadcast.
-        const fullText = r.beats.map((b) => b.text).join(" ");
-        try {
-          const tts = await generateTts({ text: fullText, voice: voiceFor(r.sessionKey) });
-          payload.audioUrl = `/tts/${tts.hash}.wav`;
-          payload.durationS = tts.durationS;
-          payload.words = tts.words;
-          payload.status = "ready";
-          payload.ts = Date.now();
-          if (isVisible(s)) {
-            broadcast({
-              kind: "script:ready",
-              sessionKey: r.sessionKey,
-              script: payload,
-            });
-          }
-        } catch (err) {
-          payload.status = "error";
-          payload.errorMessage = err instanceof Error ? err.message : String(err);
-          payload.ts = Date.now();
-          console.error(`[scriptifier] tts failed for ${r.turnId.slice(0, 8)}: ${payload.errorMessage}`);
-          if (isVisible(s)) {
-            broadcast({
-              kind: "script:error",
-              sessionKey: r.sessionKey,
-              turnId: r.turnId,
-              message: payload.errorMessage,
-            });
-          }
-        }
-      },
-    })
-  : null;
-if (scriptifier) {
-  console.log(
-    `[scriptifier] enabled · model=${SCRIPTIFIER_MODEL} · batch=${SCRIPTIFIER_BATCH_MS}ms · voice=${TTS_VOICE} · style=${activeScriptStyle}`
-  );
-}
-
 // graceful shutdown — give abort signals a moment to terminate sdk subprocesses
 // before the server process exits, otherwise claude subprocesses can be orphaned.
 {
   const onSignal = async (sig: string) => {
-    console.log(`[server] received ${sig} — stopping observer + scriptifier + infographer + chat host + registry`);
+    console.log(`[server] received ${sig} — stopping observer + chat host + registry`);
     observer?.stop();
-    scriptifier?.stop();
     chatHost.stop();
     registry.stop();
-    // infographer.stop() is async (resolves when its lifecycle loop exits or
-    // hits a 400ms ceiling). awaiting before the 500ms grace gives the sdk
-    // subprocess a real chance to terminate cleanly.
-    await infographer?.stop();
     setTimeout(() => process.exit(0), 500);
   };
   process.on("SIGINT", () => onSignal("SIGINT"));
@@ -1353,9 +557,7 @@ startTailer({
     // infinite mirror).
     const isObserverSelf =
       info.slug.includes("chunk-to-chat-observer") ||
-      info.slug.includes("cut-the-cake-chat") ||
-      info.slug.includes("cut-the-cake-scriptifier") ||
-      info.slug.includes("cut-the-cake-infographer");
+      info.slug.includes("cut-the-cake-chat");
     const s = getOrCreate(info);
     const wasVisible = isVisible(s);
     s.events.push(ev);
@@ -1391,13 +593,6 @@ startTailer({
       const fresh = Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS;
       if (observer && !isObserverSelf && isVisible(s) && fresh) {
         observer.feed(buildTurnFeed(keyFor(s.info), s.info, result.closed));
-      }
-      if (scriptifier && !isObserverSelf && isVisible(s) && fresh) {
-        const feed = buildTurnFeed(keyFor(s.info), s.info, result.closed);
-        // remember the feed so onScript's infographer hand-off doesn't depend
-        // on the recentClosedTurns ring (size 5) still containing the turn.
-        if (infographer) rememberTurnFeed(result.closed.id, feed);
-        scriptifier.feed(feed, activeScriptStyle, activeMarkerVocab);
       }
     }
   },

@@ -27,8 +27,8 @@ export type TurnFeed = {
   linesRemoved: number;
   userPrompt: string;
   assistantExcerpt: string;
-  // full event list — observer ignores it; scriptifier needs the whole
-  // transcript to script properly. populated by buildTurnFeed.
+  // full event list — the observer ignores it; kept on the feed for
+  // downstream consumers that need the whole transcript. populated by buildTurnFeed.
   events?: MetaEvent[];
 };
 
