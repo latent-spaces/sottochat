@@ -8,7 +8,7 @@ import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 // the chat companion the user talks to. one persistent sdk subprocess per upstream
 // session — lazily spawned on the user's first send, reused for follow-ups.
 // streams assistant text out via callback. tools disabled: it talks, doesn't
-// touch files. cwd is sandboxed under ~/.cut-the-cake/chat/<hash>/ per session
+// touch files. cwd is sandboxed under ~/.sottochat/chat/<hash>/ per session
 // so any side-effects (which there shouldn't be any of) stay scoped.
 
 export type ChatChunk = {
@@ -55,12 +55,21 @@ const DISALLOWED_TOOLS = [
   "TodoWrite",
 ];
 
-const CHAT_ROOT = join(homedir(), ".cut-the-cake", "chat");
+const CHAT_ROOT = join(homedir(), ".sottochat", "chat");
 
 function systemIntro(answerLanguage: string): string {
-  return `You help a developer follow a coding agent working in their terminal. The agent's terminal output is usually in English, but you MUST write everything you say to the developer — every explanation and answer — in ${answerLanguage}. Always reply in ${answerLanguage}, no matter what language the output you are describing is in. Keep it plain and brief.
+  return `Discuss the watched coding-agent session with the developer.
 
-The one exception: when they ask you to write, draft, or suggest a reply to send back to the agent, put that reply — in the agent's own language, usually English — inside one fenced code block tagged \`to-agent\`. Everything outside that block still stays in ${answerLanguage}. Only include the block when they want something to send.`;
+Language:
+- Answers to the developer: ${answerLanguage}
+- Suggested replies to the coding agent: the agent's own language, usually English
+
+Rules:
+- Keep answers plain and brief.
+- Use the supplied session context, especially the latest exchange.
+- When asked what to send, write, or reply, prepare a targeted message for the original session. Include exactly one fenced block tagged \`to-agent\`.
+- Otherwise do not include a \`to-agent\` block.
+- Text outside a \`to-agent\` block stays in ${answerLanguage}.`;
 }
 
 function findClaudeExecutable(): string {

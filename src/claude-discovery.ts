@@ -41,9 +41,15 @@ const STARTED_AT_GRACE_MS = 5_000;
 
 // abtop's `--print` filter at claude.rs:322 hides one-shot summary spawns.
 // our SDK loops set `entrypoint:"sdk-cli"` in sessions/{PID}.json and live
-// under ~/.cut-the-cake/, so we filter on those fields directly — cleaner
-// than the slug-matching self-feed filter the legacy server.ts uses.
-const SDK_CWD_PREFIX = join(HOME, ".cut-the-cake");
+// under ~/.sottochat/, so we filter on those fields directly — cleaner than the
+// slug-matching self-feed filter the legacy server.ts uses. we keep matching the
+// two legacy roots (~/.cut-the-cake chat, ~/.chunk-to-chat observer) so older
+// sessions still on disk stay classified internal instead of leaking to the inbox.
+const SDK_CWD_PREFIXES = [
+  join(HOME, ".sottochat"),
+  join(HOME, ".cut-the-cake"),
+  join(HOME, ".chunk-to-chat"),
+];
 
 export type ConfigDir = {
   baseDir: string;     // ~/.claude
@@ -85,7 +91,7 @@ export type ClaudeSession = {
   transcriptPath?: string;
   projectDir?: string;
   configBaseDir: string;
-  isInternal: boolean;   // entrypoint=sdk-cli && cwd under ~/.cut-the-cake/
+  isInternal: boolean;   // entrypoint=sdk-cli && cwd under ~/.sottochat/ (or a legacy root)
 };
 
 export function defaultConfigDir(): ConfigDir {
@@ -377,7 +383,8 @@ export function loadSession(
   })();
 
   const isInternal =
-    sf.entrypoint === "sdk-cli" && sf.cwd.startsWith(SDK_CWD_PREFIX);
+    sf.entrypoint === "sdk-cli" &&
+    SDK_CWD_PREFIXES.some((p) => sf.cwd.startsWith(p));
 
   return {
     pid: sf.pid,

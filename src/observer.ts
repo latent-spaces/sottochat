@@ -63,25 +63,26 @@ const DISALLOWED_TOOLS = [
   "TodoWrite",
 ];
 
-// observer cwd kept under the legacy ~/.chunk-to-chat/ dir for now (cosmetic
-// rename in resume queue).
-const DECISIONS_DIR = join(homedir(), ".chunk-to-chat", "observer");
+// observer cwd under ~/.sottochat/observer/. (older sessions still on disk under
+// the legacy ~/.chunk-to-chat/observer/ dir stay classified internal via the
+// slug matchers in server.ts / claude-discovery.ts / index.html.)
+const DECISIONS_DIR = join(homedir(), ".sottochat", "observer");
 
-const SUMMARY_INTRO = `You are the observer for cut-the-cake, a tool that watches Claude Code / Codex sessions and shows a glanceable one-line label of each on a dashboard.
+const SUMMARY_INTRO = `Watch closed Claude Code and Codex turns. Return a stable, glanceable label for each session.
 
-Your only job: when shown a batch of sessions (each with its recent activity), write ONE short sentence per session that says what the session is ABOUT — its subject or goal — NOT a play-by-play of the latest step. Think "what is this session for?", the label a developer would put on the tab.
+Task:
+For each item in the batch, write one short sentence in the requested language naming the session's subject or goal.
 
-Guidance:
-- Describe the topic or purpose: the feature, area, or problem the session is working on (e.g. "reworking the tab-navigation UI in the medly app", "debugging the auth token-refresh flow"). NOT the moment-to-moment action ("running a test", "editing a file", "fixing a button").
-- It should stay recognizable as the session evolves — name the subject, not the current action.
-- Keep it to roughly a dozen words — a single short phrase, no trailing period needed.
-- Write it in the user's chosen language — each batch's trailing instruction states which language.
-- You see prior batches in your context; use that memory to keep the label consistent and accurate as the session grows.
+Rules:
+- Name the feature, area, bug, or decision under work.
+- Do not describe the latest action.
+- Keep roughly 6-12 words, with no trailing period.
+- Use prior batches as memory so labels stay consistent as a session evolves.
 
-Reply with ONLY a JSON object. No prose, no markdown fences. Schema:
+Output only JSON. No prose, no markdown fences. Schema:
 {"summaries": [{"turnId": "<from input>", "summary": "..."}, ...]}
 
-The summaries array is in the same order as the input batch (one entry per session).`;
+Order must match the input batch.`;
 
 function findClaudeExecutable(): string {
   try {
@@ -382,7 +383,7 @@ export function startObserver(opts: ObserverOptions): {
     systemIntro: SUMMARY_INTRO,
     formatTrailing: () =>
       `Reply with a JSON object: {"summaries": [...one per session in input order...]}. Write every summary in ${getLanguage()}. No other text.`,
-    sdkSessionId: "chunk-to-chat-observer",
+    sdkSessionId: "sottochat-observer",
     onResponse(text, batch) {
       const parsed = parseSummaryResponse(text);
       if (!parsed) {

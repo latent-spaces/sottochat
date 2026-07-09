@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>cut-the-cake</title>
+  <title>sottochat</title>
   <link rel="icon" type="image/webp" href="/assets/logo-cake-slice.webp" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
@@ -1443,8 +1443,8 @@
   <header class="top-nav">
     <div class="nav-left">
       <img class="nav-logo" src="/assets/logo-cake-slice.webp" alt="" />
-      <a class="nav-wordmark" href="#">cut-the-cake</a>
-      <span class="nav-tag">turn long agent runs into a quick iterative chat</span>
+      <a class="nav-wordmark" href="#">sottochat</a>
+      <span class="nav-tag">discuss the response, answer well</span>
     </div>
     <div class="nav-right">
       <span class="reconnect-indicator" id="reconnect-indicator" hidden>reconnecting…</span>
@@ -1543,14 +1543,14 @@
     // stays english; only the ask box, quick-replies, and the copy card follow
     // the chosen language. the assistant answers in the language regardless.
     const UI_STRINGS = {
-      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", presets: ["תסכם", "הסבר במילים פשוטות", "מה קרה כאן?", "מה לענות?"] },
-      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", presets: ["summarize", "explain simply", "what happened here?", "what should I answer?"] },
-      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", presets: ["لخّص", "اشرح ببساطة", "ماذا حدث هنا؟", "بماذا أرد؟"] },
-      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", presets: ["resume", "explícalo simple", "¿qué pasó aquí?", "¿qué respondo?"] },
-      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", presets: ["résume", "explique simplement", "que s'est-il passé ?", "que répondre ?"] },
-      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", presets: ["кратко", "объясни просто", "что здесь произошло?", "что ответить?"] },
-      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", presets: ["zusammenfassen", "einfach erklären", "was ist passiert?", "was soll ich antworten?"] },
-      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", presets: ["总结", "简单解释", "这里发生了什么？", "该怎么回复？"] },
+      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", presets: ["תסכם", "הסבר במילים פשוטות", "מה כתוב פה", "מה קרה כאן?", "מה לענות?"] },
+      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", presets: ["summarize", "explain simply", "what does this say?", "what happened here?", "what should I answer?"] },
+      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", presets: ["لخّص", "اشرح ببساطة", "ماذا يقول هنا؟", "ماذا حدث هنا؟", "بماذا أرد؟"] },
+      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", presets: ["resume", "explícalo simple", "¿qué dice aquí?", "¿qué pasó aquí?", "¿qué respondo?"] },
+      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", presets: ["résume", "explique simplement", "qu'est-ce qui est écrit ici ?", "que s'est-il passé ?", "que répondre ?"] },
+      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", presets: ["кратко", "объясни просто", "что здесь написано?", "что здесь произошло?", "что ответить?"] },
+      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", presets: ["zusammenfassen", "einfach erklären", "was steht hier?", "was ist passiert?", "was soll ich antworten?"] },
+      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", presets: ["总结", "简单解释", "这里写了什么？", "这里发生了什么？", "该怎么回复？"] },
     };
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.he; }
 
@@ -2309,21 +2309,21 @@
     const LINEAGE_FRESH_MS = 60 * 1000;
 
     // sessions whose cwd lives under our own sandbox dirs — these are the
-    // sdk subprocesses the server itself spawns (chat-agent under
-    // ~/.cut-the-cake/chat/<hash>/, observer under ~/.chunk-to-chat/observer/
-    // on the legacy path). they're real cc sessions from the tailer's POV,
+    // sdk subprocesses the server itself spawns (chat-agent + observer, now
+    // under ~/.sottochat/; older sessions remain on disk under the legacy
+    // ~/.cut-the-cake / ~/.chunk-to-chat roots). they're real cc sessions from the tailer's POV,
     // but they aren't user-driven work — render them grouped under a divider
     // at the bottom of the inbox so the user-driven cards are never
     // interleaved with our own machinery.
     //
     // match the sandbox roots directly rather than enumerating each subprocess
     // role, so any current or future subprocess is caught. the leading '--'
-    // is the tell of a hidden dir in cc's slug encoding: ~/.cut-the-cake/…
-    // encodes to '…--cut-the-cake-…', whereas a real repo cloned as
-    // 'cut-the-cake' is single-dash ('…-cut-the-cake') and stays user-driven.
+    // is the tell of a hidden dir in cc's slug encoding: ~/.sottochat/…
+    // encodes to '…--sottochat-…', whereas a real repo cloned as
+    // 'sottochat' is single-dash ('…-sottochat') and stays user-driven.
     function isInternalSession(sess) {
       const slug = sess?.info?.slug || '';
-      return slug.includes('--cut-the-cake') || slug.includes('--chunk-to-chat');
+      return slug.includes('--sottochat') || slug.includes('--cut-the-cake') || slug.includes('--chunk-to-chat');
     }
 
     // collapsed state for the "internal · sdk subprocesses" section — persisted
@@ -3601,7 +3601,9 @@
           chatDrafts.set(sessionKey, e.target.value);
         });
         ta.addEventListener('keydown', e => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          // Enter sends; Shift+Enter inserts a newline. Skip while an IME is
+          // composing (CJK) so Enter confirms the character instead of sending.
+          if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault();
             btn?.click();
           }

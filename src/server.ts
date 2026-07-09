@@ -146,7 +146,7 @@ function getOrCreate(info: SessionInfo): SessionState {
   return s;
 }
 
-// chat-agent sessions live under ~/.cut-the-cake/chat/<sha1(upstream-key, 12)>/
+// chat-agent sessions live under ~/.sottochat/chat/<sha1(upstream-key, 12)>/
 // so their slug ends with that hash. resolve back to the upstream session by
 // scanning the live session map for a key whose hash matches — gives us the
 // upstream project name to use as a prefix on the chat session's display name.
@@ -154,7 +154,7 @@ function chatHashFor(sessionKey: string): string {
   return createHash("sha1").update(sessionKey).digest("hex").slice(0, 12);
 }
 function chatDisplayNameFor(info: SessionInfo): string | null {
-  const m = info.slug.match(/cut-the-cake-chat-([a-f0-9]+)$/);
+  const m = info.slug.match(/(?:sottochat|cut-the-cake)-chat-([a-f0-9]+)$/);
   if (!m) return null;
   const hash = m[1];
   for (const k of sessions.keys()) {
@@ -542,7 +542,7 @@ const server = Bun.serve({
   },
 });
 
-console.log(`chunk-to-chat · listening on http://localhost:${server.port}`);
+console.log(`sottochat · listening on http://localhost:${server.port}`);
 
 // the chat host — a per-session claude subprocess the user talks to (see chat-agent.ts).
 const chatHost = startChatHost({
@@ -623,12 +623,15 @@ startTailer({
     console.log(`[tailer] new session ${info.source}/${info.sessionId.slice(0, 8)} (${info.slug})`);
   },
   onEvent(info, ev) {
-    // our own sdk subprocesses (observer decisions: ~/.chunk-to-chat/observer/,
-    // chat hosts: ~/.cut-the-cake/chat/<hash>/) are themselves cc subprocesses
-    // whose jsonls get tailed. surface them as session cards so the user can
-    // see they're alive, but never feed their own turns back (would be an
-    // infinite mirror).
+    // our own sdk subprocesses (observer + chat hosts, now under ~/.sottochat/)
+    // are themselves cc subprocesses whose jsonls get tailed. surface them as
+    // session cards so the user can see they're alive, but never feed their own
+    // turns back (would be an infinite mirror). the two legacy roots
+    // (~/.cut-the-cake chat, ~/.chunk-to-chat observer) still have sessions on
+    // disk, so we keep matching their slugs too.
     const isObserverSelf =
+      info.slug.includes("sottochat-chat") ||
+      info.slug.includes("sottochat-observer") ||
       info.slug.includes("chunk-to-chat-observer") ||
       info.slug.includes("cut-the-cake-chat");
     const s = getOrCreate(info);

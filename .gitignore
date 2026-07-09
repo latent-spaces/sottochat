@@ -33,3 +33,9 @@ vendor/
 
 # exploratory / diagnostic artifacts (screenshots, scratch scripts)
 diagnostics/
+
+# ai tool skill installs (e.g. hyperframes skills command)
+.agents/
+
+# brag video output (large binary artifacts)
+brag-output/

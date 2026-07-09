@@ -4,50 +4,106 @@
 
 product
 
+## Name
+
+**sottochat**
+
+From *sotto voce* ("under the voice") + chat: the quiet back-channel where you talk about an agent run before speaking back on the main line. The agent monologues at full voice in the terminal; sottochat is your undertone conversation on the side — you follow along in your own language, then prepare a targeted reply to paste back. The name keeps the register the project has been converging on (short, quiet, sits beside terminals all day) while naming the product story directly: the second-order conversation.
+
+Legacy names still exist in storage paths, commit history, and older notes: `claude-meta`, `chunk-to-chat`, `cut-the-cake`, and `mise`. New user-facing copy and new docs should use `sottochat`.
+
 ## Users
 
-Solo developer (the author) plus a small ring of claude-code power users who will find the repo on GitHub and run it locally. Assumed-literate: comfortable with `jsonl`, terminal output, "turn", "context tokens", "tool calls". No hand-holding budget; jargon is fine; tooltips and onboarding flows are not the answer.
+Primary user: the author, a solo developer running several autonomous coding agents at once.
 
-Primary moment of use: the user is at a two-monitor desk with claude code running in one terminal and cut-the-cake open in the other, glancing over every few minutes to decide whether a turn is worth interrupting. Secondary mode: left open all day on a side monitor as ambient awareness, expected to stay quiet until something genuinely matters.
+Secondary users: a small circle of Claude Code and Codex power users who are comfortable with terminals, JSONL transcripts, model names, context tokens, tool calls, and local-only dev tools.
+
+Primary moment: a two-monitor desk. The terminal runs on one side; sottochat sits open on the other. The user opens a session when they need to understand the agent's latest output, think through it in their own language, and prepare a reply for the original terminal session.
 
 ## Product Purpose
 
-Turn long autonomous agent runs into a quick, glanceable read — in your own language. Tail every claude code (and adjacent agent) session in real time and run a persistent observer over the closed-turn stream, which labels each session with a one-sentence "what this is about", refreshed as the work evolves. When a run is worth a closer look, ask about it in plain language: the app explains the latest output in your language and, when you're deciding what to tell the agent, drafts a reply to paste back into your terminal (the app only reads the transcript — copy-paste is the bridge to the real session).
+sottochat is a meta-discussion layer for long autonomous agent runs.
 
-The explanation language is configurable — Hebrew by default, plus English, Arabic, Spanish, French, Russian, German, Chinese — and drives everything the app says *to* you; the drafted reply stays in the agent's own language.
+It tails Claude Code, Claude app local-agent-mode, and Codex rollout transcripts in real time. It groups transcript events into turns, keeps a stable inbox of sessions, and gives the user a multilingual Q&A thread about the original run.
 
-Success looks like: the user can leave several agents running unattended, glance at cut-the-cake, and within two seconds know what each one is about and whether to jump in — then get a precise course-correction drafted without breaking the glance.
+The core promise: the user can discuss the watched session in their own language, then get a targeted, fully context-aware answer to paste back into the original agent session.
 
-## Brand Personality
+A short session label still helps the user choose the right run, but it is not the product story. The story is the second-order conversation: "what happened, what matters, and what should I answer?"
 
-Three words: **wry, dessert-coded, sparing.**
+When a run needs attention, the user opens the session and sees:
 
-Voice: lowercase prose, dry-with-a-wink, confident without being cute. Code identifiers are camelCase; copy and chrome are lowercase. Personality lives in word choice and a small handful of named visual delights, five places exactly, no more.
+- the latest agent exchange, pinned to the useful tail of the answer
+- compact turn and diff charts, collapsed by default
+- a multilingual Q&A box seeded with recent turns
+- preset chips for common asks
+- a per-session context-depth stepper
+- a copyable `to-agent` reply card only when the assistant drafts something worth pasting back into the real terminal
 
-Emotional goal: a sharp tool with a sweet tooth. The chrome wears strawberry; the data stays exact; the terminal block stays unchanged. Closer to a patisserie that sells precision instruments than to "your AI assistant" or to "calm minimalism".
+The product reads transcripts only. It does not pause the agent, write into the terminal, approve changes, or pretend to control the upstream session. Copy-paste is the bridge back to the real agent.
 
-## Anti-references
+## Current Capabilities
 
-- **Datadog / Grafana density.** Charts and gauges because charts and gauges; rows of identical panels.
-- **Hero-metric SaaS template.** Big number, small label, supporting stats, gradient accent.
-- **AI-app aesthetic.** Gradient blobs, ambient glow, pastel "calm" tones, "your AI assistant" tone. Strawberry pink and the dessert mascots are allowed only in the five named places enumerated in DESIGN.md; anywhere else they are this anti-reference.
-- **Generic kawaii UI.** Rounded geometric script faces, lavender + mint pastels, balloon emojis, sticker-pack illustrations applied without restraint. The whimsy here is contained, not slathered.
-- **Severity badges, side-stripe alert cards, sidebars-of-sidebars.** Already ripped out for a reason; do not return.
-- **Notification-bait.** Pulses, red dots, growing counters, attention-stealing animation when nothing genuinely changed.
-- **Dashboard-template-readme aesthetic.** Identical card grids, icon + heading + body, repeated.
+- Multi-source transcript tailing for Claude Code CLI, Claude app local-agent-mode, and Codex CLI rollouts.
+- Unified event parsing into `MetaEvent`, then turn assembly.
+- Stable multi-session inbox with user sessions above internal SDK subprocesses.
+- Per-session summaries generated by one persistent Sonnet observer.
+- One persistent chat subprocess per upstream session, tools disabled.
+- Explanation language selector: Hebrew default, plus English, Arabic, Spanish, French, Russian, German, and Chinese.
+- Suggested replies stay in the agent's own language inside a fenced `to-agent` block.
+- Per-session recent-turn context depth from 1 to 10.
+- Manual reset of a session's Q&A state.
+- Process-driven discovery registry in shadow mode via `/diag/discovery`.
 
-## Design Principles
+## Non-Goals
 
-1. **Strip until it hurts, then strip more.** The product question on every screen is: what is the minimal information that makes the next decision obvious? Density is the enemy, not the goal. When in doubt, remove.
+- Not a notification product. No attention bait, unread dots, tab flashes, or fake urgency.
+- Not an agent control plane. No stop, approve, edit, or execute controls for upstream agents.
+- Not a team dashboard. Localhost, single-user, no auth.
+- Not a memory product. Session state is mostly in memory and can be lost on restart.
+- Not a video or narration product in this branch. Older notes mention scriptifier, TTS, and MP4 export, but this checkout does not contain those server modules.
 
-2. **Defer to the model.** The observer labels each session; the chat assistant explains it and drafts the reply. The chrome is scaffolding for that content — the summary, the explanation, the drafted reply — and must never out-shout it.
+## Product Principles
 
-3. **Ambient by default, present when it matters.** Glanceable from across the desk; quiet when nothing is happening; unmistakable when something is. The contrast between idle and active states should be the loudest thing in the UI.
+1. **The discussion is the product.** Session labels and charts are scaffolding. The valuable object is the user's meta conversation about the original run.
 
-4. **Terminal-literate, not terminal-cosplay.** Mono type, lowercase, dry voice are real because the user lives in a terminal. Do not bolt on CRT scanlines, fake typing animations, ASCII art frames, or other retro affectations.
+2. **Prepare the answer for the real session.** A good reply is specific to the latest exchange, the recent turns, the working directory, and the user's intent. Generic advice fails.
 
-5. **Fun lives in the voice and in five named places.** Copy carries personality. The chrome carries strawberry, but only at the logo, the live-session avatar, the welcome banner, the empty state, and the send button. Six is too many; one of the five gets cut. The terminal block never changes.
+3. **Ask in the user's language.** The thinking space belongs to the user. Hebrew, Arabic, English, or any supported explanation language should feel first-class.
 
-## Accessibility & Inclusion
+4. **Separate explanation from action.** Explanations are for the user and follow the selected language. Suggested replies are for the agent and stay in the agent's language.
 
-Not a hard floor. The audience is power users on their own machines; forkers can adapt for their needs. Still, do not ship genuinely broken contrast, never rely on color alone to encode state, and respect `prefers-reduced-motion` for any motion that gets added.
+5. **Keep the model prompt sober.** Sonnet prompts should be direct task instructions. Avoid persona scaffolding, especially "you are..." openings.
+
+6. **Show machinery without letting it dominate.** Internal observer and chat subprocesses can be visible for trust and debugging, but they belong below the user's real sessions.
+
+7. **Power-user copy can be terse.** Jargon such as `ctx`, `turn`, and `jsonl` is allowed when it saves space, but destructive or state-changing actions must name what they affect.
+
+## Voice
+
+Lowercase, spare, dry. No assistant persona. No motivational tone. No marketing.
+
+Good:
+
+- `discuss the response, answer well`
+- `pick a session`
+- `clear chat`
+- `reply copied`
+- `context turns`
+
+Avoid:
+
+- "your AI assistant"
+- "let me help you"
+- "break it down companion"
+- "you are watching..."
+- cute dessert copy in ordinary controls
+
+## Copy Rules
+
+- Chrome can stay English and lowercase.
+- The assistant's answers and session labels follow the selected explanation language.
+- Suggested replies target the original agent session and stay in the agent's language.
+- Error and status copy should say what failed and what remains usable.
+- Buttons should name the action: `send`, `clear chat`, `show full`, `copy`.
+- Reset-style language is reserved for true system reset. For chat history, say `clear chat`.
+- No em dashes in UI copy.
