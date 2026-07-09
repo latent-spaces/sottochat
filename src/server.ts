@@ -10,7 +10,6 @@ import { generateTts, ttsAudioPath, type WordTiming } from "./tts";
 import { exportToMp4, exportMp4Path } from "./hyperframes-export";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
-import { startComposer, composerRootDirFor, composerSafeKey, type ComposerEvent } from "./composer";
 
 const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
 const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
@@ -38,20 +37,6 @@ const SCRIPTIFIER_BATCH_MS = Number(Bun.env.META_SCRIPTIFIER_BATCH_MS ?? 2_000);
 const INFOGRAPHER_ENABLED = Bun.env.META_INFOGRAPHER_ENABLED !== "0";
 const INFOGRAPHER_MODEL = Bun.env.META_INFOGRAPHER_MODEL ?? "claude-sonnet-4-6";
 const INFOGRAPHER_BATCH_MS = Number(Bun.env.META_INFOGRAPHER_BATCH_MS ?? 2_000);
-// composer: parallel sonnet sdk subprocess (one per session) that turns each
-// closed turn into a self-contained HyperFrames composition (HTML only — no
-// audio, no render). agent reads the hyperframes skill, writes index.html,
-// runs `npx hyperframes lint --strict`, iterates until clean, emits READY.
-// served at /composer/<safeKey>/<turnId>/index.html and iframed in the new
-// "Composer Preview" pane. tools-on for this subprocess (Bash + Read + Write
-// + Edit + Grep + Glob), bounded by per-session sandboxed cwd.
-const COMPOSER_ENABLED = Bun.env.META_COMPOSER_ENABLED !== "0";
-const COMPOSER_MODEL = Bun.env.META_COMPOSER_MODEL ?? "claude-sonnet-4-6";
-// composer is the slowest of the SDK subprocesses (lint → fix loops). we only
-// kick it off once at least one prior closed turn exists in the session, so
-// there's real context for the agent to draw on.
-const COMPOSER_MIN_PRIOR_TURNS = Number(Bun.env.META_COMPOSER_MIN_PRIOR_TURNS ?? 0);
-const COMPOSER_PER_TURN_TIMEOUT_MS = Number(Bun.env.META_COMPOSER_PER_TURN_TIMEOUT_MS ?? 6 * 60 * 1000);
 const TTS_VOICE = Bun.env.META_TTS_VOICE ?? "af_heart";
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
@@ -187,43 +172,7 @@ type SessionState = {
   scripts: Map<string, ScriptPayload>;  // turnId → karaoke script + tts state
   pillPlans: Map<string, PillPlanPayload>; // turnId → infographic pill plan
   exports: Map<string, ExportPayload>;  // turnId → mp4 export status
-  composers: Map<string, ComposerPayload>; // turnId → hyperframes composition status
 };
-
-// per-turn hyperframes composition status. lifecycle:
-//   running → linting → ready (with iframe url)
-//                    → error (with message)
-// the iframe url is /composer/<safeKey>/<turnId>/index.html, served from
-// ~/.cut-the-cake/composer/<safeKey>/<turnId>/index.html on disk. the agent
-// owns that directory; the server only serves files out of it.
-type ComposerPayload = {
-  turnId: string;
-  status: "running" | "linting" | "ready" | "error";
-  url?: string;             // /composer/<safeKey>/<turnId>/index.html — set on ready
-  attempt?: number;         // best-effort lint-attempt counter (1-based)
-  errorMessage?: string;
-  ts: number;               // last ui mutation
-  startedTs: number;        // when the composer started for this turn
-};
-
-const MAX_COMPOSERS_PER_SESSION = 12;
-function pruneComposers(s: SessionState) {
-  if (s.composers.size <= MAX_COMPOSERS_PER_SESSION) return;
-  const entries = Array.from(s.composers.entries()).sort(
-    (a, b) => (a[1].startedTs || 0) - (b[1].startedTs || 0)
-  );
-  const drop = entries.length - MAX_COMPOSERS_PER_SESSION;
-  for (let i = 0; i < drop; i++) s.composers.delete(entries[i]![0]);
-}
-
-// reverse map for the composer URL → disk lookup. composerSafeKey() is the
-// authoritative one-way transform; this Map remembers the original sessionKey
-// for each safe variant so `/composer/<safeKey>/...` requests can find their
-// SessionState. populated lazily in getOrCreate().
-const sessionKeyBySafe = new Map<string, string>();
-function rememberSafeKey(sessionKey: string) {
-  sessionKeyBySafe.set(composerSafeKey(sessionKey), sessionKey);
-}
 
 const sessions = new Map<string, SessionState>();
 const sockets = new Set<Bun.ServerWebSocket<unknown>>();
@@ -335,10 +284,8 @@ function getOrCreate(info: SessionInfo): SessionState {
       scripts: new Map(),
       pillPlans: new Map(),
       exports: new Map(),
-      composers: new Map(),
     };
     sessions.set(k, s);
-    rememberSafeKey(k);
   } else {
     s.info = info;
   }
@@ -393,7 +340,6 @@ function snapshot(s: SessionState) {
     scripts: Object.fromEntries(s.scripts),
     pillPlans: Object.fromEntries(s.pillPlans),
     exports: Object.fromEntries(s.exports),
-    composers: Object.fromEntries(s.composers),
     voice: voiceFor(k),
     bookmarks: bookmarksOut,
     ...(displayName ? { displayName } : {}),
@@ -499,133 +445,6 @@ const DEMO_BEATS: ScriptBeat[] = [
   { text: "tailer skips files with mtime beyond 4 hours — they go dormant", marker: "BE_CAREFUL", emphasis: ["4 hours"] },
 ];
 const DEMO_VOICE = "af_heart";
-
-// pre-baked composition for /debug/inject-composer. demonstrates the iframe
-// pipeline without paying for a real composer agent run. 1280x720, 12s total,
-// three-scene gsap timeline with the cut-the-cake palette. stays well within
-// the same constraints we ask the agent to respect — so if this works in the
-// pane, the agent's output will too.
-const DEMO_COMPOSITION_HTML = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>cut-the-cake composer · demo fixture</title>
-  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-  <style>
-    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #fff5f8; font-family: system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif; color: #1f1320; }
-    [data-composition-id="root"] {
-      position: relative;
-      width: 1280px;
-      height: 720px;
-      overflow: hidden;
-      background: linear-gradient(180deg, #fff5f8 0%, #fffafc 60%);
-    }
-    .scene {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 0 120px;
-      box-sizing: border-box;
-      opacity: 0;
-    }
-    .label {
-      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
-      font-size: 14px;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: #ec4899;
-      margin-bottom: 18px;
-    }
-    .head {
-      font-size: 96px;
-      font-weight: 700;
-      line-height: 1.05;
-      letter-spacing: -0.01em;
-      text-align: center;
-      color: #1f1320;
-    }
-    .sub {
-      margin-top: 24px;
-      font-size: 28px;
-      color: #7d5366;
-      text-align: center;
-      max-width: 880px;
-    }
-    .pill {
-      display: inline-block;
-      padding: 8px 18px;
-      margin-top: 30px;
-      border-radius: 999px;
-      background: #ec4899;
-      color: white;
-      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
-      font-size: 18px;
-      letter-spacing: 0.04em;
-    }
-    .corner {
-      position: absolute;
-      top: 32px;
-      left: 40px;
-      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
-      font-size: 14px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: #ec4899;
-    }
-    .attribution {
-      position: absolute;
-      bottom: 28px;
-      right: 40px;
-      font-family: ui-monospace, "SFMono-Regular", "Menlo", monospace;
-      font-size: 12px;
-      color: #7d5366;
-    }
-  </style>
-</head>
-<body>
-  <div data-composition-id="root" data-duration="12">
-    <div class="corner">composer · demo</div>
-    <div class="attribution">/debug/inject-composer fixture</div>
-
-    <div class="scene" id="s1">
-      <div class="label">scene one</div>
-      <div class="head">composer preview</div>
-      <div class="sub">a short hyperframes recap of the latest turn — text and motion only, no audio yet.</div>
-    </div>
-
-    <div class="scene" id="s2">
-      <div class="label">scene two</div>
-      <div class="head">written by the agent</div>
-      <div class="sub">sonnet reads the closed turn, writes <span style="font-family:ui-monospace,monospace;color:#ec4899">index.html</span>, runs lint, iterates.</div>
-      <div class="pill">npx hyperframes lint --strict</div>
-    </div>
-
-    <div class="scene" id="s3">
-      <div class="label">scene three</div>
-      <div class="head">embedded right here</div>
-      <div class="sub">the iframe you're reading runs the gsap timeline live — same composition the lint passed.</div>
-    </div>
-  </div>
-
-  <script>
-    const tl = gsap.timeline();
-    tl.from("#s1", { opacity: 0, y: 40, duration: 0.6, ease: "power3.out" }, 0);
-    tl.to("#s1 .head", { scale: 1.04, duration: 0.5, ease: "back.out(1.4)" }, 0.4);
-    tl.to("#s1", { opacity: 0, y: -30, duration: 0.4, ease: "power2.in" }, 3.6);
-
-    tl.from("#s2", { opacity: 0, y: 40, duration: 0.6, ease: "power3.out" }, 4.0);
-    tl.from("#s2 .pill", { scale: 0.6, opacity: 0, duration: 0.45, ease: "back.out(1.6)" }, 4.6);
-    tl.to("#s2", { opacity: 0, y: -30, duration: 0.4, ease: "power2.in" }, 7.6);
-
-    tl.from("#s3", { opacity: 0, y: 40, duration: 0.6, ease: "power3.out" }, 8.0);
-    tl.to("#s3 .head", { letterSpacing: "0.01em", duration: 1.4, ease: "power2.inOut" }, 8.4);
-  </script>
-</body>
-</html>
-`;
 
 // matching pill plan for the demo beats above. exercises every kind so the
 // tiktok pane shows all pill colors during /debug/inject-script.
@@ -775,44 +594,6 @@ const server = Bun.serve({
       return new Response("not found", { status: 404 });
     }
 
-    // /composer/<safeKey>/<turnId>/index.html — serves the agent-authored
-    // hyperframes composition html. read-only static serve. hard guards:
-    //   - safeKey must be a known live session (lookup in sessionKeyBySafe)
-    //   - turnId must match a known closed turnId for that session
-    //   - filename whitelist: index.html only (the composition is self-contained)
-    // any other path under /composer/ → 404. no `..` segments accepted.
-    if (url.pathname.startsWith("/composer/") && req.method === "GET") {
-      if (url.pathname.includes("..")) {
-        return new Response("not found", { status: 404 });
-      }
-      const tail = url.pathname.slice("/composer/".length);
-      const m = tail.match(/^([a-zA-Z0-9_-]{1,80})\/([a-zA-Z0-9_.\-]{1,128})\/index\.html$/);
-      if (!m) {
-        return new Response("not found", { status: 404 });
-      }
-      const safeKey = m[1]!;
-      const turnId = m[2]!;
-      const fullKey = sessionKeyBySafe.get(safeKey);
-      if (!fullKey) return new Response("not found", { status: 404 });
-      const sess = sessions.get(fullKey);
-      if (!sess) return new Response("not found", { status: 404 });
-      const payload = sess.composers.get(turnId);
-      if (!payload || payload.status !== "ready") {
-        return new Response("not ready", { status: 404 });
-      }
-      const root = composerRootDirFor(fullKey);
-      const file = Bun.file(`${root}/${turnId}/index.html`);
-      if (await file.exists()) {
-        // text/html with a permissive cache so re-runs of the same composition
-        // show fresh content (the agent may overwrite on lint-fix iterations
-        // before READY).
-        return new Response(file, {
-          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" },
-        });
-      }
-      return new Response("not found", { status: 404 });
-    }
-
     // POST /debug/export-script — kick off an mp4 render of an existing
     // ScriptPayload. body: { sessionKey, turnId }. requires the script to be
     // status "ready" (audio + words present). returns 202 immediately and the
@@ -920,99 +701,6 @@ const server = Bun.serve({
       })();
 
       return Response.json({ ok: true, sessionKey, turnId }, { status: 202 });
-    }
-
-    // /composer/demo — write a tiny pre-baked HyperFrames composition for a
-    // chosen visible session, mark it ready, broadcast composer:ready. lets
-    // the user inspect the pane from the dashboard without paying for a real
-    // composer agent run. body: { sessionKey: string }. csrf-guarded via Origin.
-    if (url.pathname === "/composer/demo" && req.method === "POST") {
-      const origin = req.headers.get("origin");
-      if (origin && !origin.startsWith(`http://localhost:${PORT}`) && !origin.startsWith(`http://127.0.0.1:${PORT}`)) {
-        return Response.json({ error: "cross-origin blocked" }, { status: 403 });
-      }
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      if (!sessionKey) {
-        return Response.json({ error: "sessionKey required" }, { status: 400 });
-      }
-      const sess = sessions.get(sessionKey);
-      if (!sess) {
-        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
-      }
-      const turnId = "demo-" + Date.now().toString(36);
-      const dir = `${composerRootDirFor(sessionKey)}/${turnId}`;
-      const { mkdirSync } = await import("node:fs");
-      const { writeFile } = await import("node:fs/promises");
-      mkdirSync(dir, { recursive: true });
-      await writeFile(`${dir}/index.html`, DEMO_COMPOSITION_HTML, "utf8");
-
-      const now = Date.now();
-      const payload: ComposerPayload = {
-        turnId,
-        status: "ready",
-        url: `/composer/${composerSafeKey(sessionKey)}/${turnId}/index.html`,
-        ts: now,
-        startedTs: now,
-      };
-      sess.composers.set(turnId, payload);
-      pruneComposers(sess);
-      if (isVisible(sess)) {
-        broadcast({ kind: "composer:ready", sessionKey, turnId, url: payload.url });
-      }
-      console.log(`[composer] /composer/demo fixture · ${turnId} · ${payload.url}`);
-      return Response.json({ ok: true, sessionKey, turnId, url: payload.url }, { status: 200 });
-    }
-
-    // /composer/regen — kick off a real composer agent run for the most
-    // recent closed turn in the named session. requires the composer
-    // subprocess pool to be enabled (META_COMPOSER_ENABLED=1, the default).
-    // body: { sessionKey: string }. fires-and-forgets — the agent runs in the
-    // background and broadcasts composer:running → :linting → :ready / :error.
-    if (url.pathname === "/composer/regen" && req.method === "POST") {
-      if (!composer) {
-        return Response.json({ error: "composer disabled (set META_COMPOSER_ENABLED=1)" }, { status: 503 });
-      }
-      const origin = req.headers.get("origin");
-      if (origin && !origin.startsWith(`http://localhost:${PORT}`) && !origin.startsWith(`http://127.0.0.1:${PORT}`)) {
-        return Response.json({ error: "cross-origin blocked" }, { status: 403 });
-      }
-      let body: unknown;
-      try {
-        body = await req.json();
-      } catch {
-        return Response.json({ error: "invalid json" }, { status: 400 });
-      }
-      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : "";
-      if (!sessionKey) {
-        return Response.json({ error: "sessionKey required" }, { status: 400 });
-      }
-      const sess = sessions.get(sessionKey);
-      if (!sess) {
-        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
-      }
-      // grab the most recent closed turn from the per-session ring; that's
-      // the target. prior context = the 2 entries before it (or fewer if the
-      // session is brand-new).
-      const ring = sess.recentClosedTurns;
-      if (ring.length === 0) {
-        return Response.json({ error: "no closed turn yet for this session" }, { status: 400 });
-      }
-      const targetTurn = ring[ring.length - 1]!;
-      const prior = ring.slice(Math.max(0, ring.length - 3), ring.length - 1);
-      composer.feed(sessionKey, {
-        target: buildTurnFeed(sessionKey, sess.info, targetTurn),
-        prior: prior.map((t) => buildTurnFeed(sessionKey, sess.info, t)),
-      });
-      console.log(`[composer] /composer/regen · ${sessionKey} · target=${targetTurn.id.slice(0, 8)} · prior=${prior.length}`);
-      return Response.json({ ok: true, sessionKey, turnId: targetTurn.id }, { status: 202 });
     }
 
     // /debug/inject-script — inject a fully-formed demo ScriptPayload onto a
@@ -1617,74 +1305,13 @@ if (scriptifier) {
   );
 }
 
-const composer = COMPOSER_ENABLED
-  ? startComposer({
-      model: COMPOSER_MODEL,
-      perTurnTimeoutMs: COMPOSER_PER_TURN_TIMEOUT_MS,
-      onEvent(e: ComposerEvent) {
-        const sess = sessions.get(e.sessionKey);
-        if (!sess) return;
-        const existing = sess.composers.get(e.turnId);
-        if (e.kind === "running") {
-          const payload: ComposerPayload = {
-            turnId: e.turnId,
-            status: "running",
-            startedTs: e.ts,
-            ts: e.ts,
-          };
-          sess.composers.set(e.turnId, payload);
-          pruneComposers(sess);
-          if (isVisible(sess)) {
-            broadcast({ kind: "composer:running", sessionKey: e.sessionKey, turnId: e.turnId, startedTs: e.ts });
-          }
-          return;
-        }
-        if (!existing) return; // late event for an evicted turn — drop
-        if (e.kind === "linting") {
-          existing.status = "linting";
-          existing.attempt = e.attempt;
-          existing.ts = e.ts;
-          if (isVisible(sess)) {
-            broadcast({ kind: "composer:linting", sessionKey: e.sessionKey, turnId: e.turnId, attempt: e.attempt });
-          }
-          return;
-        }
-        if (e.kind === "ready") {
-          existing.status = "ready";
-          existing.url = `/composer/${composerSafeKey(e.sessionKey)}/${e.turnId}/index.html`;
-          existing.ts = e.ts;
-          if (isVisible(sess)) {
-            broadcast({ kind: "composer:ready", sessionKey: e.sessionKey, turnId: e.turnId, url: existing.url });
-          }
-          console.log(`[composer] ${e.turnId.slice(0, 8)} ready · ${existing.url}`);
-          return;
-        }
-        if (e.kind === "error") {
-          existing.status = "error";
-          existing.errorMessage = e.message;
-          existing.ts = e.ts;
-          if (isVisible(sess)) {
-            broadcast({ kind: "composer:error", sessionKey: e.sessionKey, turnId: e.turnId, message: e.message });
-          }
-          console.error(`[composer] ${e.turnId.slice(0, 8)} error · ${e.message}`);
-          return;
-        }
-      },
-    })
-  : null;
-if (composer) {
-  console.log(
-    `[composer] enabled · model=${COMPOSER_MODEL} · timeout=${COMPOSER_PER_TURN_TIMEOUT_MS}ms · minPriorTurns=${COMPOSER_MIN_PRIOR_TURNS}`
-  );
-}
 // graceful shutdown — give abort signals a moment to terminate sdk subprocesses
 // before the server process exits, otherwise claude subprocesses can be orphaned.
 {
   const onSignal = async (sig: string) => {
-    console.log(`[server] received ${sig} — stopping observer + scriptifier + composer + infographer + chat host + registry`);
+    console.log(`[server] received ${sig} — stopping observer + scriptifier + infographer + chat host + registry`);
     observer?.stop();
     scriptifier?.stop();
-    composer?.stop();
     chatHost.stop();
     registry.stop();
     // infographer.stop() is async (resolves when its lifecycle loop exits or
@@ -1771,22 +1398,6 @@ startTailer({
         // on the recentClosedTurns ring (size 5) still containing the turn.
         if (infographer) rememberTurnFeed(result.closed.id, feed);
         scriptifier.feed(feed, activeScriptStyle, activeMarkerVocab);
-      }
-      if (composer && !isObserverSelf && isVisible(s) && fresh) {
-        // composer feed = target (just-closed turn) + last 2 prior closed turns
-        // for context. recentClosedTurns is push-on-close so the JUST-pushed
-        // turn is at the end; prior context is the 2 entries before it. only
-        // fire if at least COMPOSER_MIN_PRIOR_TURNS prior turns exist.
-        const k = keyFor(s.info);
-        const ring = s.recentClosedTurns;
-        const targetIdx = ring.length - 1;
-        const prior = ring.slice(Math.max(0, targetIdx - 2), targetIdx);
-        if (prior.length >= COMPOSER_MIN_PRIOR_TURNS) {
-          composer.feed(k, {
-            target: buildTurnFeed(k, s.info, result.closed),
-            prior: prior.map((t) => buildTurnFeed(k, s.info, t)),
-          });
-        }
       }
     }
   },
