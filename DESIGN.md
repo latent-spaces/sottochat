@@ -216,7 +216,7 @@ the system explicitly rejects: the kawaii-AI dashboard cliché (mascots and spar
 
 **key characteristics:**
 - cream-tinted surface, hairline borders, almost no shadow except the send-button CTA.
-- two-monitor desk reading distance: chrome stays quiet, observer insight stays loud.
+- two-monitor desk reading distance: chrome stays quiet, the session summary stays loud.
 - per-session palette spreads the operative-voice role across six hues without losing strawberry as the brand voice.
 - type is system sans for prose + system mono for instruments; no display family.
 - one frosted glass surface in the system: the sticky top nav. one only.
@@ -231,7 +231,7 @@ a near-white cream surface plus one operative voice (strawberry) and one chart-o
 
 - **Strawberry** (`#ec4899`): the operative voice. wordmark, live border, selected-card border + tint, focus rings, send-button surface, "you" role label, brand jump-roll mark, default `--accent` outside any per-session scope. if something is strawberry, it is acting (running, just-happened, do-this-now).
 - **Strawberry Deep** (`#db2777`): hover/pressed for strawberry surfaces.
-- **Strawberry Tint** (`#fce7f3`): default `--accent-soft`. selected-card background, chart icon bubble, auto-tag pill, toggle-on background.
+- **Strawberry Tint** (`#fce7f3`): default `--accent-soft`. selected-card background, chart icon bubble.
 
 ### Secondary
 
@@ -275,7 +275,7 @@ six fixed colors used inside the radial sprinkle-burst on frosted-bar hover, mix
 
 **The One Voice Rule.** within a per-session scope, the operative voice (`--accent`) is the session's hue. outside any session scope (top nav, gh-pill, send button, brand jump-roll), the operative voice is strawberry. nothing else gets to act as an operative voice. no second-accent dividers, no decorative-accent hover tints on unrelated surfaces, no heading underlines.
 
-**The Per-Session Palette Rule.** the per-session palette overrides `--accent` / `--accent-hover` / `--accent-soft` / `--plum` only on the card root and on `#detail-content` while open. it does not extend to brand chrome. a peach-flagged card gets a peach insight border; the wordmark above it is still strawberry. brand voice is not session voice.
+**The Per-Session Palette Rule.** the per-session palette overrides `--accent` / `--accent-hover` / `--accent-soft` / `--plum` only on the card root and on `#detail-content` while open. it does not extend to brand chrome. a peach-flagged card gets a peach border; the wordmark above it is still strawberry. brand voice is not session voice.
 
 **The Plum Quarantine Rule.** plum lives in the turn-complexity chart's output bar (and its "latest" emphasis variant) and in the agent-role label of the chat-thread block. nowhere else.
 
@@ -298,7 +298,7 @@ a single sans for the prose layer, a single mono for everything that reads as in
 - **Title** (600, 13px, line-height 1.4, letter-spacing −0.01em): card session names + gh-pill + nav-toggle. truncated with ellipsis, never wraps.
 - **Body** (400, 15px, line-height 1.6): all running prose. capped at 75ch.
 - **Conversation** (400, 14px, line-height 1.55): conversation strip + chat-thread + textarea. the conv-md markdown body lives at 78ch max.
-- **Label** (mono, 500, 11px, letter-spacing 0.06em, uppercase): section labels (`sessions`), chart titles, chat-context glyph label (`break it down`), chat-tip text.
+- **Label** (mono, 500, 11px, letter-spacing 0.06em, uppercase): section labels (`sessions`), chart titles, chat-tip text.
 - **Micro** (mono, 500, 10px, letter-spacing 0.08em, uppercase): conversation role labels (`prev-agent`, `you`, `agent`), card foot text, chart axis ticks.
 - **Tag** (mono, 500, 9px, letter-spacing 0.04em, lowercase): the model-tag pill on cards.
 
@@ -325,13 +325,12 @@ cards do not lift on hover. panels do not lift.
 - **send-rest** (`box-shadow: 0 6px 20px -10px rgba(236, 72, 153, 0.55)`): ambient strawberry beneath the send button at rest.
 - **send-hover** (`box-shadow: 0 10px 28px -12px rgba(236, 72, 153, 0.65)`): same color, larger spread, paired with `transform: translateY(-1px)` on hover.
 - **cake-perch** (`drop-shadow(0 3px 5px rgba(0, 0, 0, 0.12))`): the only neutral-tinted shadow in the system. reads only when the mascot is on a colored surface (frosted bar, chart card edge).
-- **toggle-on glow** (`box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 28%, transparent)`): a 3px soft ring around the toggle dot when auto-break-down is on. the only "ring" elevation on the page; reads as state-on, not as decoration.
 
 ### Named Rules
 
-**The Flat-By-Default Rule.** cards, panels, charts, observer insights, and conversation rows all sit flush. if a shadow feels needed to "make something pop," the answer is contrast or removal.
+**The Flat-By-Default Rule.** cards, panels, charts, session summaries, and conversation rows all sit flush. if a shadow feels needed to "make something pop," the answer is contrast or removal.
 
-**The Tinted-Shadow Rule.** when a shadow is genuinely required, it carries the surface's own hue. the send-button shadow is rgba strawberry; the toggle-on ring is `color-mix` against `--accent`.
+**The Tinted-Shadow Rule.** when a shadow is genuinely required, it carries the surface's own hue — the send-button shadow is rgba strawberry.
 
 ## 5. Components
 
@@ -339,15 +338,14 @@ cards do not lift on hover. panels do not lift.
 
 - **surface:** `glass-paper` with `backdrop-filter: blur(12px) saturate(140%)`. height 56px, padding 0 24px, sticky to the viewport top with a 1px hairline bottom.
 - **left:** the cake-slice logo (`logo-cake-slice.webp`) at 32px + the wordmark at 20px / 600 in strawberry + a tagline ("turn long agent runs into a quick iterative chat") at 12px in fg-soft (hidden below 720px).
-- **right:** reconnecting indicator (mono 11px, fg-muted, hidden by default) + auto-break-down toggle pill + github pill.
+- **right:** reconnecting indicator (mono 11px, fg-muted, hidden by default) + language pill + github pill.
 - **brand jump-roll:** hovering anywhere on `.nav-left` triggers a gsap timeline on the logo only — `y: -16` jumping out of `expo.out`, then `rotation: 360` planar spin in `power2.inOut`, then `y: 0` landing in `expo.out`. total ~1.3s. debounced via a `playing` flag so re-hovers don't stack. the wordmark itself does not move.
 
-### Auto break-down toggle
+### Language pill
 
-- **shape:** pill (matches the gh-pill silhouette).
-- **off:** surface bg + border-strong + a hairline-strong dot. label `auto break-down · off`.
-- **on:** accent-soft bg + accent border + accent dot with a 3px `color-mix` ring around it. label `auto break-down`.
-- **interaction:** click → POST `/chat/auto-send` → server flips the global flag → broadcast over ws → all connected clients re-paint. optimistic local flip on click; reverts on failure.
+- **shape:** pill (matches the gh-pill / nav-toggle silhouette) — a bare `<select>` wearing the nav-toggle chrome so it reads as the same vocabulary, not a new button type. a small `▾` caret sits at the right edge.
+- **content:** the current explanation language as its native name, lowercase where the script has case (`עברית`, `english`, `العربية`, …).
+- **interaction:** change → POST `/settings/language` → server updates the global + broadcasts over ws → all clients sync; the choice persists in `localStorage`. it sets the language of everything the app says *to* the user — the session summaries and the assistant's answers — but never the reply drafted for the agent, which stays in the agent's own language.
 
 ### GitHub pill
 
@@ -375,8 +373,8 @@ cards do not lift on hover. panels do not lift.
 - **live:** border is `--accent`. used to mark sessions that have closed a turn within the recent window.
 - **idle:** opacity 0.6.
 - **selected:** `--accent` border + `--accent-soft` background + opacity 1. mascot mounts in the bottom-right corner.
-- **update pulse:** when the card's signature changes (insight or sessionName), the `is-updated` keyframe fires once — accent box-shadow ring (8px max) + 2.2% scale at peak, 1.6s, ease-out. ignores plain `lastEventTs` ticks so minute-tick changes don't flash.
-- **internal layout:** title row (`[project] observer-name` + model-tag pill, both ellipsis-truncated) → optional insight prose (sans 13px, fg, only when `decision.open === true`) → mono Pewter foot line (optional `live` word in accent + `Xs ago` / `idle Xm`).
+- **update pulse:** when the card's signature changes (a fresh session summary or sessionName), the `is-updated` keyframe fires once — accent box-shadow ring (8px max) + 2.2% scale at peak, 1.6s, ease-out. ignores plain `lastEventTs` ticks so minute-tick changes don't flash.
+- **internal layout:** title row (`[project] observer-name` + model-tag pill, both ellipsis-truncated) → optional one-sentence session summary (sans 13px, fg, `dir="auto"`; what the session is about, refreshed every few turns) → mono Pewter foot line (source · shortened working dir · optional `live` word in accent + `Xs ago` / `idle Xm`).
 
 ### Card mascot (selected only)
 
@@ -438,14 +436,14 @@ a single mascot mounts in the detail pane on every session-open, picking a deter
 - **container:** flex column, 12px gap. hidden via `:empty` rule when the thread is dormant.
 - **user rows:** plain escaped text + pre-wrap. role label `you` in `--accent`.
 - **agent rows:** `.conv-md` markdown body inside a surface card (1px hairline, input radius, 10px / 12px padding). role label `agent` in `--plum`.
-- **auto pill:** server-fired user chunks (`kind === "auto"`) carry an inline `auto` pill next to the role label — accent-soft bg, accent text, mono tag typography (9px / 0.06em / uppercase), pill radius. visually disambiguates server-fired from typed messages.
+- **suggested-reply card:** when the assistant drafts a message for the coding agent, it arrives wrapped in a fenced `to-agent` block and renders inside the agent row as a distinct card — a `chip-tint` header (mono `reply to agent` label + a copy button) over a mono, always-LTR body (the agent's language, usually english). one click copies it to paste into the terminal; the app has no write channel into the real session, so copy-paste is the bridge. present only when the assistant judged a reply useful.
 - **status row:** mono 11px Pewter italic at the bottom. `thinking` shows a leading `•` glyph in accent that pulses 1.2s ease-in-out (the only animated dot in the system; explicitly *not* notification-bait — it gates while a real subprocess is generating). `respawning` and `error` show muted message text. hidden when status is `idle` or `spawned`.
 
 ### Chat input
 
 - **container:** surface bg, 1px hairline, panel radius (14px), 14px / 16px padding.
-- **context line:** sans 13px fg, optional mono 11px accent label `⚡ break it down` followed by the observer's latest insight. when no flag, the line goes italic muted: `no observer flag yet — pick this up and edit it.`
-- **textarea:** bg-paper at rest (sits *into* the container), border-strong, input radius, 10px / 12px padding, 14px / 1.5 type, min-height 44px, vertical resize. on focus, the border becomes `--accent` and the background flips to `surface`.
+- **textarea:** the ask box — you ask about the latest output in your own language. bg-paper at rest (sits *into* the container), border-strong, input radius, 10px / 12px padding, 14px / 1.5 type, min-height 44px, vertical resize. `dir="auto"` so a right-to-left language flows correctly; the placeholder is localized to the chosen language (`ask about the output…`). on focus, the border becomes `--accent` and the background flips to `surface`.
+- **quick-replies:** once the thread is live, two localized nudge pills (`next` / `explain more`) let the user move it forward without retyping.
 - **send button:** 44 × 44 strawberry square, input radius, an inline svg arrow-up glyph at 20px (Lucide-style stroked path), strawberry shadow at rest + larger shadow on hover with `translateY(-1px)`. disabled state flips the surface to border-strong and desaturates the svg to opacity 0.5. `⌘ ↵` keyboard shortcut wired.
 - **tip line:** flex space-between. left: mono 11px Pewter `tip: ask for smaller steps, rationale, or alternatives`. right: mono 11px Pewter `⌘ ↵ to send` with the keys colored `--accent`.
 - **per-session draft:** textarea content is cached in a `chatDrafts` map keyed by sessionKey, lost on reload.
@@ -475,7 +473,7 @@ when a card enters or exits the sidebar, the surrounding cards FLIP-animate to t
 
 - **inbox empty:** italic 13px fg-soft on a 1px dashed border-strong outline at card radius, 32px / 16px padding, centered. used in the sidebar.
 - **conversation empty:** italic 13px fg-soft, 24px vertical padding, no outline. used in the conversation strip when a session has no closed turns yet.
-- **chat-context muted:** when no observer flag yet, the chat-input's context line goes italic muted, prefixed with the same `⚡ break it down` mono label so the affordance is consistent.
+- **ask-box placeholder:** the chat input's only chrome copy is its placeholder, localized to the chosen language (`ask about the output…`); there is no separate context line.
 
 ### Concentrated whimsy spots (the named delights)
 
@@ -499,9 +497,9 @@ the system is loud at six places. anywhere else, dessert vocabulary is the kawai
 - **Do** keep diff-green and diff-red in the code-changes chart only.
 - **Do** keep the sticky top nav as the only `backdrop-filter: blur` surface.
 - **Do** keep mono for every label, axis, role tag, and elapsed time; sans for prose.
-- **Do** stay flat. the send-button shadow, the cake-perch drop-shadow, the toggle-on ring, and the FLIP layout micro-motion are the only depth in the system.
+- **Do** stay flat. the send-button shadow, the cake-perch drop-shadow, and the FLIP layout micro-motion are the only depth in the system.
 - **Do** render the code-changes chart only when there's something to render.
-- **Do** write all UI copy in lowercase, dry-with-a-wink. the wordmark is `cut-the-cake`, never `Cut the Cake`. button labels are `auto break-down`, never `Auto Break-Down`.
+- **Do** write all UI copy in lowercase, dry-with-a-wink. the wordmark is `cut-the-cake`, never `Cut the Cake`. button labels are `reply to agent`, never `Reply To Agent`.
 - **Do** honor `prefers-reduced-motion`. every gsap timeline early-returns when reduced motion is on; css transitions zero out via the global selector.
 
 ### Don't:

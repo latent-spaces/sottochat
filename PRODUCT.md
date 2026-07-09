@@ -12,9 +12,11 @@ Primary moment of use: the user is at a two-monitor desk with claude code runnin
 
 ## Product Purpose
 
-Turn long autonomous agent runs into a quick, iterative chat. Tail every claude code (and adjacent agent) session in real time, run a persistent observer over the closed-turn stream, and surface only the moments worth user attention as a one-sentence insight plus an editable prefill the user can hand back to the original agent.
+Turn long autonomous agent runs into a quick, glanceable read — in your own language. Tail every claude code (and adjacent agent) session in real time and run a persistent observer over the closed-turn stream, which labels each session with a one-sentence "what this is about", refreshed as the work evolves. When a run is worth a closer look, ask about it in plain language: the app explains the latest output in your language and, when you're deciding what to tell the agent, drafts a reply to paste back into your terminal (the app only reads the transcript — copy-paste is the bridge to the real session).
 
-Success looks like: the user can leave several agents running unattended, glance at cut-the-cake, and within two seconds know whether to keep working on something else or jump in with a precise course-correction.
+The explanation language is configurable — Hebrew by default, plus English, Arabic, Spanish, French, Russian, German, Chinese — and drives everything the app says *to* you; the drafted reply stays in the agent's own language.
+
+Success looks like: the user can leave several agents running unattended, glance at cut-the-cake, and within two seconds know what each one is about and whether to jump in — then get a precise course-correction drafted without breaking the glance.
 
 ## Brand Personality
 
@@ -38,7 +40,7 @@ Emotional goal: a sharp tool with a sweet tooth. The chrome wears strawberry; th
 
 1. **Strip until it hurts, then strip more.** The product question on every screen is: what is the minimal information that makes the next decision obvious? Density is the enemy, not the goal. When in doubt, remove.
 
-2. **Defer to the observer.** The model picks the moment worth surfacing. The chrome is scaffolding for its insight and prefill; the chrome must never out-shout the content it's framing.
+2. **Defer to the model.** The observer labels each session; the chat assistant explains it and drafts the reply. The chrome is scaffolding for that content — the summary, the explanation, the drafted reply — and must never out-shout it.
 
 3. **Ambient by default, present when it matters.** Glanceable from across the desk; quiet when nothing is happening; unmistakable when something is. The contrast between idle and active states should be the loudest thing in the UI.
 
