@@ -107,6 +107,17 @@ function pushChatChunk(c: ChatChunk) {
   if (arr.length > MAX_CHAT_CHUNKS) arr.splice(0, arr.length - MAX_CHAT_CHUNKS);
 }
 
+// reset a session's Q&A to pristine (as if the session was untouched): stop the
+// chat subprocess so the assistant forgets, wipe the stored thread + status, and
+// tell clients. used by the manual clear route and by the auto-clear that fires
+// when a session advances to a new turn.
+function clearChat(sessionKey: string): void {
+  chatHost.stop(sessionKey);
+  chatThreads.delete(sessionKey);
+  chatStatuses.delete(sessionKey);
+  broadcast({ kind: "chat:cleared", sessionKey });
+}
+
 function keyFor(info: SessionInfo): string {
   return `${info.source}:${info.path}`;
 }
@@ -453,10 +464,7 @@ const server = Bun.serve({
       // drop the chat subprocess so the assistant forgets, and wipe the stored
       // thread + status. the next send spawns a fresh subprocess, re-seeded with
       // the latest exchange.
-      chatHost.stop(sessionKey);
-      chatThreads.delete(sessionKey);
-      chatStatuses.delete(sessionKey);
-      broadcast({ kind: "chat:cleared", sessionKey });
+      clearChat(sessionKey);
       return Response.json({ ok: true });
     }
 
@@ -656,6 +664,13 @@ startTailer({
       }
       maybeOpenThread(s, result.closed);
       const fresh = Date.now() - result.closed.endTs <= OBSERVER_FRESH_MS;
+      // a fresh turn moved the session on — reset any open Q&A for it so the next
+      // question re-seeds against the new turn (pristine, as if untouched). only
+      // when there's actually a discussion to clear, and never for our own sdk
+      // subprocesses (which carry no user chat).
+      if (fresh && !isObserverSelf && chatThreads.has(keyFor(s.info))) {
+        clearChat(keyFor(s.info));
+      }
       // count only fresh (observed) turns — historical turns replayed from disk at
       // startup must NOT advance the cadence, or a resumed session would miss its
       // first/every-4th trigger. label regenerates on the first observed close,
