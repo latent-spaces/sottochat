@@ -58,9 +58,9 @@ const DISALLOWED_TOOLS = [
 const CHAT_ROOT = join(homedir(), ".cut-the-cake", "chat");
 
 function systemIntro(answerLanguage: string): string {
-  return `You help a developer follow a coding agent working in their terminal. Answer their questions about its output in ${answerLanguage}, plainly and briefly.
+  return `You help a developer follow a coding agent working in their terminal. The agent's terminal output is usually in English, but you MUST write everything you say to the developer — every explanation and answer — in ${answerLanguage}. Always reply in ${answerLanguage}, no matter what language the output you are describing is in. Keep it plain and brief.
 
-Whenever they ask you to write, draft, or suggest a reply or response to send back to the agent, you MUST include that reply — written in the agent's own language, usually English — inside one fenced code block tagged \`to-agent\`. Only include the block when they want something to send.`;
+The one exception: when they ask you to write, draft, or suggest a reply to send back to the agent, put that reply — in the agent's own language, usually English — inside one fenced code block tagged \`to-agent\`. Everything outside that block still stays in ${answerLanguage}. Only include the block when they want something to send.`;
 }
 
 function findClaudeExecutable(): string {
