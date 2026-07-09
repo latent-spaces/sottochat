@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cut-the-cake · session state</title>
+<style>
+  :root{
+    --bg:#fdf9fa; --surface:#fff; --fg:#1a1a1f; --soft:#6e6e7a; --muted:#9090a0;
+    --border:#efe8eb; --border-strong:#dcd2d6; --chip:#f5eef1;
+    --accent:#ec4899; --accent-soft:#fce7f3; --plum:#a855f7;
+    --green:#10b981; --amber:#eab308; --red:#ef4444;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);line-height:1.55;font-size:15px}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 22px 90px}
+  h1{font-size:24px;margin:0 0 4px;letter-spacing:-.02em}
+  h1 .berry{color:var(--accent)}
+  .meta{font-family:var(--mono);font-size:12px;color:var(--muted);margin:0 0 18px}
+  .meta code{background:var(--chip);padding:1px 6px;border-radius:4px;color:var(--soft)}
+  .meta a{color:var(--accent);text-decoration:none}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);color:var(--muted);margin:26px 0 10px;font-weight:600}
+  h3{font-size:15px;margin:16px 0 6px}
+  p,li{color:var(--fg)}
+  code{font-family:var(--mono);font-size:.86em;background:var(--chip);padding:1px 5px;border-radius:4px}
+  pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.5}
+  a{color:var(--accent)}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;border-bottom:1px solid var(--border);padding-bottom:10px}
+  .tab{font-family:var(--mono);font-size:12px;padding:5px 12px;border:1px solid var(--border-strong);background:var(--surface);border-radius:999px;cursor:pointer;color:var(--soft)}
+  .tab[aria-selected="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--fg)}
+  .panel{display:none}
+  .panel[data-active="true"]{display:block}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:12px 0}
+  .next{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:14px 16px;margin:14px 0}
+  .next .lbl{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
+  th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.04em;padding:1px 7px;border-radius:999px;vertical-align:middle}
+  .pill.done{background:color-mix(in oklab,var(--green) 16%,transparent);color:var(--green)}
+  .pill.wip{background:color-mix(in oklab,var(--amber) 20%,transparent);color:#8a6d00}
+  .pill.gate{background:var(--accent-soft);color:var(--accent)}
+  .warn{border-left:3px solid var(--amber)}
+  ul{margin:6px 0;padding-left:20px}
+  li{margin:3px 0}
+  .foot{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- @state:header tier=rewrite -->
+<h1><span class="berry">cut-the-cake</span> · session state</h1>
+<p class="meta">
+  Updated <code>2026-07-09</code>
+  · branch <code>feat/multilingual-qa-and-session-summaries</code>
+  · saved-at <code>2e9beaf</code>
+  · design: <a href="docs/superpowers/specs/2026-07-09-conversational-qa-design.md">conversational-qa spec</a>, <a href="PRODUCT.md">PRODUCT.md</a>, <a href="DESIGN.md">DESIGN.md</a>
+</p>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-panel="resume">resume</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="history">history</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="arch">architecture</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="decisions">decisions</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="gotchas">gotchas</button>
+  <button class="tab" role="tab" aria-selected="false" data-panel="contracts">contracts</button>
+</div>
+
+<!-- @state:resume tier=rewrite -->
+<section class="panel" data-panel="resume" data-active="true">
+  <h2>Resume here</h2>
+  <p><strong>What this is.</strong> <em>cut-the-cake</em> (formerly <em>chunk-to-chat</em>) — a Bun + TypeScript app that tails Claude Code / Codex session <code>jsonl</code> files in real time and turns long autonomous agent runs into a glanceable, multilingual dashboard + Q&amp;A. Run with <code>bun src/server.ts</code> (HTTP/ws on port 3737). Frontend is a single-file SPA: <code>public/index.html</code> (inline JS/CSS, fed over ws).</p>
+
+  <p><strong>Where it stands.</strong> Two features are shipped &amp; committed on this branch; a 4-part follow-up batch is <span class="pill wip">implemented, uncommitted</span> and was under review at save time.</p>
+  <table>
+    <tr><th>Work</th><th>State</th><th>Evidence</th></tr>
+    <tr><td>Q&amp;A rework + session-summary cards (cwd, tail, stable sidebar)</td><td><span class="pill done">committed</span></td><td><code>8f6b55b</code> · 2 review passes folded · browser-verified</td></tr>
+    <tr><td>PRODUCT.md / DESIGN.md brought to the new model</td><td><span class="pill done">committed</span></td><td><code>2e9beaf</code></td></tr>
+    <tr><td>Token count on cards + detail header</td><td><span class="pill wip">uncommitted</span></td><td><code>contextTokens</code> flow + <code>fmtTokens</code> verified; render <em>not</em> visually verified (browser wedged)</td></tr>
+    <tr><td>Model → <code>claude-sonnet-5</code> (all 4 defaults)</td><td><span class="pill wip">uncommitted</span></td><td>boot log <code>model=claude-sonnet-5</code></td></tr>
+    <tr><td>Chat prompt cut to 2 paragraphs</td><td><span class="pill wip">uncommitted</span></td><td>live: Hebrew answer + <code>to-agent</code> block fired</td></tr>
+    <tr><td>Clear-discussion (<code>POST /chat/clear</code> + micro-button)</td><td><span class="pill wip">uncommitted</span></td><td>live: thread <code>1 → clear → 0</code>, bad key → 400</td></tr>
+  </table>
+
+  <p><strong>Latest verification.</strong> <code>bun run typecheck</code> clean across the batch. Backend live-tested on throwaway ports (3943–3951). The uncommitted batch is <em>not</em> committed and the token render was verified by data + logic only (the chrome-devtools browser wedged after a test server died — see gotchas).</p>
+
+  <p><strong>Open gates.</strong></p>
+  <ul>
+    <li><span class="pill done">review done</span> Adversarial review <code>wf_cea559f2-85e</code> returned 2 confirmed findings, <strong>both fixed</strong>: (1) a late chunk from an aborted query could resurrect a just-cleared thread — added <code>if (stopped) break</code> at the stream-loop top in <code>chat-agent.ts</code>; (2) <code>fmtTokens</code> rendered ≥1M as "1000k" — added an <code>m</code> unit. <code>bun run typecheck</code> clean after both.</li>
+    <li>Then <strong>commit the batch</strong> (token · sonnet-5 · prompt · clear) as one commit on the branch. No <code>Co-Authored-By</code> line (owner rule).</li>
+    <li>User may want <strong>push / open PR</strong> — branch is 2 commits ahead of <code>main</code>.</li>
+    <li>User must <strong>restart their app on :3737</strong> to run the new code (it's still the old build).</li>
+  </ul>
+
+  <!-- @state:next -->
+  <div class="next">
+    <div class="lbl">do this next</div>
+    <p>Review is done and its 2 fixes are applied (typecheck clean). Commit the uncommitted batch — <strong>token count · claude-sonnet-5 · simplified chat prompt · clear-discussion</strong> (incl. the 2 review fixes) — to <code>feat/multilingual-qa-and-session-summaries</code> as a single commit (no <code>Co-Authored-By</code>). Then ask the owner whether to push / open a PR, and remind them to restart their app on :3737.</p>
+  </div>
+</section>
+
+<!-- @state:history tier=append -->
+<section class="panel" data-panel="history">
+  <h2>History</h2>
+
+  <h3>2026-07-09 · <code>8f6b55b</code> — feat: multilingual Q&amp;A + session-summary cards</h3>
+  <p>Reworked the core loop away from the old auto "chunk → prefill prompt" model. The observer stopped writing per-turn insights/prefills and became a <strong>session summarizer</strong>; a configurable-language chat assistant replaced the auto-send. Also: real working dir on cards/header, latest-exchange pinned to its <em>tail</em>, stable (no-reshuffle) sidebar order + scroll preservation. <strong>Two adversarial review passes</strong> folded in: language clobber-on-load, prototype-key validation crash, chat respawn persona/language loss, summary cadence broken by historical backfill, tail fade scrolling off, codex turnId collision in a batch, language no-op broadcast, ambient-quiet activity age. Verified: <code>bun run typecheck</code> clean; browser DOM-inspected (cwd/summary/tail/language all correct, zero console errors).</p>
+
+  <h3>2026-07-09 · <code>2e9beaf</code> — docs: PRODUCT/DESIGN to the new model</h3>
+  <p>Rewrote the product purpose + principle #2 (defer to the model); swapped the DESIGN "auto break-down toggle" component for the language pill, the chat-input prefill context-line for the RTL-aware ask box, the card per-turn-insight for the session summary + working dir; added the suggested-reply card component; retired the toggle-on ring. Two vestigial style tokens (<code>nav-toggle-on</code>, <code>chat-auto-tag</code>) left in frontmatter intentionally.</p>
+
+  <h3>2026-07-09 · uncommitted batch (review in flight)</h3>
+  <p>Token count (<code>contextTokens</code>) chip on card meta + <code>· N ctx</code> in the detail header; model default → <code>claude-sonnet-5</code> (chat-agent, observer, server ×2); chat <code>systemIntro</code> cut from 5 verbose paragraphs to 2 (first cut was too lean and dropped the <code>to-agent</code> block — re-tightened so the block fires reliably); clear-discussion feature (<code>POST /chat/clear</code> → drop subprocess + wipe thread + broadcast <code>chat:cleared</code>; frontend mono <code>clear</code> micro-button). Review <code>wf_cea559f2-85e</code>: 2 confirmed findings, both fixed — clear-thread resurrection race (<code>stopped</code> guard) + <code>fmtTokens</code> ≥1M unit. See the resume gate for commit status.</p>
+</section>
+
+<!-- @state:ref-architecture tier=stable -->
+<section class="panel" data-panel="arch">
+  <h2>Architecture</h2>
+  <p><strong>Core loop:</strong> <code>tailer → turns → observer → chat</code>.</p>
+  <ul>
+    <li><code>src/tailer.ts</code> — polls <code>~/.claude/projects/*</code> + codex rollouts; parses each jsonl line; emits <code>MetaEvent</code>s. Now also lifts the raw <code>cwd</code> onto <code>SessionInfo.cwd</code>.</li>
+    <li><code>src/turns.ts</code> — closes a turn on a <code>stop</code> event or a new user message.</li>
+    <li><code>src/observer.ts</code> — one long-lived <code>claude-sonnet-5</code> subprocess, batched every 30s (<code>META_OBSERVER_BATCH_MS</code>). <strong>Now a summarizer</strong>: returns one <code>{turnId, summary}</code> per fed session; the summary is "what the session is about", in the user's language.</li>
+    <li><code>src/chat-agent.ts</code> — one <code>claude-sonnet-5</code> subprocess <em>per session</em>, tools disabled, text-in/out. Answers in the chosen language; emits a fenced <code>to-agent</code> block when asked to draft a reply. <code>send()</code> takes <code>{seed, language}</code>; persona set on first message; language re-asserted on change; respawns clean on <code>stop()</code>.</li>
+    <li><code>src/server.ts</code> — Bun HTTP + ws on 3737. Holds <code>SessionState</code> (events, turns, <code>summary</code>/<code>summaryTs</code>, <code>closedTurnCount</code>, <code>recentClosedTurns</code>, <code>contextTokens</code>, <code>totalOutputTokens</code>) and the global <code>explainLang</code>. Feeds the summarizer on the 1st <strong>fresh</strong> closed turn then every 4th.</li>
+    <li><code>public/index.html</code> — single-file SPA. Sidebar cards (summary + cwd + token chip), detail pane (header + charts + conversation strip + chat thread + ask box), language pill, copy-card. <code>marked</code> + <code>gsap</code> via CDN.</li>
+    <li>Other src: <code>jsonl, registry, claude-discovery, codex-discovery, codex-jsonl, process-discovery, triggers</code>.</li>
+  </ul>
+  <p>Env knobs: <code>META_PORT</code> (3737), <code>META_OBSERVER_MODEL</code>, <code>META_CHAT_MODEL</code>, <code>META_EXPLAIN_LANG</code> (he), <code>META_OBSERVER_BATCH_MS</code>, <code>META_OBSERVER_ENABLED=0</code> to skip the summarizer subprocess.</p>
+</section>
+
+<!-- @state:ref-decisions tier=stable -->
+<section class="panel" data-panel="decisions">
+  <h2>Decisions (why)</h2>
+  <ul>
+    <li><strong>Observer → summarizer.</strong> The per-turn insight + editable prefill mechanic was removed. The card now shows a one-sentence "what this session is about", regenerated on the 1st fresh turn then every 4 (a throttle, not per-turn). "About", not activity narration — the owner corrected this explicitly.</li>
+    <li><strong>No write channel to the terminal.</strong> The app only <em>reads</em> jsonl. "Reply to the agent" can only mean a copy-paste block: the assistant wraps the reply in a fenced <code>to-agent</code> block → the frontend renders a one-click copy card (LTR, agent's language). This is load-bearing.</li>
+    <li><strong>Language</strong> is a global setting: curated dropdown (<code>he</code> default + en/ar/es/fr/ru/de/zh), <code>localStorage</code> + <code>POST /settings/language</code> + ws <code>settings:language</code>. Drives everything said <em>to</em> the user (summaries + answers); the drafted reply stays in the agent's own language.</li>
+    <li><strong>Working dir</strong> comes from the raw jsonl <code>cwd</code> field (top-level on user/assistant records) — <em>never</em> derived from the slug, which mangles dashes (<code>claude-meta</code> → <code>claude/meta</code>).</li>
+    <li><strong>Token count shown = <code>contextTokens</code></strong> (current context-window size), not total output — it's the "how big is this session" number PRODUCT.md already names as the audience's vocabulary.</li>
+    <li><strong>Model = <code>claude-sonnet-5</code></strong> for both the summarizer and the chat assistant (env-overridable).</li>
+    <li><strong>Clear = drop + forget.</strong> "Clear discussion" (owner chose over archive) stops the chat subprocess (assistant forgets) and wipes the thread; the next send respawns fresh, re-seeded with the latest exchange.</li>
+  </ul>
+</section>
+
+<!-- @state:ref-gotchas tier=stable -->
+<section class="panel" data-panel="gotchas">
+  <h2>Gotchas — read before touching</h2>
+  <div class="card warn">
+    <h3>1. <code>public/index.html</code> contains literal <code>0x01</code> bytes</h3>
+    <p>Some JS string literals use a SOH (<code>\x01</code>) control byte as a separator (e.g. <code>.join("\x01")</code> in <code>cardSig</code>, and the <code>" "</code> separators in <code>sortedSessions</code>). Plain <code>grep</code> treats the whole file as <em>binary</em> and silently returns nothing. <strong>Use <code>grep -a</code> or <code>awk 'index($0,pat){print NR}'</code></strong> to search. The <code>Edit</code> tool will fail to match any multi-line <code>old_string</code> spanning those lines — edit only the clean lines around them.</p>
+  </div>
+  <div class="card warn">
+    <h3>2. Port 3737 is the owner's live app (old code)</h3>
+    <p><code>bun src/server.ts</code> on 3737 fails "port in use" but <strong>silently</strong> — then any browser/curl hits the <em>old</em> running app, so your changes look like they regressed (this cost real debug time; cwd looked "broken", it was the old build). Always test on a fresh port (<code>META_PORT=3943</code>+) and confirm via the boot log line <code>listening on http://localhost:PORT</code>.</p>
+  </div>
+  <div class="card warn">
+    <h3>3. chrome-devtools MCP browser wedged</h3>
+    <p>After a test server died mid-session, the devtools browser stuck on "browser already running for …/chrome-profile" and every navigate/screenshot failed. Recovery not established this session — likely needs the chrome process killed, or the <code>--isolated</code> flag. DOM inspection via <code>evaluate_script</code> worked <em>before</em> it wedged and is the reliable way to verify frontend state (no screenshot needed).</p>
+  </div>
+  <div class="card warn">
+    <h3>4. Summaries only fire on <em>fresh</em> turn closes</h3>
+    <p>The cadence counts fresh turns, not the startup backfill (a review fix). To see a summary in a test you need a live session to actually close a turn — use <code>META_OBSERVER_BATCH_MS=6000</code> and poll <code>/state</code> for <code>.summary</code>. Each observer/chat call spawns a real <code>claude</code> subprocess (needs <code>claude</code> on PATH + auth) and takes ~5–30s.</p>
+  </div>
+</section>
+
+<!-- @state:ref-contracts tier=stable -->
+<section class="panel" data-panel="contracts">
+  <h2>Contracts</h2>
+  <h3>HTTP routes</h3>
+  <ul>
+    <li><code>GET /</code>, <code>/state</code>, <code>/sessions</code>, <code>/diag/discovery*</code></li>
+    <li><code>POST /chat/send</code> <code>{sessionKey,text}</code> — sends to the chat assistant (seeded with cwd + summary + latest exchange, in <code>explainLang</code>)</li>
+    <li><code>POST /chat/clear</code> <code>{sessionKey}</code> — drops subprocess + wipes thread + broadcasts <code>chat:cleared</code></li>
+    <li><code>POST /settings/language</code> <code>{language}</code> — validated via <code>hasOwnProperty</code>; no-op guarded; broadcasts on change</li>
+  </ul>
+  <h3>ws message kinds</h3>
+  <p><code>hello{sessions,language}</code> · <code>session:upsert</code> · <code>event</code> · <code>thread:new</code> · <code>session:summary{sessionKey,summary,summaryTs}</code> · <code>chat:chunk</code> · <code>chat:status</code> · <code>chat:cleared{sessionKey}</code> · <code>settings:language{language}</code></p>
+  <h3>The <code>to-agent</code> marker</h3>
+  <p>The chat assistant wraps a suggested reply in a fenced block tagged <code>to-agent</code>. The frontend peels it into a copy card with a <strong>line-anchored</strong> regex (so an inline mention in the explanation can't false-match):</p>
+  <pre>/(?:^|\n)[ \t]*```to-agent[^\n]*\n([\s\S]*?)\n[ \t]*```/</pre>
+</section>
+
+<p class="foot">handoff brief · surgical updates only · grep <code>@state:</code> for section offsets · dates absolute · claims carry evidence</p>
+
+</div>
+<script>
+  const tabs=[...document.querySelectorAll('.tab')];
+  const panels=[...document.querySelectorAll('.panel')];
+  tabs.forEach(t=>t.addEventListener('click',()=>{
+    tabs.forEach(x=>x.setAttribute('aria-selected', x===t?'true':'false'));
+    panels.forEach(p=>p.setAttribute('data-active', p.dataset.panel===t.dataset.panel?'true':'false'));
+  }));
+</script>
+</body>
+</html>

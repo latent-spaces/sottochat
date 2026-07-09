@@ -5,7 +5,7 @@ import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 
-// the "break it down" companion. one persistent sdk subprocess per upstream
+// the chat companion the user talks to. one persistent sdk subprocess per upstream
 // session — lazily spawned on the user's first send, reused for follow-ups.
 // streams assistant text out via callback. tools disabled: it talks, doesn't
 // touch files. cwd is sandboxed under ~/.cut-the-cake/chat/<hash>/ per session
@@ -58,17 +58,9 @@ const DISALLOWED_TOOLS = [
 const CHAT_ROOT = join(homedir(), ".cut-the-cake", "chat");
 
 function systemIntro(answerLanguage: string): string {
-  return `You are the companion inside cut-the-cake. The user is watching another coding agent (Claude Code / Codex) work through a long, multi-piece run in their terminal, and they want help understanding it and deciding what to do next.
+  return `You help a developer follow a coding agent working in their terminal. Answer their questions about its output in ${answerLanguage}, plainly and briefly.
 
-Always answer in ${answerLanguage}. Explain, in ${answerLanguage}, what the agent's output actually says or did — plainly and concisely, so the user can make their next move. When you're unsure what they're referring to, ask one short clarifying question in ${answerLanguage} rather than guessing.
-
-Sometimes the user is deciding what to tell the agent next — e.g. "what should I answer", "reply to this", "tell it to…", or clearly asking you to compose a message back to the agent. ONLY in that case, after your explanation, ALSO draft the message for them to send. Write that message in the agent's OWN language — the language the agent is writing in (usually English), NOT ${answerLanguage} — and put it, and nothing else, inside a single fenced code block whose info string is exactly \`to-agent\`, like:
-
-\`\`\`to-agent
-<the message to paste back to the agent>
-\`\`\`
-
-If the user only wants an explanation or is just discussing, do NOT include a to-agent block. Never put your ${answerLanguage} explanation inside the to-agent block, and never wrap normal code samples in a \`to-agent\` block.`;
+Whenever they ask you to write, draft, or suggest a reply or response to send back to the agent, you MUST include that reply — written in the agent's own language, usually English — inside one fenced code block tagged \`to-agent\`. Only include the block when they want something to send.`;
 }
 
 function findClaudeExecutable(): string {
@@ -110,7 +102,7 @@ export function startChatHost(opts: ChatAgentOptions): {
   send: (sessionKey: string, text: string, sendOpts?: ChatSendOptions) => void;
   stop: (sessionKey?: string) => void;
 } {
-  const model = opts.model ?? "claude-sonnet-4-6";
+  const model = opts.model ?? "claude-sonnet-5";
   if (!existsSync(CHAT_ROOT)) mkdirSync(CHAT_ROOT, { recursive: true });
   const claudePath = findClaudeExecutable();
   const agents = new Map<string, AgentHandle>();
@@ -215,6 +207,10 @@ export function startChatHost(opts: ChatAgentOptions): {
           });
 
           for await (const m of result as AsyncIterable<unknown>) {
+            // if the session was cleared/stopped mid-response, drop any buffered
+            // message the aborted iterator still delivers — otherwise a late
+            // onChunk would resurrect the just-wiped thread (broadcast after chat:cleared).
+            if (stopped) break;
             const msg = m as { type?: string; message?: { content?: unknown } };
             if (msg.type !== "assistant") continue;
             const content = msg.message?.content;

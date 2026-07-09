@@ -17,8 +17,8 @@ const MAX_EVENTS_PER_SESSION = 5000;
 // on every hot reload — see state.md issue #4).
 const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED !== "0";
 // META_OBSERVER_MODEL: per-turn decisions subprocess (sonnet by default — needs judgment).
-const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-4-6";
-const CHAT_MODEL = Bun.env.META_CHAT_MODEL ?? "claude-sonnet-4-6";
+const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-5";
+const CHAT_MODEL = Bun.env.META_CHAT_MODEL ?? "claude-sonnet-5";
 const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
@@ -421,6 +421,28 @@ const server = Bun.serve({
       // summary so far, and the recent turns (latest one in full).
       const seed = buildChatSeed(sess);
       chatHost.send(sessionKey, text, { seed, language: explainLanguageName() });
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/chat/clear" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
+      if (!sessionKey) {
+        return Response.json({ error: "sessionKey required" }, { status: 400 });
+      }
+      // drop the chat subprocess so the assistant forgets, and wipe the stored
+      // thread + status. the next send spawns a fresh subprocess, re-seeded with
+      // the latest exchange.
+      chatHost.stop(sessionKey);
+      chatThreads.delete(sessionKey);
+      chatStatuses.delete(sessionKey);
+      broadcast({ kind: "chat:cleared", sessionKey });
       return Response.json({ ok: true });
     }
 

@@ -1,5 +1,5 @@
 // one long-lived sdk subprocess:
-//   - summarizer: sonnet-4-6, returns a per-session one-sentence summary
+//   - summarizer: sonnet-5, returns a per-session one-sentence summary
 // keeps prior-batch context so the summary reflects the session's arc.
 //
 // pattern: claude-mem ClaudeProvider — query() from @anthropic-ai/claude-agent-sdk,
@@ -370,7 +370,7 @@ export function startObserver(opts: ObserverOptions): {
   feed: (t: TurnFeed) => void;
   stop: () => void;
 } {
-  const summaryModel = opts.summaryModel ?? "claude-sonnet-4-6";
+  const summaryModel = opts.summaryModel ?? "claude-sonnet-5";
   const batchMs = opts.batchMs ?? 30_000;
   const getLanguage = opts.getLanguage ?? (() => "Hebrew");
 
