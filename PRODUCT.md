@@ -49,15 +49,16 @@ The product reads transcripts only. It does not pause the agent, write into the 
 - Explanation language selector: Hebrew default, plus English, Arabic, Spanish, French, Russian, German, and Chinese.
 - Suggested replies stay in the agent's own language inside a fenced `to-agent` block.
 - Per-session recent-turn context depth from 1 to 10.
-- Manual reset of a session's Q&A state.
-- Process-driven discovery registry in shadow mode via `/diag/discovery`.
+- Manual reset of a session's Q&A state; cleared discussions are archived per session (last 10) and can be viewed or restored from a history control.
+- Chat threads, summaries, and chat settings persist across server restarts (`~/.sottochat/state.json`).
+- Process-driven discovery drives inbox visibility: a session shows while its agent process is alive, plus a 30-minute grace window after its last event. `/diag/discovery` remains for inspection.
 
 ## Non-Goals
 
 - Not a notification product. No attention bait, unread dots, tab flashes, or fake urgency.
 - Not an agent control plane. No stop, approve, edit, or execute controls for upstream agents.
 - Not a team dashboard. Localhost, single-user, no auth.
-- Not a memory product. Session state is mostly in memory and can be lost on restart.
+- Not a memory product. Chat threads and summaries survive restarts, but there is no deep history, search, or cross-session recall.
 - Not a video or narration product in this branch. Older notes mention scriptifier, TTS, and MP4 export, but this checkout does not contain those server modules.
 
 ## Product Principles
