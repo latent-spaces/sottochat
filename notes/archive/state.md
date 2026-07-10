@@ -1,3 +1,5 @@
+> **ARCHIVED 2026-07-10.** This doc describes the retired cut-the-cake auto-break-down model (prefills, scriptifier, TTS, MP4 export) and does not match the codebase. Do not plan from it. The live handoff brief is `state.html`; the product source of truth is `PRODUCT.md`.
+
 # state.md — cut-the-cake
 
 cold-start brief. read this first when resuming. intentionally redundant with `plan.md` and `claude-mem-patterns.md`.

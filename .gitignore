@@ -22,7 +22,7 @@ Thumbs.db
 *.swp
 
 # vendor / reference clones (not committed)
-vendor/
+/vendor/
 
 # local overrides
 .claude/settings.local.json

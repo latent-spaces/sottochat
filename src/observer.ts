@@ -48,21 +48,6 @@ export type ObserverOptions = {
   getLanguage?: () => string;
 };
 
-const DISALLOWED_TOOLS = [
-  "Bash",
-  "Read",
-  "Write",
-  "Edit",
-  "Grep",
-  "Glob",
-  "WebFetch",
-  "WebSearch",
-  "Task",
-  "NotebookEdit",
-  "AskUserQuestion",
-  "TodoWrite",
-];
-
 // observer cwd under ~/.sottochat/observer/. (older sessions still on disk under
 // the legacy ~/.chunk-to-chat/observer/ dir stay classified internal via the
 // slug matchers in server.ts / claude-discovery.ts / index.html.)
@@ -148,7 +133,7 @@ function stripFences(text: string): string {
   return text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 }
 
-function parseSummaryResponse(text: string): Array<Omit<ObserverSummary, "sessionKey">> | null {
+export function parseSummaryResponse(text: string): Array<Omit<ObserverSummary, "sessionKey">> | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripFences(text));
@@ -280,7 +265,9 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
           model: opts.model,
           cwd: opts.cwd,
           pathToClaudeCodeExecutable: claudePath,
-          disallowedTools: DISALLOWED_TOOLS,
+          // empty allowlist: no built-in tools at all — a deny-list would
+          // silently admit tools added in future sdk releases.
+          tools: [],
           settingSources: [],
           mcpServers: {},
           strictMcpConfig: true,

@@ -40,21 +40,6 @@ export type ChatAgentOptions = {
   onStatus?: (s: ChatStatusUpdate) => void;
 };
 
-const DISALLOWED_TOOLS = [
-  "Bash",
-  "Read",
-  "Write",
-  "Edit",
-  "Grep",
-  "Glob",
-  "WebFetch",
-  "WebSearch",
-  "Task",
-  "NotebookEdit",
-  "AskUserQuestion",
-  "TodoWrite",
-];
-
 const CHAT_ROOT = join(homedir(), ".sottochat", "chat");
 
 function systemIntro(answerLanguage: string): string {
@@ -207,7 +192,9 @@ export function startChatHost(opts: ChatAgentOptions): {
               model,
               cwd,
               pathToClaudeCodeExecutable: claudePath,
-              disallowedTools: DISALLOWED_TOOLS,
+              // empty allowlist: no built-in tools at all — a deny-list would
+              // silently admit tools added in future sdk releases.
+              tools: [],
               settingSources: [],
               mcpServers: {},
               strictMcpConfig: true,
