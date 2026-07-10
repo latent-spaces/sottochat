@@ -1,0 +1,10 @@
+{"type":"user","uuid":"u-1","timestamp":"2026-07-10T10:00:00.000Z","cwd":"/Users/dev/proj","message":{"role":"user","content":"fix the login bug"}}
+{"type":"assistant","uuid":"a-1","timestamp":"2026-07-10T10:00:05.000Z","cwd":"/Users/dev/proj","message":{"role":"assistant","model":"claude-sonnet-5","content":[{"type":"text","text":"Looking at the auth module."},{"type":"tool_use","id":"toolu_01","name":"Edit","input":{"file_path":"/Users/dev/proj/src/auth.ts","old_string":"let ok = false;\nreturn ok;","new_string":"return checkToken(token);"}}],"usage":{"input_tokens":12,"output_tokens":85,"cache_read_input_tokens":4000,"cache_creation_input_tokens":200}}}
+{"type":"user","uuid":"u-2","timestamp":"2026-07-10T10:00:08.000Z","cwd":"/Users/dev/proj","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_01","content":[{"type":"text","text":"edit applied"}]}]}}
+{"type":"assistant","uuid":"a-2","timestamp":"2026-07-10T10:00:12.000Z","cwd":"/Users/dev/proj","message":{"role":"assistant","model":"claude-sonnet-5","content":[{"type":"text","text":"Done. The login check now validates the token."}],"usage":{"input_tokens":9,"output_tokens":40,"cache_read_input_tokens":4300,"cache_creation_input_tokens":0}}}
+{"type":"system","subtype":"stop_hook_summary","uuid":"s-1","timestamp":"2026-07-10T10:00:13.000Z"}
+{"type":"mode","mode":"default"}
+{"type":"file-history-snapshot","uuid":"fh-1","snapshot":{}}
+{"type":"attachment","uuid":"at-1"}
+{"type":"ai-title","title":"fix login"}
+{"type":"system","subtype":"turn_duration","uuid":"s-2","timestamp":"2026-07-10T10:00:13.500Z","durationMs":13500}

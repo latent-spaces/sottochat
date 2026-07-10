@@ -1,0 +1,13 @@
+{"timestamp":"2026-07-10T09:00:00.000Z","type":"session_meta","payload":{"id":"019f2d58-4ccc-7343-b416-cbbc836ed500","timestamp":"2026-07-10T09:00:00.000Z","cwd":"/Users/dev/my.proj","cli_version":"0.98.0","git":{"branch":"main"}}}
+{"timestamp":"2026-07-10T09:00:01.000Z","type":"turn_context","payload":{"cwd":"/Users/dev/my.proj","model":"gpt-5.4-codex","effort":"medium","model_context_window":272000}}
+{"timestamp":"2026-07-10T09:00:01.100Z","type":"event_msg","payload":{"type":"task_started","model_context_window":272000}}
+{"timestamp":"2026-07-10T09:00:01.200Z","type":"event_msg","payload":{"type":"user_message","message":"add a healthcheck endpoint"}}
+{"timestamp":"2026-07-10T09:00:03.000Z","type":"response_item","payload":{"type":"reasoning","summary":[],"content":null}}
+{"timestamp":"2026-07-10T09:00:04.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"command\":[\"bash\",\"-lc\",\"ls src\"]}","call_id":"call_1"}}
+{"timestamp":"2026-07-10T09:00:04.500Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call_1","output":"server.ts\nroutes.ts"}}
+{"timestamp":"2026-07-10T09:00:05.000Z","type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","input":"*** Begin Patch\n*** Update File: src/routes.ts\n@@\n+router.get(\"/healthz\", ok);\n*** End Patch","call_id":"call_2"}}
+{"timestamp":"2026-07-10T09:00:05.400Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_2","output":"Done."}}
+{"timestamp":"2026-07-10T09:00:06.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":52000,"output_tokens":900},"last_token_usage":{"input_tokens":1500,"cached_input_tokens":50000,"output_tokens":220},"model_context_window":272000}}}
+{"timestamp":"2026-07-10T09:00:06.100Z","type":"event_msg","payload":{"type":"agent_message","message":"Added a /healthz endpoint.","phase":"final"}}
+{"timestamp":"2026-07-10T09:00:06.100Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Added a /healthz endpoint."}]}}
+{"timestamp":"2026-07-10T09:00:06.200Z","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"Added a /healthz endpoint."}}
