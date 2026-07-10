@@ -6,6 +6,7 @@ import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver, type TurnFeed } from "./observer";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
+import { loadPersistedSessions, startPersister, type PersistedSession } from "./persistence";
 
 const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
 const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
@@ -97,6 +98,36 @@ const sockets = new Set<Bun.ServerWebSocket<unknown>>();
 const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
 
+// disk-backed state (~/.sottochat/state.json): chat threads, summaries, and
+// token counters survive restarts. loaded once at boot; live sessions overlay
+// their entries on save. entries idle for over a week are pruned on save.
+const PERSIST_MAX_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
+const persistedSessions = loadPersistedSessions();
+for (const [k, p] of persistedSessions) {
+  if (p.chatThread?.length) chatThreads.set(k, p.chatThread.slice());
+}
+function collectPersisted(): Map<string, PersistedSession> {
+  const out = new Map(persistedSessions);
+  for (const [k, s] of sessions) {
+    const p: PersistedSession = {
+      lastEventTs: s.lastEventTs,
+      chatContextTurns: s.chatContextTurns,
+      closedTurnCount: s.closedTurnCount,
+      ...(s.summary ? { summary: s.summary } : {}),
+      ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
+    };
+    const chat = chatThreads.get(k);
+    if (chat && chat.length) p.chatThread = chat;
+    out.set(k, p);
+  }
+  const cutoff = Date.now() - PERSIST_MAX_IDLE_MS;
+  for (const [k, p] of out) {
+    if ((p.lastEventTs ?? 0) < cutoff) out.delete(k);
+  }
+  return out;
+}
+const persister = startPersister(collectPersisted);
+
 function pushChatChunk(c: ChatChunk) {
   let arr = chatThreads.get(c.sessionKey);
   if (!arr) {
@@ -105,6 +136,7 @@ function pushChatChunk(c: ChatChunk) {
   }
   arr.push(c);
   if (arr.length > MAX_CHAT_CHUNKS) arr.splice(0, arr.length - MAX_CHAT_CHUNKS);
+  persister.schedule();
 }
 
 // reset a session's Q&A to pristine (as if the session was untouched): stop the
@@ -115,6 +147,11 @@ function clearChat(sessionKey: string): void {
   chatHost.stop(sessionKey);
   chatThreads.delete(sessionKey);
   chatStatuses.delete(sessionKey);
+  // drop the persisted copy too — for a session not currently tailed, the
+  // collect overlay wouldn't rebuild the entry without its thread.
+  const p = persistedSessions.get(sessionKey);
+  if (p) delete p.chatThread;
+  persister.schedule();
   broadcast({ kind: "chat:cleared", sessionKey });
 }
 
@@ -139,6 +176,16 @@ function getOrCreate(info: SessionInfo): SessionState {
       recentClosedTurns: [],
       chatContextTurns: CHAT_CONTEXT_TURNS_DEFAULT,
     };
+    // restore what a previous server run knew about this session. events/turns
+    // are re-derived from the jsonl on disk; only derived-by-model or
+    // user-tuned state needs the disk copy.
+    const p = persistedSessions.get(k);
+    if (p) {
+      if (typeof p.chatContextTurns === "number") s.chatContextTurns = p.chatContextTurns;
+      if (typeof p.closedTurnCount === "number") s.closedTurnCount = p.closedTurnCount;
+      if (typeof p.summary === "string") s.summary = p.summary;
+      if (typeof p.summaryTs === "number") s.summaryTs = p.summaryTs;
+    }
     sessions.set(k, s);
   } else {
     s.info = info;
@@ -167,6 +214,20 @@ function chatDisplayNameFor(info: SessionInfo): string | null {
   return null;
 }
 
+// the hello/upsert snapshot used to ship the whole event buffer (up to 5000
+// events, full assistant texts — megabytes per connect). the frontend only
+// derives the last CHART_TURNS(5) turns + the latest exchange from it, so send
+// just the events of the last few turns. live "event" messages keep appending
+// client-side after hydration.
+const SNAPSHOT_TURNS = 8;
+function snapshotEvents(s: SessionState): MetaEvent[] {
+  const turns = s.turns.turns.slice(-SNAPSHOT_TURNS);
+  if (turns.length === 0) return s.events.slice(-200);
+  const out: MetaEvent[] = [];
+  for (const t of turns) out.push(...t.events);
+  return out;
+}
+
 function snapshot(s: SessionState) {
   const k = keyFor(s.info);
   const chat = chatThreads.get(k);
@@ -175,7 +236,7 @@ function snapshot(s: SessionState) {
   return {
     key: k,
     info: s.info,
-    events: s.events,
+    events: snapshotEvents(s),
     threads: s.threads,
     lastEventTs: s.lastEventTs,
     model: s.model,
@@ -493,6 +554,7 @@ const server = Bun.serve({
       );
       if (sess.chatContextTurns !== turns) {
         sess.chatContextTurns = turns;
+        persister.schedule();
         broadcast({ kind: "chat:context-turns", sessionKey, turns });
       }
       return Response.json({ ok: true, turns });
@@ -570,6 +632,7 @@ const observer = OBSERVER_ENABLED
         if (s.summary === d.summary) return; // no change → no repaint/pulse
         s.summary = d.summary;
         s.summaryTs = Date.now();
+        persister.schedule();
         if (isVisible(s)) {
           broadcast({
             kind: "session:summary",
@@ -592,6 +655,7 @@ if (observer) {
 {
   const onSignal = async (sig: string) => {
     console.log(`[server] received ${sig} — stopping observer + chat host + registry`);
+    persister.flush();
     observer?.stop();
     chatHost.stop();
     registry.stop();
@@ -659,6 +723,11 @@ startTailer({
     }
 
     const result = ingestEvent(s.turns, ev);
+    // turns.ts keeps every turn forever; only the recent tail is ever read
+    // (snapshotEvents, recentClosedTurns). cap it so long sessions don't leak.
+    if (s.turns.turns.length > 50) {
+      s.turns.turns.splice(0, s.turns.turns.length - 50);
+    }
     if (result.closed) {
       // ring buffer feeding the summary digest + the chat seed.
       s.recentClosedTurns.push(result.closed);
@@ -683,6 +752,7 @@ startTailer({
         const dueForSummary = s.closedTurnCount === 1 || s.closedTurnCount % 4 === 0;
         if (dueForSummary) observer.feed(buildSummaryFeed(s));
       }
+      persister.schedule();
     }
   },
 });
