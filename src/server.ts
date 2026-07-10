@@ -31,7 +31,7 @@ const RECENT_CLOSED_TURNS = 10;
 const SUMMARY_DIGEST_TURNS = 5;
 const CHAT_CONTEXT_TURNS_MIN = 1;
 const CHAT_CONTEXT_TURNS_MAX = 10;
-const CHAT_CONTEXT_TURNS_DEFAULT = 5;
+const CHAT_CONTEXT_TURNS_DEFAULT = 1;
 // the user-facing explanation language. everything the app says TO the user —
 // the assistant's answers and the observer's glance-insight — is written in this
 // language. the suggested reply back to the coding agent stays in the agent's
