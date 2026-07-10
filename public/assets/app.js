@@ -1269,6 +1269,23 @@
         const sk = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
         resetBtn.onclick = () => resetChat(sk);
       }
+      // history (N) — lists this session's archived discussions. hidden until
+      // the first clear archives something.
+      const historyBtn = document.getElementById("d-chat-history");
+      if (historyBtn) {
+        const sk = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+        const archives = chatArchivesByKey.get(sk) || [];
+        historyBtn.hidden = archives.length === 0;
+        const label = historyBtn.querySelector(".history-label");
+        if (label) label.textContent = "history (" + archives.length + ")";
+        historyBtn.setAttribute("aria-expanded", archiveOpenPanels.has(sk) ? "true" : "false");
+        historyBtn.onclick = () => {
+          if (archiveOpenPanels.has(sk)) archiveOpenPanels.delete(sk);
+          else archiveOpenPanels.add(sk);
+          renderDetail();
+        };
+        if (!archives.length) archiveOpenPanels.delete(sk);
+      }
       const turns = deriveTurns(events);
 
       dChart.innerHTML = turns.length >= 2 ? renderChartHtml(turns, CHART_TURNS) : "";
@@ -1321,6 +1338,7 @@
       }
 
       renderConversation(sess, turns);
+      renderChatArchives(sess);
       renderChatThread(sess);
       // hide the chat-input while we're waiting for the upstream agent to reply —
       // the conversation panel above already shows the typing indicator.
@@ -1386,6 +1404,13 @@
     const RECENT_VISIBLE_CHUNKS = 2;
     const expandedThreads = new Set();
     const chatStatusByKey = new Map();
+    // archived (cleared) discussions — sessionKey → [{archivedTs, chunks}].
+    // fed by snapshots + ws "chat:archived"/"chat:restored". the history (N)
+    // button in the title row toggles the panel; archiveOpenPanels tracks which
+    // sessions have it open, archiveExpanded which entries are unfolded.
+    const chatArchivesByKey = new Map();
+    const archiveOpenPanels = new Set();
+    const archiveExpanded = new Set();
     let convoLastSession = null;
     let convoLastTurnCount = 0;
     // remember which conv-bodies the user has expanded so 5s refresh doesn't snap them shut.
@@ -2126,6 +2151,79 @@
              '</div>';
     }
 
+    // read-only list of the session's archived discussions, newest first.
+    // each entry: when it was archived, its opening question, view (unfold the
+    // transcript in place) and restore (make it the live thread again — the
+    // subprocess is gone, so a follow-up send re-seeds from current turns).
+    function renderChatArchives(sess) {
+      const el = document.getElementById("d-chat-archives");
+      if (!el) return;
+      const sk = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+      const archives = chatArchivesByKey.get(sk) || [];
+      if (!archives.length || !archiveOpenPanels.has(sk)) {
+        el.hidden = true;
+        el.innerHTML = "";
+        return;
+      }
+      el.hidden = false;
+      const items = archives.slice().reverse().map((a) => {
+        const id = sk + ":" + a.archivedTs;
+        const expanded = archiveExpanded.has(id);
+        const firstUser = a.chunks.find((c) => c.role === "user");
+        const preview = firstUser && firstUser.text ? firstUser.text : "(no question)";
+        const clipped = preview.length > 60 ? preview.slice(0, 60) + "…" : preview;
+        let body = "";
+        if (expanded) {
+          body = '<div class="archive-thread">' + a.chunks.map((c) => {
+            if (c.role === "assistant") {
+              const mdHtml = typeof marked !== "undefined"
+                ? marked.parse(c.text || "", { breaks: true, gfm: true })
+                : escapeHtml(c.text || "");
+              return '<div class="chat-row agent"><div class="chat-role">agent</div>' +
+                     '<div class="chat-body conv-md" dir="auto">' + mdHtml + '</div></div>';
+            }
+            return '<div class="chat-row you"><div class="chat-role">you</div>' +
+                   '<div class="chat-body" dir="auto">' + escapeHtml(c.text || "") + '</div></div>';
+          }).join("") + '</div>';
+        }
+        return '<div class="archive-item" data-ts="' + a.archivedTs + '">' +
+                 '<div class="archive-head">' +
+                   '<span class="archive-when">' + escapeHtml(fmtAge(Date.now() - a.archivedTs)) + ' ago</span>' +
+                   '<span class="archive-preview" dir="auto">' + escapeHtml(clipped) + '</span>' +
+                   '<button type="button" class="archive-view">' + (expanded ? "hide" : "view") + '</button>' +
+                   '<button type="button" class="archive-restore" title="make this the live discussion again">restore</button>' +
+                 '</div>' + body +
+               '</div>';
+      });
+      el.innerHTML =
+        '<div class="archives-head">past discussions</div>' + items.join("");
+
+      el.querySelectorAll(".archive-item").forEach((item) => {
+        const ts = Number(item.dataset.ts);
+        const id = sk + ":" + ts;
+        const viewBtn = item.querySelector(".archive-view");
+        if (viewBtn) viewBtn.addEventListener("click", () => {
+          if (archiveExpanded.has(id)) archiveExpanded.delete(id);
+          else archiveExpanded.add(id);
+          renderChatArchives(sess);
+        });
+        const restoreBtn = item.querySelector(".archive-restore");
+        if (restoreBtn) restoreBtn.addEventListener("click", async () => {
+          try {
+            const res = await fetch("/chat/restore", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ sessionKey: sk, archivedTs: ts }),
+            });
+            if (!res.ok) console.warn("[chat] restore failed", res.status);
+            // ws chat:restored updates state + re-renders.
+          } catch (e) {
+            console.warn("[chat] restore failed", e);
+          }
+        });
+      });
+    }
+
     function renderChatThread(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       const thread = chatThreadByKey.get(sessionKey) || [];
@@ -2272,6 +2370,9 @@
       if (snap.chatStatus && typeof snap.chatStatus.status === "string") {
         chatStatusByKey.set(key, { status: snap.chatStatus.status, message: snap.chatStatus.message, ts: snap.chatStatus.ts || 0 });
       }
+      if (Array.isArray(snap.chatArchives) && snap.chatArchives.length) {
+        chatArchivesByKey.set(key, snap.chatArchives.slice());
+      }
     }
 
     function appendEvent(sessionKey, ev) {
@@ -2361,6 +2462,26 @@
           chatThreadByKey.delete(msg.sessionKey);
           chatStatusByKey.delete(msg.sessionKey);
           expandedThreads.delete(msg.sessionKey);
+          refresh();
+        } else if (msg.kind === "chat:archived" || msg.kind === "chat:restored") {
+          if (Array.isArray(msg.archives)) {
+            if (msg.archives.length) chatArchivesByKey.set(msg.sessionKey, msg.archives.slice());
+            else chatArchivesByKey.delete(msg.sessionKey);
+          }
+          if (msg.kind === "chat:restored" && Array.isArray(msg.thread)) {
+            chatThreadByKey.set(msg.sessionKey, msg.thread.slice());
+            chatStatusByKey.delete(msg.sessionKey);
+            // restored threads are usually longer than the collapse window —
+            // open them so the user lands on what they asked to see.
+            expandedThreads.add(msg.sessionKey);
+            archiveOpenPanels.delete(msg.sessionKey);
+          }
+          refresh();
+        } else if (msg.kind === "session:remove") {
+          // process-driven discovery says this session's agent is gone (and
+          // its grace window passed) — drop it from the inbox.
+          sessionsByKey.delete(msg.sessionKey);
+          maybeRecoverStaleHash();
           refresh();
         } else if (msg.kind === "settings:language") {
           if (typeof msg.language === "string") {

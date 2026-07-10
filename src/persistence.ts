@@ -8,6 +8,8 @@ import { homedir } from "node:os";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { ChatChunk } from "./chat-agent";
 
+export type ChatArchive = { archivedTs: number; chunks: ChatChunk[] };
+
 // only state the boot-time jsonl replay can NOT rebuild belongs here: chat
 // threads and summaries (model-derived, cost tokens to regenerate), the
 // user-tuned context depth, and the summary cadence counter. token counters
@@ -16,6 +18,7 @@ import type { ChatChunk } from "./chat-agent";
 export type PersistedSession = {
   lastEventTs?: number;
   chatThread?: ChatChunk[];
+  chatArchives?: ChatArchive[];
   summary?: string;
   summaryTs?: number;
   chatContextTurns?: number;

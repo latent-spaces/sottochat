@@ -6,7 +6,12 @@ import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver, type TurnFeed } from "./observer";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
-import { loadPersistedSessions, startPersister, type PersistedSession } from "./persistence";
+import {
+  loadPersistedSessions,
+  startPersister,
+  type ChatArchive,
+  type PersistedSession,
+} from "./persistence";
 
 const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
 const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
@@ -54,13 +59,13 @@ let explainLang = isKnownLang(Bun.env.META_EXPLAIN_LANG ?? "") ? Bun.env.META_EX
 function explainLanguageName(): string {
   return isKnownLang(explainLang) ? LANGUAGE_NAMES[explainLang]! : "Hebrew";
 }
-// shadow mode for the abtop-style PID-driven discovery (src/registry.ts).
-// when off (default), the registry still runs every 2s and is exposed at
-// /diag/discovery for parity verification — it just doesn't drive the inbox
-// yet. flipping to "1" will replace the legacy mtime-driven tailer view as
-// the source-of-truth for which sessions to show; that lands in a follow-up
-// commit once the diag has been compared against real usage.
-const USE_PROCESS_DISCOVERY = Bun.env.META_USE_PROCESS_DISCOVERY === "1";
+// abtop-style PID-driven discovery (src/registry.ts) drives inbox visibility:
+// a claude-code/codex session shows only while its process is alive, or for a
+// grace window after its last event (so a just-finished run stays discussable).
+// claude-app sessions aren't process-discoverable and keep the plain time
+// window. set META_USE_PROCESS_DISCOVERY=0 to revert to the mtime-only view.
+const USE_PROCESS_DISCOVERY = Bun.env.META_USE_PROCESS_DISCOVERY !== "0";
+const DISCOVERY_GRACE_MS = Number(Bun.env.META_DISCOVERY_GRACE_MINUTES ?? 30) * 60 * 1000;
 // only feed the observer turns whose close ts is within the last
 // OBSERVER_FRESH_MS — backfill of historical turns at startup is skipped.
 const OBSERVER_FRESH_MS = Number(Bun.env.META_OBSERVER_FRESH_MS ?? 5 * 60 * 1000);
@@ -97,6 +102,25 @@ const sockets = new Set<Bun.ServerWebSocket<unknown>>();
 // kept separate so observed-data state stays focused on tailer-sourced facts.
 const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
+// past discussions, newest last. every clear (manual reset or the auto-clear
+// on a fresh turn) archives the live thread here instead of discarding it;
+// the UI lists them behind a per-session "history (N)" control and can
+// restore one as the live thread again.
+const chatArchives = new Map<string, ChatArchive[]>();
+const MAX_CHAT_ARCHIVES = 10;
+
+function archiveChatThread(sessionKey: string): boolean {
+  const thread = chatThreads.get(sessionKey);
+  if (!thread || thread.length === 0) return false;
+  let arr = chatArchives.get(sessionKey);
+  if (!arr) {
+    arr = [];
+    chatArchives.set(sessionKey, arr);
+  }
+  arr.push({ archivedTs: Date.now(), chunks: thread });
+  if (arr.length > MAX_CHAT_ARCHIVES) arr.splice(0, arr.length - MAX_CHAT_ARCHIVES);
+  return true;
+}
 
 // disk-backed state (~/.sottochat/state.json): chat threads, summaries, and
 // token counters survive restarts. loaded once at boot; live sessions overlay
@@ -105,6 +129,7 @@ const PERSIST_MAX_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
 const persistedSessions = loadPersistedSessions();
 for (const [k, p] of persistedSessions) {
   if (p.chatThread?.length) chatThreads.set(k, p.chatThread.slice());
+  if (p.chatArchives?.length) chatArchives.set(k, p.chatArchives.slice());
 }
 function collectPersisted(): Map<string, PersistedSession> {
   const out = new Map(persistedSessions);
@@ -118,6 +143,8 @@ function collectPersisted(): Map<string, PersistedSession> {
     };
     const chat = chatThreads.get(k);
     if (chat && chat.length) p.chatThread = chat;
+    const archives = chatArchives.get(k);
+    if (archives && archives.length) p.chatArchives = archives;
     out.set(k, p);
   }
   const cutoff = Date.now() - PERSIST_MAX_IDLE_MS;
@@ -145,14 +172,22 @@ function pushChatChunk(c: ChatChunk) {
 // when a session advances to a new turn.
 function clearChat(sessionKey: string): void {
   chatHost.stop(sessionKey);
+  const archived = archiveChatThread(sessionKey);
   chatThreads.delete(sessionKey);
   chatStatuses.delete(sessionKey);
-  // drop the persisted copy too — for a session not currently tailed, the
-  // collect overlay wouldn't rebuild the entry without its thread.
+  // sync the persisted copy too — for a session not currently tailed, the
+  // collect overlay wouldn't rebuild the entry.
   const p = persistedSessions.get(sessionKey);
-  if (p) delete p.chatThread;
+  if (p) {
+    delete p.chatThread;
+    const arr = chatArchives.get(sessionKey);
+    if (arr?.length) p.chatArchives = arr;
+  }
   persister.schedule();
   broadcast({ kind: "chat:cleared", sessionKey });
+  if (archived) {
+    broadcast({ kind: "chat:archived", sessionKey, archives: chatArchives.get(sessionKey) ?? [] });
+  }
 }
 
 function keyFor(info: SessionInfo): string {
@@ -248,11 +283,45 @@ function snapshot(s: SessionState) {
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
+    ...((chatArchives.get(k)?.length ?? 0) > 0 ? { chatArchives: chatArchives.get(k) } : {}),
   };
 }
 
 function isInWindow(s: SessionState): boolean {
   return s.lastEventTs > 0 && Date.now() - s.lastEventTs <= RECENT_MS;
+}
+
+// sessionIds the registry saw attached to a live PID on its latest tick.
+// null until the first tick lands (fail open — show everything).
+let liveSids: Set<string> | null = null;
+
+function isDiscoveryAlive(s: SessionState): boolean {
+  if (!USE_PROCESS_DISCOVERY || !liveSids) return true;
+  const src = s.info.source;
+  // the registry only discovers claude-code + codex processes; claude-app
+  // local-agent-mode has no discoverable PID, so it keeps the time window.
+  if (src !== "claude-code" && src !== "codex") return true;
+  if (liveSids.has(s.info.sessionId)) return true;
+  // dead PID — keep the session discussable for a grace window after its
+  // last event, then let it drop out of the inbox.
+  return Date.now() - s.lastEventTs <= DISCOVERY_GRACE_MS;
+}
+
+// which session keys clients currently see. registry ticks + incoming events
+// both reconcile against this so visibility flips fan out exactly once.
+const visibleKeys = new Set<string>();
+function syncVisibility(): void {
+  for (const [k, s] of sessions) {
+    const vis = isVisible(s);
+    const was = visibleKeys.has(k);
+    if (vis && !was) {
+      visibleKeys.add(k);
+      broadcast({ kind: "session:upsert", session: snapshot(s) });
+    } else if (!vis && was) {
+      visibleKeys.delete(k);
+      broadcast({ kind: "session:remove", sessionKey: k });
+    }
+  }
 }
 
 // claude code spawns ephemeral helper subprocesses (title generators, /code-review
@@ -266,7 +335,7 @@ function isEphemeralHelper(info: SessionInfo): boolean {
 }
 
 function isVisible(s: SessionState): boolean {
-  return isInWindow(s) && !isEphemeralHelper(s.info);
+  return isInWindow(s) && !isEphemeralHelper(s.info) && isDiscoveryAlive(s);
 }
 
 function recentSessions() {
@@ -471,7 +540,7 @@ const server = Bun.serve({
         tailerEntries.push({
           sid,
           lastEventTs: sess.lastEventTs,
-          visible: isInWindow(sess) && !isEphemeralHelper(sess.info),
+          visible: isVisible(sess),
         });
       }
       const onlyInDiscovery = [...discoverySids].filter((s) => !tailerSids.has(s));
@@ -526,6 +595,50 @@ const server = Bun.serve({
       // thread + status. the next send spawns a fresh subprocess, re-seeded with
       // the latest exchange.
       clearChat(sessionKey);
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/chat/restore" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
+      const archivedTs = typeof o.archivedTs === "number" ? o.archivedTs : null;
+      if (!sessionKey || archivedTs === null) {
+        return Response.json({ error: "sessionKey and archivedTs required" }, { status: 400 });
+      }
+      const arr = chatArchives.get(sessionKey);
+      const idx = arr ? arr.findIndex((a) => a.archivedTs === archivedTs) : -1;
+      if (!arr || idx === -1) {
+        return Response.json({ error: "unknown archive" }, { status: 404 });
+      }
+      // the restored transcript becomes the live thread. the subprocess that
+      // produced it is long gone — the next send spawns fresh and re-seeds from
+      // the current turns, so the assistant won't remember the old exchange.
+      chatHost.stop(sessionKey);
+      const [entry] = arr.splice(idx, 1);
+      // if a different discussion is currently live, archive it rather than
+      // overwrite it.
+      archiveChatThread(sessionKey);
+      chatThreads.set(sessionKey, entry!.chunks.slice());
+      chatStatuses.delete(sessionKey);
+      const p = persistedSessions.get(sessionKey);
+      if (p) {
+        p.chatThread = chatThreads.get(sessionKey);
+        p.chatArchives = arr.length ? arr : undefined;
+        if (!arr.length) delete p.chatArchives;
+      }
+      persister.schedule();
+      broadcast({
+        kind: "chat:restored",
+        sessionKey,
+        thread: chatThreads.get(sessionKey),
+        archives: arr,
+      });
       return Response.json({ ok: true });
     }
 
@@ -670,13 +783,18 @@ if (observer) {
 // comparison). when USE_PROCESS_DISCOVERY=1 in a follow-up, this snapshot
 // becomes the source-of-truth for which sessions to surface in the inbox.
 const registry = startRegistry({
-  onSnapshot: (_snap: RegistrySnapshot) => {
-    // intentionally quiet — full snapshots fan out only via /diag/discovery
-    // for now. a future commit will broadcast deltas over ws to drive the UI.
+  onSnapshot: (snap: RegistrySnapshot) => {
+    if (!USE_PROCESS_DISCOVERY) return;
+    const next = new Set<string>();
+    for (const rs of snap.sessions) next.add(rs.sessionId);
+    liveSids = next;
+    // a PID died or (re)appeared, or a grace window expired — reconcile what
+    // clients see. no-ops when nothing changed.
+    syncVisibility();
   },
 });
 console.log(
-  `[registry] enabled · use-as-driver=${USE_PROCESS_DISCOVERY} · diag at /diag/discovery`,
+  `[registry] enabled · use-as-driver=${USE_PROCESS_DISCOVERY} · grace=${Math.round(DISCOVERY_GRACE_MS / 60000)}m · diag at /diag/discovery`,
 );
 
 startTailer({
@@ -699,7 +817,7 @@ startTailer({
       info.slug.includes("chunk-to-chat-observer") ||
       info.slug.includes("cut-the-cake-chat");
     const s = getOrCreate(info);
-    const wasVisible = isVisible(s);
+    const key = keyFor(s.info);
     s.events.push(ev);
     if (s.events.length > MAX_EVENTS_PER_SESSION) {
       s.events.splice(0, s.events.length - MAX_EVENTS_PER_SESSION);
@@ -715,11 +833,15 @@ startTailer({
 
     const nowVisible = isVisible(s);
 
-    if (!wasVisible && nowVisible) {
+    if (nowVisible && !visibleKeys.has(key)) {
       // first time this session crosses into visibility — send full snapshot
+      visibleKeys.add(key);
       broadcast({ kind: "session:upsert", session: snapshot(s) });
     } else if (nowVisible) {
-      broadcast({ kind: "event", sessionKey: keyFor(s.info), event: ev });
+      broadcast({ kind: "event", sessionKey: key, event: ev });
+    } else if (visibleKeys.has(key)) {
+      visibleKeys.delete(key);
+      broadcast({ kind: "session:remove", sessionKey: key });
     }
 
     const result = ingestEvent(s.turns, ev);

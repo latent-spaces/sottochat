@@ -852,6 +852,58 @@
     }
     .d-reset-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
     .d-reset-btn .reset-glyph { font-size: 13px; line-height: 1; }
+    #d-chat-history[aria-expanded="true"] { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
+    .chat-archives {
+      margin: 10px 0;
+      padding: 10px 12px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+    .chat-archives .archives-head {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--fg-soft);
+      margin-bottom: 8px;
+    }
+    .archive-item { padding: 6px 0; }
+    .archive-item + .archive-item { border-top: 1px solid var(--border); }
+    .archive-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .archive-when {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-soft);
+      white-space: nowrap;
+    }
+    .archive-preview {
+      flex: 1;
+      min-width: 0;
+      font-size: 12px;
+      color: var(--fg);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .archive-view, .archive-restore {
+      height: 20px;
+      padding: 0 8px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-soft);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .archive-view:hover, .archive-restore:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-soft); }
+    .archive-thread { margin-top: 8px; opacity: 0.9; }
     .charts-toggle .chev { transition: transform 0.2s var(--ease-out); display: block; }
     .charts-toggle[aria-expanded="true"] .chev { transform: rotate(180deg); }
     .charts-toggle[aria-expanded="true"] { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-soft); }
@@ -1491,6 +1543,9 @@
           <button class="charts-toggle" id="d-charts-toggle" type="button" aria-expanded="false" aria-controls="d-charts-band" title="show charts">
             <svg class="chev" viewBox="0 0 12 8" width="10" height="7" aria-hidden="true"><path d="M1 1.5l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <button class="d-reset-btn" id="d-chat-history" type="button" hidden aria-expanded="false" title="past discussions for this session">
+            <span class="history-label">history</span>
+          </button>
           <button class="d-reset-btn" id="d-chat-reset" type="button" title="reset this discussion — clears everything you've asked, as if untouched">
             <span class="reset-glyph" aria-hidden="true">↺</span>reset
           </button>
@@ -1504,6 +1559,7 @@
         </div>
 
         <div class="conversation" id="d-conversation"></div>
+        <div class="chat-archives" id="d-chat-archives" hidden></div>
         <div class="chat-thread" id="d-chat-thread"></div>
         <div class="chat-input" id="d-chat-input"></div>
       </article>
