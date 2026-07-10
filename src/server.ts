@@ -691,6 +691,18 @@ const server = Bun.serve({
         explainLang = lang;
         console.log(`[settings] explain language → ${lang} (${LANGUAGE_NAMES[lang]})`);
         broadcast({ kind: "settings:language", language: explainLang });
+        // re-run every visible session's one-liner through the summarizer so
+        // the inbox cards flip to the new language instead of waiting for the
+        // next closed turn.
+        if (observer) {
+          let refed = 0;
+          for (const s of sessions.values()) {
+            if (!isVisible(s) || !s.summary || s.recentClosedTurns.length === 0) continue;
+            observer.feed(buildSummaryFeed(s));
+            refed++;
+          }
+          if (refed > 0) console.log(`[settings] re-queued ${refed} card summaries in ${LANGUAGE_NAMES[lang]}`);
+        }
       }
       return Response.json({ ok: true, language: explainLang });
     }

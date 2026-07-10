@@ -138,8 +138,15 @@ export function startChatHost(opts: ChatAgentOptions): {
           : `${intro}\n\n---\n\n`;
         content = `${seedBlock}${text}`;
       } else if (lang !== lastLanguage) {
-        // language changed mid-conversation — re-assert it for this and future replies.
-        content = `(from now on, answer in ${lang}.)\n\n${text}`;
+        // language changed mid-conversation. a parenthetical aside loses to the
+        // spawn-time intro, so restate the Language section with the same
+        // authority and mark it as superseding the earlier setting.
+        content = `Language settings changed by the developer — this supersedes the earlier Language section:
+- Answers to the developer: ${lang}
+- Text outside a \`to-agent\` block stays in ${lang}.
+- Suggested replies to the coding agent: unchanged (the agent's own language, usually English)
+
+${text}`;
       } else {
         content = text;
       }
