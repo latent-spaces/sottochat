@@ -1,7 +1,20 @@
 {
   "name": "sottochat",
+  "description": "A quiet back-channel for long autonomous agent runs — tails Claude Code / Codex transcripts and gives you a multilingual Q&A thread about each session.",
+  "license": "MIT",
   "private": true,
   "type": "module",
+  "engines": {
+    "bun": ">=1.1.0"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "agent",
+    "transcript",
+    "jsonl",
+    "bun"
+  ],
   "scripts": {
     "dev": "bun --hot src/server.ts",
     "start": "bun src/server.ts",
@@ -10,10 +23,10 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.128",
-    "@anthropic-ai/sdk": "latest"
+    "@anthropic-ai/sdk": "^0.92.0"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.3.13",
     "typescript": "^5.5.0"
   }
 }

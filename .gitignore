@@ -24,9 +24,11 @@ Thumbs.db
 # vendor / reference clones (not committed)
 /vendor/
 
-# local overrides
-.claude/settings.local.json
-.claude/scheduled_tasks.lock
+# local agent/tool state
+.claude/
+agent/
+.impeccable/
+skills-lock.json
 
 # logs
 *.log
@@ -39,3 +41,9 @@ diagnostics/
 
 # brag video output (large binary artifacts)
 brag-output/
+
+# session working docs (personal workflow, not product)
+state.html
+notes/
+docs/superpowers/
+docs/product-audit-*.md

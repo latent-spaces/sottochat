@@ -3,7 +3,8 @@
 Bun + TypeScript server (`src/server.ts`, port 3737) that tails Claude Code /
 Codex session jsonl files and serves a no-build SPA (`public/index.html` +
 `public/assets/app.js`) over websocket. Product source of truth: `PRODUCT.md`.
-Design language: `DESIGN.md`. Session handoff brief: `state.html`.
+Design language: `DESIGN.md`. Session handoff brief: `state.html` (local
+working doc, gitignored — never commit it).
 
 ## Commands
 

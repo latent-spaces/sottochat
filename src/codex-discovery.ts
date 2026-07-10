@@ -104,7 +104,7 @@ export async function mapPidToRollout(pids: number[]): Promise<Map<number, strin
 }
 
 // ── today's sessions dir ──────────────────────────────────────────────────────
-// abtop codex.rs:151-162 — `~/.codex/sessions/YYYY/MM/DD/`. we also probe
+// codex writes rollouts under `~/.codex/sessions/YYYY/MM/DD/`. we also probe
 // yesterday's dir for the timezone-rollover edge: a session started before
 // midnight UTC writes to yesterday's dir even when 'today' has changed.
 // returns most-recent-first.
