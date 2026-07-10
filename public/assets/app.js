@@ -228,7 +228,21 @@
       return s.length > n ? s.slice(0, n) + "…" : s;
     }
     function projectName(info) {
-      if (!info || !info.slug) return "";
+      if (!info) return "";
+      // prefer the real cwd: its basename keeps the hyphens/underscores the
+      // dash-encoded slug flattens away ("claude-meta" → "claude meta", not "meta").
+      // single-word basenames widen to the parent dir; capped at 4 words.
+      if (info.cwd && typeof info.cwd === "string") {
+        const segs = info.cwd.split("/").filter(Boolean);
+        if (segs.length) {
+          let words = segs[segs.length - 1].split(/[-_\s]+/).filter(Boolean);
+          if (words.length < 2 && segs.length > 1) {
+            words = segs[segs.length - 2].split(/[-_\s]+/).filter(Boolean).concat(words);
+          }
+          if (words.length) return words.slice(0, 4).join(" ");
+        }
+      }
+      if (!info.slug) return "";
       const parts = info.slug.replace(/^-+/, "").split("-");
       return parts[parts.length - 1] || info.slug;
     }
