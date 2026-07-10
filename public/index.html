@@ -586,7 +586,19 @@
       font-size: 11px;
       color: var(--fg-muted);
       margin: 2px 0 0;
-      word-break: break-all;
+      /* second header row: single line, ellipsized from the left so the path's
+         tail stays visible; soaks up the free space so the history/reset
+         buttons stay pinned right. */
+      order: 5;
+      flex: 1 1 auto;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      direction: rtl;
+      unicode-bidi: plaintext;
+      text-align: left;
+      align-self: center;
     }
 
     /* chart cards — turn complexity + code changes, panel-style with header pills */
@@ -765,11 +777,22 @@
     }
 
     /* detail page */
+    /* two deliberate rows: name + source meta + charts chevron on top,
+       working dir + history/reset actions below. the ::after break keeps the
+       flat markup while forcing the wrap between the rows. */
     .session-head {
       display: flex;
+      flex-wrap: wrap;
       align-items: baseline;
-      gap: 12px;
+      gap: 6px 12px;
       margin: 4px 0 24px;
+      min-width: 0;
+    }
+    .session-head::after {
+      content: "";
+      order: 4;
+      flex-basis: 100%;
+      height: 0;
     }
     .session-head h2 {
       font-size: 26px;
@@ -777,13 +800,25 @@
       margin: 0;
       letter-spacing: -0.02em;
       color: var(--accent);
+      /* long multi-word names ellipsize instead of wrapping the row */
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      order: 1;
+      flex: 0 1 auto;
+      min-width: 0;
     }
     .session-head .source {
       font-size: 13px;
       color: var(--fg-soft);
       margin: 0;
       font-family: var(--mono);
+      white-space: nowrap;
+      order: 2;
+      flex: none;
     }
+    .session-head .charts-toggle { order: 3; flex: none; }
+    .session-head .d-reset-btn { order: 6; flex: none; align-self: center; }
     .session-head .source .src-glyph { color: var(--accent); margin-right: 4px; }
 
     /* inline glance — agent-message bar + added/removed bars on each session card.
