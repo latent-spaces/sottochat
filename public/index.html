@@ -1512,7 +1512,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-  <script src="https://unpkg.com/rough-notation@0.5.1/lib/rough-notation.iife.js"></script>
   <script>
     // dom
     const cardsEl = document.getElementById("cards");
@@ -2466,7 +2465,7 @@
         sess.lastEventTs || 0,
         sess.summaryTs || 0,
         sess.summary || "",
-      ].join("");
+      ].join("\u0001");
     }
 
     function buildCard(sess, opts) {
