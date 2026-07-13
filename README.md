@@ -6,7 +6,7 @@ sottochat tails your local **Claude Code**, **Claude app (local agent mode)**, a
 
 The name comes from *sotto voce* ("under the voice"): the agent monologues at full voice in the terminal; sottochat is your undertone conversation on the side.
 
-![sottochat — session view with multilingual Q&A and a copyable reply card](docs/screenshot.png)
+![sottochat — session detail switching the Q&A language between Hebrew, English, Chinese, Arabic, Spanish, and French](docs/screenshot.gif)
 
 ## What it does
 
