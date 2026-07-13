@@ -6,8 +6,6 @@ sottochat tails your local **Claude Code**, **Claude app (local agent mode)**, a
 
 The name comes from *sotto voce* ("under the voice"): the agent monologues at full voice in the terminal; sottochat is your undertone conversation on the side.
 
-![sottochat — session detail switching the Q&A language between Hebrew, English, Chinese, Arabic, Spanish, and French](docs/screenshot.gif)
-
 ## What it does
 
 - **Live inbox** — discovers active agent sessions from local transcript files (`~/.claude`, `~/.codex/sessions`) and running processes, and keeps a stable list of recent runs.
