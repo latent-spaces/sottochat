@@ -1,0 +1,1264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>plan: state engine slice 1</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --bg: #fdf9fa; --surface: #fffdfd; --fg: #1a1a1f; --fg-soft: #6e6e7a;
+    --fg-muted: #9090a0; --border: #efe8eb; --border-strong: #dcd2d6;
+    --chip-tint: #f5eef1; --accent: #ec4899; --accent-soft: #fce7f3;
+    --plum: #a855f7; --ok: #10b981;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:var(--sans); background:var(--bg); color:var(--fg); font-size:15.5px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .page { max-width: 860px; margin: 0 auto; padding: 44px 28px 120px; }
+  .wordmark { font-size:14px; font-weight:600; color:var(--accent); margin:0 0 14px; }
+  h1 { font-size:30px; font-weight:650; letter-spacing:-0.02em; margin:0 0 6px; }
+  .doc-meta { font-family:var(--mono); font-size:12px; color:var(--fg-muted); margin:0 0 20px; }
+  .header-box { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px 20px; font-size:14.5px; }
+  .header-box p { margin:6px 0; }
+  .header-box .lbl { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.07em; color:var(--fg-muted); margin-left:0; }
+  .constraints { margin:18px 0 0; padding:14px 20px; background:var(--chip-tint); border-radius:12px; font-size:14px; }
+  .constraints ul { margin:6px 0 0; padding-left:22px; }
+  .constraints li { margin:3px 0; }
+  nav.toc { margin:28px 0 40px; font-size:14px; }
+  nav.toc a { color:var(--fg); text-decoration:none; }
+  nav.toc a:hover { color:var(--accent); }
+  nav.toc ol { columns:2; column-gap:32px; margin:0; padding-left:24px; }
+  nav.toc li { margin:3px 0; break-inside:avoid; }
+  h2.task {
+    font-size:20px; font-weight:650; margin:56px 0 4px; padding-top:20px;
+    border-top:1px solid var(--border); letter-spacing:-0.01em;
+  }
+  h2.task .tno { font-family:var(--mono); color:var(--accent); font-size:14px; margin-right:10px; }
+  .task-meta { font-size:13.5px; color:var(--fg-soft); margin:0 0 14px; }
+  .fi { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px; font-size:13.5px; margin:12px 0; }
+  .fi .lbl { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--fg-muted); display:block; margin-bottom:4px; }
+  .fi ul { margin:0; padding-left:20px; }
+  .fi li { margin:2px 0; }
+  .fi code { font-size:12px; }
+  .step { margin:16px 0 18px; }
+  .step .step-title { font-weight:650; font-size:14.5px; margin-bottom:6px; }
+  .step .step-title input[type=checkbox] { accent-color: var(--accent); margin-right:8px; vertical-align:-2px; width:15px; height:15px; }
+  code { font-family:var(--mono); font-size:.85em; background:var(--chip-tint); border-radius:5px; padding:1px 5px; }
+  pre { font-family:var(--mono); font-size:12px; line-height:1.5; background:#211a1f; color:#f5e8ee; border-radius:10px; padding:13px 16px; overflow-x:auto; margin:8px 0; }
+  pre .cm { color:#9d8896; }
+  .run { font-family:var(--mono); font-size:12.5px; background:var(--surface); border:1px solid var(--border-strong); border-radius:8px; padding:8px 12px; margin:6px 0; }
+  .run .exp { color:var(--fg-muted); }
+  .note { font-size:13.5px; color:var(--fg-soft); border-right:none; border-left:3px solid var(--accent-soft); padding:2px 14px; margin:10px 0; }
+  .badge { display:inline-block; font-family:var(--mono); font-size:10.5px; color:var(--plum); background:#f3e8ff; border-radius:999px; padding:0 8px; vertical-align:1px; }
+  table { width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  th { text-align:left; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--fg-muted); padding:8px 12px; background:var(--chip-tint); border-bottom:1px solid var(--border-strong); }
+  td { padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  .state { font-family:var(--mono); font-size:12px; background:var(--chip-tint); border-radius:6px; padding:1px 7px; white-space:nowrap; }
+  @media print { body{background:#fff;font-size:12px} pre{white-space:pre-wrap} h2.task{break-before:page} }
+</style>
+</head>
+<body>
+<div class="page">
+
+<p class="wordmark">sottochat · plan/active</p>
+<h1>State Engine — Slice 1 Implementation Plan</h1>
+<p class="doc-meta">2026-07-13 · spec: notes/masterplan-2026-07-12.md §4 · status: ready for execution</p>
+
+<div class="header-box">
+  <p><span class="lbl">for agentic workers</span> — REQUIRED SUB-SKILL: use <code>superpowers:subagent-driven-development</code> (recommended) or <code>superpowers:executing-plans</code> to implement this plan task-by-task. Steps use checkboxes for tracking.</p>
+  <p><span class="lbl">goal</span> — Every visible session card and detail header shows an honest attention state (<span class="state">needs decision</span>, <span class="state">plan review</span>, <span class="state">waiting</span>…) derived from a hybrid engine: deterministic transcript heuristics always, authoritative Claude Code hooks when the user installs a one-line snippet — with a receipt explaining every state.</p>
+  <p><span class="lbl">architecture</span> — A new pure state machine (<code>src/attention.ts</code>) consumes the existing MetaEvent stream plus new additive parser events (raw <code>AskUserQuestion</code> payloads, plan exits, queue ops) and optional hook signals POSTed to <code>/hooks</code>. The server resolves attention per session on each event and on a 30s tick, ships it on the session snapshot, and broadcasts changes. No model calls, no new dependencies, no persistence changes.</p>
+  <p><span class="lbl">tech stack</span> — Bun + TypeScript (server), plain JS no-build SPA (frontend), <code>bun test</code> with jsonl fixtures.</p>
+</div>
+
+<div class="constraints">
+  <strong>Global constraints</strong> (every task inherits these):
+  <ul>
+    <li>Never restart the owner's live instance on <code>:3737</code>. All manual verification runs a scratch instance: <code>META_PORT=3947 META_OBSERVER_ENABLED=0 bun src/server.ts</code>.</li>
+    <li>Existing tests must pass unchanged at every commit: <code>bun run typecheck &amp;&amp; bun test</code>. Parser changes are additive only — existing MetaEvent kinds, fields, and semantics do not change.</li>
+    <li>No new npm dependencies. No CDN scripts. Frontend stays build-free.</li>
+    <li>States inform, never interrupt: no dots, pulses, sounds, tab-title counts, or color escalation. State words render in mono pewter; <code>needs *</code> may use ink. (DESIGN.md boundary — Task 1 lands it before any UI.)</li>
+    <li>UI copy is lowercase; destructive actions name their object (<code>clear chat</code>, not <code>reset</code>).</li>
+    <li>Attention is derived state: never persisted, never computed for internal sottochat subprocesses, never minted from historical replay for dead sessions.</li>
+    <li>Commits: one per task, message given in the task. Never add <code>Co-Authored-By</code> lines.</li>
+    <li>Fixtures record real transcript shapes; each fixture file header-comments the Claude Code version it was captured from (transcript format is officially unstable).</li>
+  </ul>
+</div>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#t1">Docs first — the boundary lands before code</a></li>
+    <li><a href="#t2">Parser: structured-question &amp; plan events</a></li>
+    <li><a href="#t3">Parser: queue &amp; mode records</a></li>
+    <li><a href="#t4">attention.ts: tracker + pending lifecycle</a></li>
+    <li><a href="#t5">attention.ts: temporal resolution</a></li>
+    <li><a href="#t6">attention.ts: hook signals</a></li>
+    <li><a href="#t7">Golden replay fixture + integration test</a></li>
+    <li><a href="#t8">Server plumbing</a></li>
+    <li><a href="#t9">/hooks + /hooks/install endpoints</a></li>
+    <li><a href="#t10">Frontend: state words, receipt drawer, copy fix</a></li>
+    <li><a href="#t11">README + final verification</a></li>
+  </ol>
+</nav>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t1"><span class="tno">Task 1</span>Docs first — the boundary lands before code</h2>
+<p class="task-meta">The masterplan gates all UI on the written boundary (§2 refusal 4, §4.4). Pure doc edits, no code.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>DESIGN.md</code> (Components section, after "Session Card")</li>
+    <li>Modify: <code>PRODUCT.md</code> (Non-Goals section)</li>
+  </ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: add the states boundary to DESIGN.md</div>
+<p>Insert a new subsection into <code>DESIGN.md</code> immediately after the <code>### Session Card</code> subsection:</p>
+<pre>### Attention States
+
+Cards and the detail header may show one attention state word per session:
+`running`, `needs decision`, `needs permission`, `plan review`, `waiting`,
+`idle`, `erred`, or `unknown` (rendered as a dash).
+
+Rules:
+
+- States inform; they never interrupt. No dots, pulses, sounds, tab-title
+  counts, or color escalation. State words are mono, pewter; `needs *`
+  states may use ink. Accent stays reserved for selection and actions.
+- Every state can explain itself: clicking the state word in the detail
+  header opens a receipt ("why: AskUserQuestion asked 14:03, unanswered ·
+  via transcript"). A state that cannot show a receipt shows `unknown`.
+- `unknown` is honest and first-class. Never guess.</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: add the refusals to PRODUCT.md</div>
+<p>In <code>PRODUCT.md</code>, replace the first Non-Goals bullet (<code>- Not a notification product. No attention bait, unread dots, tab flashes, or fake urgency.</code>) with:</p>
+<pre>- Not a notification product. Session state is shown; attention is never
+  grabbed. No attention bait, unread dots, tab flashes, or fake urgency.
+- Not an agent control plane, and never a send path. sottochat does not
+  stop, approve, edit, execute, spawn, or schedule upstream agents, and
+  it never writes into the terminal. Copy-paste is deliberate friction.
+- Not a cloud product. Local tailing and local persistence are the
+  privacy pitch: no relay, no hosted sessions, no telemetry.</pre>
+<p>(The existing "Not an agent control plane" bullet is subsumed — delete it. Keep the remaining bullets.)</p>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: commit</div>
+<div class="run">git add DESIGN.md PRODUCT.md<br>git commit -m "docs: attention-state boundary and refusals ahead of state engine"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t2"><span class="tno">Task 2</span>Parser: structured-question &amp; plan events</h2>
+<p class="task-meta">Additive MetaEvents carrying raw payloads. Shapes verified against real transcripts (masterplan Appendix A).</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>src/jsonl.ts</code></li>
+    <li>Test: <code>tests/jsonl-attention.test.ts</code> (new)</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">produces (later tasks rely on these exact names)</span>
+  <ul>
+    <li><code>type AskQuestion = { question: string; header?: string; multiSelect?: boolean; options: { label: string; description?: string }[] }</code></li>
+    <li>MetaEvent kinds: <code>ask_question</code> (with <code>toolUseId</code>, <code>questions: AskQuestion[]</code>), <code>plan_exit</code>, <code>question_answered</code>, <code>tool_rejected</code> (each with <code>toolUseId</code>, <code>uuid</code>, <code>ts</code>)</li>
+  </ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: write the failing tests</div>
+<p>Create <code>tests/jsonl-attention.test.ts</code>:</p>
+<pre>import { describe, expect, test } from "bun:test";
+import { parseRecord } from "../src/jsonl";
+
+const ASK_RECORD = {
+  type: "assistant",
+  uuid: "a1",
+  timestamp: "2026-07-13T10:00:10.000Z",
+  message: {
+    role: "assistant",
+    content: [
+      { type: "text", text: "Which auth flavor?" },
+      {
+        type: "tool_use", id: "toolu_ask1", name: "AskUserQuestion",
+        input: { questions: [{
+          question: "Which auth method should the API use?",
+          header: "Auth", multiSelect: false,
+          options: [
+            { label: "JWT (recommended)", description: "stateless" },
+            { label: "Sessions", description: "server-side" },
+          ],
+        }] },
+      },
+    ],
+  },
+};
+
+describe("ask_question", () => {
+  test("AskUserQuestion tool_use emits ask_question with raw questions", () => {
+    const evs = parseRecord(ASK_RECORD);
+    const ask = evs.find((e) => e.kind === "ask_question");
+    expect(ask).toBeDefined();
+    if (ask?.kind !== "ask_question") throw new Error("unreachable");
+    expect(ask.toolUseId).toBe("toolu_ask1");
+    expect(ask.questions[0]!.header).toBe("Auth");
+    expect(ask.questions[0]!.options.map((o) => o.label)).toEqual([
+      "JWT (recommended)", "Sessions",
+    ]);
+  });
+
+  test("the plain tool_use event is still emitted (counts unchanged)", () => {
+    const evs = parseRecord(ASK_RECORD);
+    const tu = evs.filter((e) => e.kind === "tool_use");
+    expect(tu.length).toBe(1);
+  });
+});
+
+describe("plan_exit", () => {
+  test("ExitPlanMode tool_use emits plan_exit", () => {
+    const evs = parseRecord({
+      type: "assistant", uuid: "a2", timestamp: "2026-07-13T10:06:00.000Z",
+      message: { role: "assistant", content: [{
+        type: "tool_use", id: "toolu_plan1", name: "ExitPlanMode",
+        input: { plan: "1. add jwt middleware", allowedPrompts: [], planFilePath: "plan.md" },
+      }] },
+    });
+    const pe = evs.find((e) => e.kind === "plan_exit");
+    if (pe?.kind !== "plan_exit") throw new Error("plan_exit missing");
+    expect(pe.toolUseId).toBe("toolu_plan1");
+  });
+});
+
+describe("answer / rejection signatures", () => {
+  test("answered ask emits question_answered", () => {
+    const evs = parseRecord({
+      type: "user", uuid: "u2", timestamp: "2026-07-13T10:05:00.000Z",
+      message: { role: "user", content: [{
+        type: "tool_result", tool_use_id: "toolu_ask1",
+        content: 'Your questions have been answered: "Which auth method should the API use?"="JWT (recommended)"',
+      }] },
+    });
+    const qa = evs.find((e) => e.kind === "question_answered");
+    if (qa?.kind !== "question_answered") throw new Error("question_answered missing");
+    expect(qa.toolUseId).toBe("toolu_ask1");
+    expect(evs.some((e) => e.kind === "tool_result")).toBe(true);
+  });
+
+  test("rejected tool_use emits tool_rejected", () => {
+    const evs = parseRecord({
+      type: "user", uuid: "u3", timestamp: "2026-07-13T10:07:00.000Z",
+      message: { role: "user", content: [{
+        type: "tool_result", tool_use_id: "toolu_plan1",
+        content: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file).",
+      }] },
+    });
+    const tr = evs.find((e) => e.kind === "tool_rejected");
+    if (tr?.kind !== "tool_rejected") throw new Error("tool_rejected missing");
+    expect(tr.toolUseId).toBe("toolu_plan1");
+  });
+});</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: run to verify failure</div>
+<div class="run">bun test tests/jsonl-attention.test.ts<br><span class="exp">Expected: FAIL — ask_question / plan_exit / question_answered / tool_rejected not found</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: implement in src/jsonl.ts</div>
+<p>3a. Add the payload type and new MetaEvent members (extend the existing union — do not touch existing members):</p>
+<pre>export type AskQuestion = {
+  question: string;
+  header?: string;
+  multiSelect?: boolean;
+  options: { label: string; description?: string }[];
+};
+
+export type MetaEvent =
+  | <span class="cm">/* …existing five members unchanged… */</span>
+  | { kind: "ask_question"; uuid: string; toolUseId: string; questions: AskQuestion[]; ts: number }
+  | { kind: "plan_exit"; uuid: string; toolUseId: string; ts: number }
+  | { kind: "question_answered"; uuid: string; toolUseId: string; ts: number }
+  | { kind: "tool_rejected"; uuid: string; toolUseId: string; ts: number };</pre>
+<p>3b. In <code>parseAssistant</code>, inside the <code>b?.type === "tool_use"</code> branch, after the existing <code>events.push({ kind: "tool_use", … })</code>, add:</p>
+<pre>if (tool === "AskUserQuestion") {
+  const questions = parseAskQuestions(b.input);
+  if (questions.length > 0) {
+    events.push({ kind: "ask_question", uuid: `${baseUuid}:q${events.length}`, toolUseId, questions, ts });
+  }
+} else if (tool === "ExitPlanMode") {
+  events.push({ kind: "plan_exit", uuid: `${baseUuid}:p${events.length}`, toolUseId, ts });
+}</pre>
+<p>3c. In <code>parseUser</code>, inside the <code>b?.type === "tool_result"</code> branch, after the existing <code>events.push({ kind: "tool_result", … })</code>, add:</p>
+<pre>const fullText = toolResultText(b.content);
+if (fullText.startsWith("Your questions have been answered")) {
+  events.push({ kind: "question_answered", uuid: `${baseUuid}:qa${events.length}`, toolUseId, ts });
+} else if (fullText.startsWith("The user doesn't want to proceed with this tool use")) {
+  events.push({ kind: "tool_rejected", uuid: `${baseUuid}:tr${events.length}`, toolUseId, ts });
+}</pre>
+<p>3d. Add the two helpers next to <code>summarizeToolResult</code>:</p>
+<pre><span class="cm">// untruncated head of a tool_result's text — signature detection needs more
+// than summarizeToolResult's 100-char clip.</span>
+function toolResultText(content: unknown): string {
+  if (typeof content === "string") return content.slice(0, 400);
+  if (!Array.isArray(content)) return "";
+  for (const b of content as Block[]) {
+    if (b?.type === "text" && typeof b.text === "string") return b.text.slice(0, 400);
+  }
+  return "";
+}
+
+function parseAskQuestions(input: unknown): AskQuestion[] {
+  if (!input || typeof input !== "object") return [];
+  const qs = (input as { questions?: unknown }).questions;
+  if (!Array.isArray(qs)) return [];
+  const out: AskQuestion[] = [];
+  for (const q of qs) {
+    if (!q || typeof q !== "object") continue;
+    const qq = q as Record&lt;string, unknown&gt;;
+    if (typeof qq.question !== "string") continue;
+    const optsRaw = Array.isArray(qq.options) ? qq.options : [];
+    const options: AskQuestion["options"] = [];
+    for (const o of optsRaw) {
+      if (!o || typeof o !== "object") continue;
+      const oo = o as Record&lt;string, unknown&gt;;
+      if (typeof oo.label !== "string") continue;
+      options.push({
+        label: oo.label,
+        ...(typeof oo.description === "string" ? { description: oo.description } : {}),
+      });
+    }
+    out.push({
+      question: qq.question,
+      ...(typeof qq.header === "string" ? { header: qq.header } : {}),
+      ...(typeof qq.multiSelect === "boolean" ? { multiSelect: qq.multiSelect } : {}),
+      options,
+    });
+  }
+  return out;
+}</pre>
+<p>3e. Update the file's header comment (line 1-4) to mention the new events.</p>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: verify green, and that nothing else broke</div>
+<div class="run">bun run typecheck &amp;&amp; bun test<br><span class="exp">Expected: typecheck clean; all tests pass (33 existing + new)</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 5: commit</div>
+<div class="run">git add src/jsonl.ts tests/jsonl-attention.test.ts<br>git commit -m "feat: parse structured questions, plan exits, answer/rejection signatures"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t3"><span class="tno">Task 3</span>Parser: queue &amp; mode records</h2>
+<p class="task-meta">Queue records prove the operator already responded (attention suppression). <strong>Verified quirk:</strong> these records have <em>no <code>uuid</code></em> (mode also has no <code>timestamp</code>), and queue ops are <code>enqueue | dequeue | remove</code> — so the branch must sit <em>before</em> parseRecord's uuid guard.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>src/jsonl.ts</code> (parseRecord top)</li>
+    <li>Test: <code>tests/jsonl-attention.test.ts</code> (extend)</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">produces</span>
+  <ul><li>MetaEvent kinds: <code>queue_op</code> (<code>op: "enqueue" | "dequeue" | "remove"</code>), <code>mode_change</code> (<code>mode: string</code>)</li></ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: write the failing tests (append to tests/jsonl-attention.test.ts)</div>
+<pre>describe("queue_op / mode_change", () => {
+  test("queue-operation without uuid still parses", () => {
+    const evs = parseRecord({
+      type: "queue-operation", operation: "enqueue",
+      timestamp: "2026-07-13T10:08:00.000Z", content: "continue",
+    });
+    const q = evs.find((e) => e.kind === "queue_op");
+    if (q?.kind !== "queue_op") throw new Error("queue_op missing");
+    expect(q.op).toBe("enqueue");
+  });
+
+  test("dequeue and remove both parse", () => {
+    for (const operation of ["dequeue", "remove"]) {
+      const evs = parseRecord({ type: "queue-operation", operation, timestamp: "2026-07-13T10:08:30.000Z" });
+      const q = evs.find((e) => e.kind === "queue_op");
+      if (q?.kind !== "queue_op") throw new Error("queue_op missing");
+      expect(q.op).toBe(operation);
+    }
+  });
+
+  test("mode record (no uuid, no timestamp) parses", () => {
+    const evs = parseRecord({ type: "mode", mode: "plan" });
+    const m = evs.find((e) => e.kind === "mode_change");
+    if (m?.kind !== "mode_change") throw new Error("mode_change missing");
+    expect(m.mode).toBe("plan");
+  });
+});</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: run to verify failure</div>
+<div class="run">bun test tests/jsonl-attention.test.ts<br><span class="exp">Expected: FAIL — queue_op / mode_change not emitted (uuid guard returns [])</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: implement</div>
+<p>3a. Extend the MetaEvent union:</p>
+<pre>  | { kind: "queue_op"; uuid: string; op: "enqueue" | "dequeue" | "remove"; ts: number }
+  | { kind: "mode_change"; uuid: string; mode: string; ts: number }</pre>
+<p>3b. In <code>parseRecord</code>, insert <em>before</em> the <code>if (typeof r.uuid !== "string") return [];</code> guard (these records carry no uuid — synthesize one):</p>
+<pre>const earlyTs = typeof r.timestamp === "string" ? Date.parse(r.timestamp) || Date.now() : Date.now();
+if (r.type === "queue-operation") {
+  const op = (raw as { operation?: unknown }).operation;
+  if (op === "enqueue" || op === "dequeue" || op === "remove") {
+    return [{ kind: "queue_op", uuid: `queue-${earlyTs}-${op}`, op, ts: earlyTs }];
+  }
+  return [];
+}
+if (r.type === "mode") {
+  const mode = (raw as { mode?: unknown }).mode;
+  if (typeof mode === "string") {
+    return [{ kind: "mode_change", uuid: `mode-${earlyTs}-${mode}`, mode, ts: earlyTs }];
+  }
+  return [];
+}</pre>
+<div class="note">turns.ts drops events that arrive while no turn is open and tallies only known kinds — new kinds flow through <code>turn.events</code> untouched, which is what we want. The frontend event renderers are if-chains with no else (verified app.js:302-327, 2409) so unknown kinds render as nothing.</div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: verify green</div>
+<div class="run">bun run typecheck &amp;&amp; bun test<br><span class="exp">Expected: all pass</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 5: commit</div>
+<div class="run">git add src/jsonl.ts tests/jsonl-attention.test.ts<br>git commit -m "feat: parse queue-operation and mode records (uuid-less, additive)"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t4"><span class="tno">Task 4</span>attention.ts: tracker + pending lifecycle</h2>
+<p class="task-meta">The pure core. Pending-map by <code>toolUseId</code> <span class="badge">codex</span>; any matching <code>tool_result</code> or a new <code>user_message</code> clears. No timers yet — resolution here covers only pending-driven states + <span class="state">unknown</span> fallback.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Create: <code>src/attention.ts</code></li>
+    <li>Test: <code>tests/attention.test.ts</code> (new)</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">produces (exact signatures later tasks use)</span>
+  <ul>
+    <li><code>createAttentionTracker(): AttentionTracker</code></li>
+    <li><code>ingestAttentionEvent(t: AttentionTracker, ev: MetaEvent): void</code></li>
+    <li><code>resolveAttention(t, opts: { now: number; alive: boolean; lastEventTs: number }): Attention</code></li>
+    <li><code>Attention = { state: AttentionWord; confidence: "hook"|"strong"|"weak"; since: number; receipt?: { kind: string; toolUseId?: string; excerpt?: string; ts: number } }</code></li>
+  </ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: write the failing tests</div>
+<p>Create <code>tests/attention.test.ts</code>:</p>
+<pre>import { describe, expect, test } from "bun:test";
+import {
+  createAttentionTracker, ingestAttentionEvent, resolveAttention,
+} from "../src/attention";
+import type { MetaEvent } from "../src/jsonl";
+
+const T0 = Date.parse("2026-07-13T10:00:00.000Z");
+const user = (ts: number): MetaEvent => ({ kind: "user_message", uuid: `u${ts}`, text: "go", ts });
+const ask = (id: string, ts: number): MetaEvent => ({
+  kind: "ask_question", uuid: `a${ts}`, toolUseId: id, ts,
+  questions: [{ question: "Which auth method?", header: "Auth", options: [{ label: "JWT" }] }],
+});
+const result = (id: string, ts: number): MetaEvent => ({
+  kind: "tool_result", uuid: `r${ts}`, toolUseId: id, summary: "", isError: false, ts,
+});
+const opts = (now: number) => ({ now, alive: true, lastEventTs: now });
+
+function track(evs: MetaEvent[]) {
+  const t = createAttentionTracker();
+  for (const ev of evs) ingestAttentionEvent(t, ev);
+  return t;
+}
+
+describe("pending lifecycle", () => {
+  test("open ask → needs decision, strong, with receipt", () => {
+    const t = track([user(T0), ask("toolu_1", T0 + 10_000)]);
+    const a = resolveAttention(t, opts(T0 + 15_000));
+    expect(a.state).toBe("needs decision");
+    expect(a.confidence).toBe("strong");
+    expect(a.receipt?.toolUseId).toBe("toolu_1");
+    expect(a.receipt?.excerpt).toContain("Which auth method?");
+  });
+
+  test("tool_result clears the pending ask", () => {
+    const t = track([user(T0), ask("toolu_1", T0 + 10_000), result("toolu_1", T0 + 20_000)]);
+    expect(resolveAttention(t, opts(T0 + 21_000)).state).not.toBe("needs decision");
+  });
+
+  test("a new user_message clears all pendings", () => {
+    const t = track([user(T0), ask("toolu_1", T0 + 10_000), user(T0 + 30_000)]);
+    expect(resolveAttention(t, opts(T0 + 31_000)).state).not.toBe("needs decision");
+  });
+
+  test("plan_exit → plan review until its result arrives", () => {
+    const t = track([user(T0), { kind: "plan_exit", uuid: "p1", toolUseId: "toolu_p", ts: T0 + 5_000 }]);
+    expect(resolveAttention(t, opts(T0 + 6_000)).state).toBe("plan review");
+    ingestAttentionEvent(t, result("toolu_p", T0 + 9_000));
+    expect(resolveAttention(t, opts(T0 + 10_000)).state).not.toBe("plan review");
+  });
+
+  test("empty tracker resolves unknown", () => {
+    const a = resolveAttention(createAttentionTracker(), { now: T0, alive: true, lastEventTs: 0 });
+    expect(a.state).toBe("unknown");
+  });
+
+  test("queued input suppresses needs decision", () => {
+    const t = track([
+      user(T0), ask("toolu_1", T0 + 10_000),
+      { kind: "queue_op", uuid: "q1", op: "enqueue", ts: T0 + 20_000 },
+    ]);
+    expect(resolveAttention(t, opts(T0 + 21_000)).state).not.toBe("needs decision");
+  });
+});</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: run to verify failure</div>
+<div class="run">bun test tests/attention.test.ts<br><span class="exp">Expected: FAIL — Cannot find module '../src/attention'</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: implement src/attention.ts</div>
+<pre><span class="cm">// derives one attention state per session from the MetaEvent stream
+// (+ optional hook signals, task 6). pure and deterministic: no model
+// calls, no timers — resolveAttention takes `now` so tests own the clock.
+// masterplan §4: `unknown` is first-class; there is deliberately no `done`.</span>
+import type { MetaEvent } from "./jsonl";
+
+export type AttentionWord =
+  | "running" | "needs decision" | "needs permission" | "plan review"
+  | "waiting" | "idle" | "erred" | "unknown";
+
+export type Attention = {
+  state: AttentionWord;
+  confidence: "hook" | "strong" | "weak";
+  since: number;
+  receipt?: { kind: string; toolUseId?: string; excerpt?: string; ts: number };
+};
+
+type Pending = { toolUseId: string; ts: number; excerpt: string };
+
+export type AttentionTracker = {
+  pendingAsks: Map&lt;string, Pending&gt;;
+  pendingPlans: Map&lt;string, Pending&gt;;
+  turnOpen: boolean;
+  sawAnyEvent: boolean;
+  queuedCount: number;
+  lastActivityTs: number;
+  lastStopTs: number;
+};
+
+export function createAttentionTracker(): AttentionTracker {
+  return {
+    pendingAsks: new Map(),
+    pendingPlans: new Map(),
+    turnOpen: false,
+    sawAnyEvent: false,
+    queuedCount: 0,
+    lastActivityTs: 0,
+    lastStopTs: 0,
+  };
+}
+
+function clip(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+}
+
+export function ingestAttentionEvent(t: AttentionTracker, ev: MetaEvent): void {
+  t.sawAnyEvent = true;
+  switch (ev.kind) {
+    case "user_message":
+      t.turnOpen = true;
+      t.pendingAsks.clear();
+      t.pendingPlans.clear();
+      t.lastActivityTs = ev.ts;
+      break;
+    case "assistant_text":
+    case "tool_use":
+      t.turnOpen = true;
+      t.lastActivityTs = ev.ts;
+      break;
+    case "ask_question": {
+      const q = ev.questions[0];
+      const excerpt = q ? clip(q.header ? `${q.header}: ${q.question}` : q.question, 80) : "question";
+      t.pendingAsks.set(ev.toolUseId, { toolUseId: ev.toolUseId, ts: ev.ts, excerpt });
+      t.lastActivityTs = ev.ts;
+      break;
+    }
+    case "plan_exit":
+      t.pendingPlans.set(ev.toolUseId, { toolUseId: ev.toolUseId, ts: ev.ts, excerpt: "plan submitted" });
+      t.lastActivityTs = ev.ts;
+      break;
+    case "tool_result":
+    case "question_answered":
+    case "tool_rejected":
+      t.pendingAsks.delete(ev.toolUseId);
+      t.pendingPlans.delete(ev.toolUseId);
+      t.lastActivityTs = ev.ts;
+      break;
+    case "stop":
+      t.turnOpen = false;
+      t.lastStopTs = ev.ts;
+      break;
+    case "queue_op":
+      if (ev.op === "enqueue") t.queuedCount += 1;
+      else t.queuedCount = Math.max(0, t.queuedCount - 1);
+      break;
+    case "mode_change":
+      break; <span class="cm">// corroboration only — unused in v1 resolution</span>
+  }
+}
+
+export type ResolveOpts = { now: number; alive: boolean; lastEventTs: number };
+
+function oldest(m: Map&lt;string, Pending&gt;): Pending {
+  let best: Pending | undefined;
+  for (const p of m.values()) if (!best || p.ts &lt; best.ts) best = p;
+  return best!;
+}
+
+export function resolveAttention(t: AttentionTracker, opts: ResolveOpts): Attention {
+  if (!t.sawAnyEvent) {
+    return { state: "unknown", confidence: "weak", since: opts.now, receipt: { kind: "no_signals", ts: opts.now } };
+  }
+  if (t.queuedCount === 0 &amp;&amp; t.pendingAsks.size &gt; 0) {
+    const p = oldest(t.pendingAsks);
+    return {
+      state: "needs decision", confidence: "strong", since: p.ts,
+      receipt: { kind: "ask_question", toolUseId: p.toolUseId, excerpt: p.excerpt, ts: p.ts },
+    };
+  }
+  if (t.queuedCount === 0 &amp;&amp; t.pendingPlans.size &gt; 0) {
+    const p = oldest(t.pendingPlans);
+    return {
+      state: "plan review", confidence: "strong", since: p.ts,
+      receipt: { kind: "plan_exit", toolUseId: p.toolUseId, excerpt: p.excerpt, ts: p.ts },
+    };
+  }
+  <span class="cm">// temporal states land in task 5; honest fallback until then.</span>
+  return { state: "unknown", confidence: "weak", since: opts.now, receipt: { kind: "unresolved", ts: opts.now } };
+}</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: verify green</div>
+<div class="run">bun run typecheck &amp;&amp; bun test tests/attention.test.ts<br><span class="exp">Expected: PASS (all 6)</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 5: commit</div>
+<div class="run">git add src/attention.ts tests/attention.test.ts<br>git commit -m "feat: attention tracker — pending ask/plan lifecycle"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t5"><span class="tno">Task 5</span>attention.ts: temporal resolution</h2>
+<p class="task-meta">running / waiting / idle / erred / unknown. Thresholds are exported constants so tests and the receipt drawer name them. No <span class="state">done</span> — deliberate <span class="badge">codex</span>.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>src/attention.ts</code> (resolveAttention tail + constants)</li>
+    <li>Test: <code>tests/attention.test.ts</code> (extend)</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">produces</span>
+  <ul><li><code>RUNNING_STALL_MS = 90_000</code>, <code>WAITING_WINDOW_MS = 1_800_000</code> (exported)</li></ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: write the failing tests (append)</div>
+<pre>import { RUNNING_STALL_MS, WAITING_WINDOW_MS } from "../src/attention";
+
+describe("temporal states", () => {
+  const asst = (ts: number): MetaEvent =>
+    ({ kind: "assistant_text", uuid: `t${ts}`, text: "working…", ts });
+  const stop = (ts: number): MetaEvent => ({ kind: "stop", uuid: `s${ts}`, ts });
+
+  test("recent activity in an open turn → running", () => {
+    const t = track([user(T0), asst(T0 + 5_000)]);
+    const a = resolveAttention(t, opts(T0 + 10_000));
+    expect(a.state).toBe("running");
+  });
+
+  test("open turn stalled past RUNNING_STALL_MS → unknown (could be a permission prompt)", () => {
+    const t = track([user(T0), asst(T0 + 5_000)]);
+    const a = resolveAttention(t, opts(T0 + 5_000 + RUNNING_STALL_MS + 1_000));
+    expect(a.state).toBe("unknown");
+    expect(a.receipt?.kind).toBe("stalled_turn");
+  });
+
+  test("after stop → waiting, then idle past WAITING_WINDOW_MS", () => {
+    const t = track([user(T0), asst(T0 + 5_000), stop(T0 + 6_000)]);
+    expect(resolveAttention(t, opts(T0 + 60_000)).state).toBe("waiting");
+    expect(resolveAttention(t, opts(T0 + 6_000 + WAITING_WINDOW_MS + 1_000)).state).toBe("idle");
+  });
+
+  test("queued input after stop → running (agent will consume it)", () => {
+    const t = track([
+      user(T0), asst(T0 + 5_000), stop(T0 + 6_000),
+      { kind: "queue_op", uuid: "q1", op: "enqueue", ts: T0 + 7_000 },
+    ]);
+    expect(resolveAttention(t, opts(T0 + 8_000)).state).toBe("running");
+  });
+
+  test("process death mid-turn → erred; after stop → idle", () => {
+    const mid = track([user(T0), asst(T0 + 5_000)]);
+    expect(resolveAttention(mid, { now: T0 + 10_000, alive: false, lastEventTs: T0 + 5_000 }).state).toBe("erred");
+    const done = track([user(T0), asst(T0 + 5_000), stop(T0 + 6_000)]);
+    expect(resolveAttention(done, { now: T0 + 10_000, alive: false, lastEventTs: T0 + 6_000 }).state).toBe("idle");
+  });
+});</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: run to verify failure</div>
+<div class="run">bun test tests/attention.test.ts<br><span class="exp">Expected: FAIL — temporal cases resolve "unknown"/missing constants</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: implement</div>
+<p>3a. Add the constants at the top of <code>src/attention.ts</code>:</p>
+<pre><span class="cm">// an open turn with no event for this long is no longer confidently
+// "running" — could be a permission prompt we can't see, so: unknown.</span>
+export const RUNNING_STALL_MS = 90_000;
+<span class="cm">// after a stop, the agent "waits" for a reply this long, then reads idle.</span>
+export const WAITING_WINDOW_MS = 30 * 60_000;</pre>
+<p>3b. Replace the final fallback of <code>resolveAttention</code> (the task-4 <code>return { state: "unknown" … "unresolved" … }</code> line) with:</p>
+<pre>  if (!opts.alive) {
+    if (t.turnOpen) {
+      return {
+        state: "erred", confidence: "weak", since: opts.lastEventTs,
+        receipt: { kind: "process_gone_mid_turn", ts: opts.lastEventTs },
+      };
+    }
+    return { state: "idle", confidence: "weak", since: opts.lastEventTs, receipt: { kind: "process_gone", ts: opts.lastEventTs } };
+  }
+  if (t.turnOpen) {
+    if (opts.now - t.lastActivityTs &lt;= RUNNING_STALL_MS) {
+      return { state: "running", confidence: "strong", since: t.lastActivityTs, receipt: { kind: "recent_activity", ts: t.lastActivityTs } };
+    }
+    return {
+      state: "unknown", confidence: "weak", since: t.lastActivityTs,
+      receipt: { kind: "stalled_turn", excerpt: "turn open, no activity — possibly a permission prompt", ts: t.lastActivityTs },
+    };
+  }
+  <span class="cm">// turn closed</span>
+  if (t.queuedCount &gt; 0) {
+    return { state: "running", confidence: "weak", since: t.lastStopTs, receipt: { kind: "queued_input", ts: t.lastStopTs } };
+  }
+  if (t.lastStopTs &gt; 0 &amp;&amp; opts.now - t.lastStopTs &lt;= WAITING_WINDOW_MS) {
+    return { state: "waiting", confidence: "weak", since: t.lastStopTs, receipt: { kind: "turn_ended", ts: t.lastStopTs } };
+  }
+  return { state: "idle", confidence: "weak", since: t.lastStopTs || t.lastActivityTs, receipt: { kind: "no_recent_activity", ts: opts.now } };</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: verify green</div>
+<div class="run">bun run typecheck &amp;&amp; bun test tests/attention.test.ts<br><span class="exp">Expected: PASS (11)</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 5: commit</div>
+<div class="run">git add src/attention.ts tests/attention.test.ts<br>git commit -m "feat: attention temporal resolution — running/waiting/idle/erred/unknown"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t6"><span class="tno">Task 6</span>attention.ts: hook signals</h2>
+<p class="task-meta">The authoritative overlay (masterplan §1 fact 3). Hook posts only <em>add confidence</em> — they refine states, never invent sessions.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>src/attention.ts</code></li>
+    <li>Test: <code>tests/attention.test.ts</code> (extend)</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">produces</span>
+  <ul>
+    <li><code>applyHookSignal(t: AttentionTracker, sig: HookSignal): void</code></li>
+    <li><code>HookSignal = { kind: "permission_request"; toolName?: string; ts: number } | { kind: "idle_notification"; ts: number } | { kind: "stop"; ts: number }</code></li>
+    <li><code>PERMISSION_TTL_MS = 900_000</code> (exported)</li>
+  </ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: write the failing tests (append)</div>
+<pre>import { applyHookSignal, PERMISSION_TTL_MS } from "../src/attention";
+
+describe("hook signals", () => {
+  const asst = (ts: number): MetaEvent =>
+    ({ kind: "assistant_text", uuid: `t${ts}`, text: "working…", ts });
+
+  test("permission_request → needs permission with hook confidence", () => {
+    const t = track([user(T0), asst(T0 + 5_000)]);
+    applyHookSignal(t, { kind: "permission_request", toolName: "Bash", ts: T0 + 6_000 });
+    const a = resolveAttention(t, opts(T0 + 10_000));
+    expect(a.state).toBe("needs permission");
+    expect(a.confidence).toBe("hook");
+    expect(a.receipt?.excerpt).toContain("Bash");
+  });
+
+  test("permission signal clears on any tool_result and expires after TTL", () => {
+    const t = track([user(T0), asst(T0 + 5_000)]);
+    applyHookSignal(t, { kind: "permission_request", ts: T0 + 6_000 });
+    ingestAttentionEvent(t, result("toolu_x", T0 + 8_000));
+    expect(resolveAttention(t, opts(T0 + 9_000)).state).toBe("running");
+
+    const t2 = track([user(T0), asst(T0 + 5_000)]);
+    applyHookSignal(t2, { kind: "permission_request", ts: T0 + 6_000 });
+    expect(resolveAttention(t2, opts(T0 + 6_000 + PERMISSION_TTL_MS + 1_000)).state).not.toBe("needs permission");
+  });
+
+  test("pending ask outranks permission hook", () => {
+    const t = track([user(T0), ask("toolu_1", T0 + 5_000)]);
+    applyHookSignal(t, { kind: "permission_request", ts: T0 + 6_000 });
+    expect(resolveAttention(t, opts(T0 + 7_000)).state).toBe("needs decision");
+  });
+
+  test("idle_notification on an open turn → waiting via hook", () => {
+    const t = track([user(T0), asst(T0 + 5_000)]);
+    applyHookSignal(t, { kind: "idle_notification", ts: T0 + 60_000 });
+    const a = resolveAttention(t, opts(T0 + 61_000));
+    expect(a.state).toBe("waiting");
+    expect(a.confidence).toBe("hook");
+  });
+
+  test("hook stop closes the turn", () => {
+    const t = track([user(T0), asst(T0 + 5_000)]);
+    applyHookSignal(t, { kind: "stop", ts: T0 + 6_000 });
+    expect(resolveAttention(t, opts(T0 + 10_000)).state).toBe("waiting");
+  });
+});</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: run to verify failure</div>
+<div class="run">bun test tests/attention.test.ts<br><span class="exp">Expected: FAIL — applyHookSignal not exported</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: implement</div>
+<p>3a. Constant + tracker fields (add to the <code>AttentionTracker</code> type and <code>createAttentionTracker</code> initializer):</p>
+<pre>export const PERMISSION_TTL_MS = 15 * 60_000;
+
+<span class="cm">// on AttentionTracker:</span>
+  hookPermission?: { ts: number; toolName?: string };
+  hookIdleTs?: number;
+<span class="cm">// createAttentionTracker(): the two fields start undefined — no initializer change needed.</span></pre>
+<p>3b. New export:</p>
+<pre>export type HookSignal =
+  | { kind: "permission_request"; toolName?: string; ts: number }
+  | { kind: "idle_notification"; ts: number }
+  | { kind: "stop"; ts: number };
+
+export function applyHookSignal(t: AttentionTracker, sig: HookSignal): void {
+  t.sawAnyEvent = true;
+  if (sig.kind === "permission_request") {
+    t.hookPermission = { ts: sig.ts, ...(sig.toolName ? { toolName: sig.toolName } : {}) };
+  } else if (sig.kind === "idle_notification") {
+    t.hookIdleTs = sig.ts;
+  } else {
+    t.turnOpen = false;
+    t.lastStopTs = Math.max(t.lastStopTs, sig.ts);
+    t.hookPermission = undefined;
+  }
+}</pre>
+<p>3c. Clear the permission overlay when results/answers/user input arrive — in <code>ingestAttentionEvent</code>, add <code>t.hookPermission = undefined;</code> inside the <code>user_message</code> case and inside the shared <code>tool_result / question_answered / tool_rejected</code> case. Also add <code>t.hookIdleTs = undefined;</code> to the <code>user_message</code> case.</p>
+<p>3d. In <code>resolveAttention</code>, insert between the <code>pendingPlans</code> block and the <code>!opts.alive</code> block:</p>
+<pre>  if (t.hookPermission &amp;&amp; opts.now - t.hookPermission.ts &lt;= PERMISSION_TTL_MS) {
+    const tn = t.hookPermission.toolName;
+    return {
+      state: "needs permission", confidence: "hook", since: t.hookPermission.ts,
+      receipt: { kind: "hook_permission_request", excerpt: tn ? `permission prompt: ${tn}` : "permission prompt", ts: t.hookPermission.ts },
+    };
+  }
+  if (t.hookIdleTs &amp;&amp; opts.now - t.hookIdleTs &lt;= WAITING_WINDOW_MS &amp;&amp; t.queuedCount === 0) {
+    return {
+      state: "waiting", confidence: "hook", since: t.hookIdleTs,
+      receipt: { kind: "hook_idle_prompt", ts: t.hookIdleTs },
+    };
+  }</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: verify green</div>
+<div class="run">bun run typecheck &amp;&amp; bun test<br><span class="exp">Expected: all pass (16 attention + rest)</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 5: commit</div>
+<div class="run">git add src/attention.ts tests/attention.test.ts<br>git commit -m "feat: attention hook overlay — authoritative permission/idle/stop signals"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t7"><span class="tno">Task 7</span>Golden replay fixture + integration test</h2>
+<p class="task-meta">Real-shape jsonl replayed through parseRecord → attention. This is the format-drift tripwire (masterplan §4.5).</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Create: <code>tests/fixtures/attention-claude.jsonl</code></li>
+    <li>Test: <code>tests/attention-replay.test.ts</code> (new)</li>
+  </ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: create the fixture</div>
+<p><code>tests/fixtures/attention-claude.jsonl</code> — 8 lines, shapes copied from a real Claude Code 2.x transcript (see masterplan Appendix A). One record per line, exactly:</p>
+<pre>{"type":"user","uuid":"u1","timestamp":"2026-07-13T10:00:00.000Z","message":{"role":"user","content":"add auth to the api"}}
+{"type":"assistant","uuid":"a1","timestamp":"2026-07-13T10:00:10.000Z","message":{"role":"assistant","model":"claude-sonnet-5","usage":{"output_tokens":42,"input_tokens":10,"cache_read_input_tokens":1000,"cache_creation_input_tokens":0},"content":[{"type":"text","text":"Which auth flavor?"},{"type":"tool_use","id":"toolu_ask1","name":"AskUserQuestion","input":{"questions":[{"question":"Which auth method should the API use?","header":"Auth","multiSelect":false,"options":[{"label":"JWT (recommended)","description":"stateless"},{"label":"Sessions","description":"server-side"}]}]}}]}}
+{"type":"user","uuid":"u2","timestamp":"2026-07-13T10:05:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_ask1","content":"Your questions have been answered: \"Which auth method should the API use?\"=\"JWT (recommended)\""}]}}
+{"type":"assistant","uuid":"a2","timestamp":"2026-07-13T10:06:00.000Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_plan1","name":"ExitPlanMode","input":{"plan":"1. add jwt middleware","allowedPrompts":[],"planFilePath":"plan.md"}}]}}
+{"type":"user","uuid":"u3","timestamp":"2026-07-13T10:07:00.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_plan1","content":"The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file)."}]}}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-07-13T10:08:00.000Z","content":"continue"}
+{"type":"queue-operation","operation":"dequeue","timestamp":"2026-07-13T10:08:30.000Z"}
+{"type":"system","subtype":"stop_hook_summary","uuid":"s1","timestamp":"2026-07-13T10:09:00.000Z"}</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: write the replay test</div>
+<p>Create <code>tests/attention-replay.test.ts</code>:</p>
+<pre>import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { parseRecord } from "../src/jsonl";
+import { createAttentionTracker, ingestAttentionEvent, resolveAttention } from "../src/attention";
+
+const LINES = readFileSync(join(import.meta.dir, "fixtures", "attention-claude.jsonl"), "utf8")
+  .split("\n").filter((l) => l.trim());
+
+function replayTo(lineCount: number) {
+  const t = createAttentionTracker();
+  let lastTs = 0;
+  for (const line of LINES.slice(0, lineCount)) {
+    for (const ev of parseRecord(JSON.parse(line))) {
+      ingestAttentionEvent(t, ev);
+      lastTs = Math.max(lastTs, ev.ts);
+    }
+  }
+  return { t, lastTs };
+}
+
+const at = (lastTs: number, plusMs: number) =>
+  ({ now: lastTs + plusMs, alive: true, lastEventTs: lastTs });
+
+describe("golden replay — claude-code fixture", () => {
+  test("open ask → needs decision", () => {
+    const { t, lastTs } = replayTo(2);
+    expect(resolveAttention(t, at(lastTs, 5_000)).state).toBe("needs decision");
+  });
+  test("answer clears it → running", () => {
+    const { t, lastTs } = replayTo(3);
+    expect(resolveAttention(t, at(lastTs, 5_000)).state).toBe("running");
+  });
+  test("plan exit → plan review", () => {
+    const { t, lastTs } = replayTo(4);
+    expect(resolveAttention(t, at(lastTs, 5_000)).state).toBe("plan review");
+  });
+  test("rejection clears it → running", () => {
+    const { t, lastTs } = replayTo(5);
+    expect(resolveAttention(t, at(lastTs, 5_000)).state).toBe("running");
+  });
+  test("stop with drained queue → waiting, then idle 31min later", () => {
+    const { t, lastTs } = replayTo(8);
+    expect(resolveAttention(t, at(lastTs, 10_000)).state).toBe("waiting");
+    expect(resolveAttention(t, at(lastTs, 31 * 60_000)).state).toBe("idle");
+  });
+});</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: run — must pass with no source changes</div>
+<div class="run">bun test tests/attention-replay.test.ts<br><span class="exp">Expected: PASS (5). A failure here means tasks 2–6 disagree — fix them, not the fixture.</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: commit</div>
+<div class="run">git add tests/fixtures/attention-claude.jsonl tests/attention-replay.test.ts<br>git commit -m "test: golden replay fixture for attention states"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t8"><span class="tno">Task 8</span>Server plumbing</h2>
+<p class="task-meta">Tracker per session, resolve on every event + 30s tick, snapshot field, ws broadcast on change. Attention never computed for internal subprocesses; liveness comes from the existing registry gate <span class="badge">codex</span>.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>src/server.ts</code> — SessionState type (~line 82), getOrCreate initializer, snapshot() (~line 270), onEvent (~line 826), plus one new helper + interval</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">consumes</span>
+  <ul><li><code>createAttentionTracker / ingestAttentionEvent / resolveAttention / Attention / AttentionTracker</code> from Task 4-6</li></ul>
+  <span class="lbl" style="margin-top:8px">produces</span>
+  <ul><li>snapshot field <code>attention?: Attention</code>; ws message <code>{ kind: "attention", sessionKey, attention }</code></li></ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: extend SessionState + import</div>
+<pre>import {
+  createAttentionTracker, ingestAttentionEvent, resolveAttention,
+  type Attention, type AttentionTracker,
+} from "./attention";
+
+<span class="cm">// SessionState gains:</span>
+  attention: AttentionTracker;
+  lastAttention?: Attention;</pre>
+<p>In <code>getOrCreate</code>'s new-session initializer object add <code>attention: createAttentionTracker(),</code>.</p>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: internal filter + refresh helper (place near isVisible)</div>
+<pre><span class="cm">// sottochat's own sdk subprocesses (observer + chat sandboxes) never get
+// attention — they'd mirror our own machinery back at the operator.</span>
+function isInternalSlug(slug: string): boolean {
+  return (
+    slug.includes("sottochat-chat") ||
+    slug.includes("sottochat-observer") ||
+    slug.includes("chunk-to-chat-observer") ||
+    slug.includes("cut-the-cake-chat")
+  );
+}
+
+function attentionChanged(a?: Attention, b?: Attention): boolean {
+  if (!a || !b) return a !== b;
+  return a.state !== b.state || a.receipt?.toolUseId !== b.receipt?.toolUseId || a.receipt?.kind !== b.receipt?.kind;
+}
+
+function refreshAttention(s: SessionState): void {
+  if (isInternalSlug(s.info.slug)) return;
+  <span class="cm">// replay guard: only live/graced sessions may hold obligations.</span>
+  if (!isDiscoveryAlive(s)) {
+    s.lastAttention = undefined;
+    return;
+  }
+  const next = resolveAttention(s.attention, {
+    now: Date.now(),
+    alive: liveSids === null || s.info.source === "claude-app"
+      ? true
+      : liveSids.has(s.info.sessionId),
+    lastEventTs: s.lastEventTs,
+  });
+  if (attentionChanged(s.lastAttention, next)) {
+    s.lastAttention = next;
+    if (visibleKeys.has(keyFor(s.info))) {
+      broadcast({ kind: "attention", sessionKey: keyFor(s.info), attention: next });
+    }
+  } else {
+    s.lastAttention = next;
+  }
+}</pre>
+<div class="note">Reuse the existing slug matchers from onEvent's <code>isObserverSelf</code> by replacing that inline expression with <code>const isObserverSelf = isInternalSlug(info.slug);</code> — one source of truth.</div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: wire into onEvent, snapshot, and a 30s tick</div>
+<p>3a. In <code>onEvent</code>, immediately after <code>const result = ingestEvent(s.turns, ev);</code> add:</p>
+<pre>ingestAttentionEvent(s.attention, ev);
+refreshAttention(s);</pre>
+<p>3b. In <code>snapshot()</code> add to the returned object:</p>
+<pre>...(s.lastAttention &amp;&amp; !isInternalSlug(s.info.slug) ? { attention: s.lastAttention } : {}),</pre>
+<p>3c. After the tailer/registry start (bottom of the file), add the temporal tick — time-based transitions (waiting→idle, running→unknown) happen without new events:</p>
+<pre>setInterval(() => {
+  for (const s of sessions.values()) {
+    if (visibleKeys.has(keyFor(s.info))) refreshAttention(s);
+  }
+}, 30_000);</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: verify — typecheck, tests, live smoke</div>
+<div class="run">bun run typecheck &amp;&amp; bun test<br><span class="exp">Expected: clean</span></div>
+<div class="run">META_PORT=3947 META_OBSERVER_ENABLED=0 bun src/server.ts &amp;<br>curl -s localhost:3947/state | jq '.sessions[0].attention'<br><span class="exp">Expected: {"state":"running"|"waiting"|"idle"|…, "confidence":…, "since":…, "receipt":{…}} on a real session; internal cards have no attention field. Kill the scratch server after.</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 5: commit</div>
+<div class="run">git add src/server.ts<br>git commit -m "feat: per-session attention — resolve on event + 30s tick, snapshot + ws"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t9"><span class="tno">Task 9</span>/hooks + /hooks/install endpoints</h2>
+<p class="task-meta">The opt-in authoritative feed. Localhost-bound, unknown sessions ignored — hook posts add confidence, never invent sessions.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>src/server.ts</code> — two routes in the fetch handler (place beside the existing <code>/settings/language</code> route)</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">consumes</span>
+  <ul><li><code>applyHookSignal / HookSignal</code> from Task 6; <code>refreshAttention</code> from Task 8</li></ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: implement the routes</div>
+<pre>if (url.pathname === "/hooks" &amp;&amp; req.method === "POST") {
+  let body: unknown;
+  try { body = await req.json(); } catch { return Response.json({ error: "invalid json" }, { status: 400 }); }
+  const o = (body &amp;&amp; typeof body === "object" ? body : {}) as Record&lt;string, unknown&gt;;
+  const sid = typeof o.session_id === "string" ? o.session_id : null;
+  const eventName = typeof o.hook_event_name === "string" ? o.hook_event_name : "";
+  if (!sid || !eventName) return Response.json({ error: "session_id and hook_event_name required" }, { status: 400 });
+
+  let target: SessionState | undefined;
+  for (const s of sessions.values()) {
+    if (s.info.sessionId === sid) { target = s; break; }
+  }
+  <span class="cm">// unknown session: acknowledge and drop — hooks never mint sessions.</span>
+  if (!target || isInternalSlug(target.info.slug)) return Response.json({ ok: false, ignored: true });
+
+  const ts = Date.now();
+  const toolName = typeof o.tool_name === "string" ? o.tool_name : undefined;
+  const hint = `${typeof o.notification_type === "string" ? o.notification_type : ""} ${typeof o.message === "string" ? o.message : ""}`.toLowerCase();
+
+  let sig: HookSignal | null = null;
+  if (eventName === "PermissionRequest") sig = { kind: "permission_request", ...(toolName ? { toolName } : {}), ts };
+  else if (eventName === "Notification" &amp;&amp; hint.includes("permission")) sig = { kind: "permission_request", ts };
+  else if (eventName === "Notification" &amp;&amp; hint.includes("idle")) sig = { kind: "idle_notification", ts };
+  else if (eventName === "Stop" || eventName === "SessionEnd") sig = { kind: "stop", ts };
+  if (!sig) return Response.json({ ok: false, ignored: true });
+
+  applyHookSignal(target.attention, sig);
+  refreshAttention(target);
+  return Response.json({ ok: true });
+}
+
+if (url.pathname === "/hooks/install" &amp;&amp; req.method === "GET") {
+  const hook = { hooks: [{ type: "http", url: `http://localhost:${PORT}/hooks` }] };
+  return Response.json({
+    note: "merge into ~/.claude/settings.json — sottochat states become authoritative for these events",
+    settings: { hooks: { PermissionRequest: [hook], Notification: [hook], Stop: [hook] } },
+  });
+}</pre>
+<p>Add <code>applyHookSignal, type HookSignal</code> to the attention import in server.ts.</p>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: verify against a scratch instance</div>
+<div class="run">META_PORT=3947 META_OBSERVER_ENABLED=0 bun src/server.ts &amp;<br>curl -s localhost:3947/hooks/install | jq .settings.hooks.PermissionRequest<br><span class="exp">Expected: [{"hooks":[{"type":"http","url":"http://localhost:3947/hooks"}]}]</span></div>
+<div class="run">SID=$(curl -s localhost:3947/state | jq -r '.sessions[0].info.sessionId')<br>curl -s -X POST localhost:3947/hooks -H 'content-type: application/json' \<br>&nbsp;&nbsp;-d "{\"hook_event_name\":\"PermissionRequest\",\"session_id\":\"$SID\",\"tool_name\":\"Bash\"}"<br>curl -s localhost:3947/state | jq '.sessions[0].attention'<br><span class="exp">Expected: {"ok":true}, then state "needs permission", confidence "hook", receipt excerpt "permission prompt: Bash". Unknown session_id returns {"ok":false,"ignored":true}. Kill the scratch server after.</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: commit</div>
+<div class="run">git add src/server.ts<br>git commit -m "feat: /hooks authoritative feed + /hooks/install snippet"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t10"><span class="tno">Task 10</span>Frontend: state words, receipt drawer, copy fix</h2>
+<p class="task-meta">Calm rendering per Task 1's boundary. The detail pane re-renders on every ws tick — drawer open-state must live outside the DOM.</p>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul>
+    <li>Modify: <code>public/assets/app.js</code> — buildCardInnerHtml (~line 909), ws dispatch chain (~line 2448-2512), detail-header fill (near <code>dName.textContent</code>)</li>
+    <li>Modify: <code>public/index.html</code> — session-head markup (~line 1540), CSS, reset-button copy</li>
+  </ul>
+  <span class="lbl" style="margin-top:8px">consumes</span>
+  <ul><li>snapshot field <code>sess.attention</code>; ws message <code>{ kind: "attention", sessionKey, attention }</code> (Task 8)</li></ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: card state word</div>
+<p>In <code>app.js</code>, add near <code>sessionState()</code>:</p>
+<pre><span class="cm">// attention words worth showing on a card. running/idle stay silent —
+// the live/idle chip already says it; calm by design.</span>
+const ATTN_SHOW = new Set(["needs decision", "needs permission", "plan review", "waiting", "erred", "unknown"]);
+function attnWordHtml(sess) {
+  const a = sess &amp;&amp; sess.attention;
+  if (!a || !ATTN_SHOW.has(a.state)) return "";
+  const w = a.state === "unknown" ? "—" : a.state;
+  return '&lt;span class="card-attn' + (a.state.indexOf("needs") === 0 ? " attn-needs" : "") + '"&gt;' + escapeHtml(w) + '&lt;/span&gt;';
+}</pre>
+<p>In <code>buildCardInnerHtml</code>, change the foot assembly line to include it before the elapsed part:</p>
+<pre>const footParts = [sourceStr, cwdHtml, attnWordHtml(sess), elapsedHtml].filter(Boolean);</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: ws message + local state</div>
+<p>In the ws dispatch chain (after the <code>session:summary</code> branch), add:</p>
+<pre>} else if (msg.kind === "attention") {
+  const sess = sessionsByKey.get(msg.sessionKey);
+  if (sess) { sess.attention = msg.attention; scheduleRender(); }
+}</pre>
+<div class="note">Use the file's actual session-map and re-render helper names — check how the <code>session:summary</code> branch two lines above mutates and repaints, and do exactly the same (the store/repaint helpers are in scope there).</div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: detail header word + receipt drawer</div>
+<p>3a. <code>index.html</code> — inside the <code>.source</code> paragraph of <code>.session-head</code> (after the <code>d-tokens</code> span), add:</p>
+<pre>&lt;button class="d-attn" id="d-attn" type="button" hidden aria-expanded="false" title="why this state"&gt;&lt;/button&gt;</pre>
+<p>and immediately after the closing <code>&lt;/div&gt;</code> of <code>.session-head</code>:</p>
+<pre>&lt;p class="d-receipt" id="d-receipt" hidden&gt;&lt;/p&gt;</pre>
+<p>3b. CSS (next to the <code>.d-reset-btn</code> rules):</p>
+<pre>.card-attn { font-family: var(--mono); font-size: 10.5px; color: var(--fg-muted); }
+.card-attn.attn-needs { color: var(--fg); }
+.d-attn {
+  font-family: var(--mono); font-size: 11px; color: var(--fg-soft);
+  background: var(--chip-tint); border: none; border-radius: 6px;
+  padding: 2px 8px; margin-left: 10px; cursor: pointer;
+}
+.d-attn:hover { color: var(--fg); }
+.d-receipt {
+  font-family: var(--mono); font-size: 11px; color: var(--fg-muted);
+  margin: 4px 0 0; order: 8; flex-basis: 100%;
+}</pre>
+<p>3c. <code>app.js</code> — module-scope open-state + fill logic in the detail render path (same function that sets <code>dName.textContent</code>):</p>
+<pre><span class="cm">// drawer open-state survives the per-tick re-render.</span>
+const openReceipts = new Set();
+
+<span class="cm">// in the detail render, after dName.textContent = …:</span>
+const dAttn = document.getElementById("d-attn");
+const dReceipt = document.getElementById("d-receipt");
+const attn = sess.attention;
+if (attn) {
+  dAttn.hidden = false;
+  dAttn.textContent = attn.state === "unknown" ? "—" : attn.state;
+  const open = openReceipts.has(keyForSnapshot(sess));
+  dAttn.setAttribute("aria-expanded", String(open));
+  dReceipt.hidden = !open;
+  if (open) {
+    const r = attn.receipt || {};
+    const via = attn.confidence === "hook" ? "via hook" : "via transcript";
+    const when = r.ts ? new Date(r.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    dReceipt.textContent = "why: " + (r.excerpt || r.kind || "?") + (when ? " · " + when : "") + " · " + via;
+  }
+} else {
+  dAttn.hidden = true;
+  dReceipt.hidden = true;
+}</pre>
+<p>3d. One delegated click handler, registered once at startup (not per render):</p>
+<pre>document.addEventListener("click", (e) => {
+  if (!(e.target instanceof Element) || !e.target.closest("#d-attn")) return;
+  const key = currentSessionKey();   <span class="cm">// use the existing "which session is open" accessor in app.js</span>
+  if (!key) return;
+  if (openReceipts.has(key)) openReceipts.delete(key); else openReceipts.add(key);
+  scheduleRender();
+});</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 4: the copy fix riding along</div>
+<p>In <code>index.html</code>, the visible reset control (<code>#d-chat-reset</code>, ~line 1549):</p>
+<pre><span class="cm">before:</span> &lt;span class="reset-glyph" aria-hidden="true"&gt;↺&lt;/span&gt;reset
+<span class="cm">after:</span>  &lt;span class="reset-glyph" aria-hidden="true"&gt;↺&lt;/span&gt;clear chat</pre>
+<p>Update its <code>title</code> to <code>clear this Q&amp;A and forget its chat context</code>. CSS class names stay as-is.</p>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 5: smoke pass (CLAUDE.md definition of done — required)</div>
+<div class="run">META_PORT=3947 META_OBSERVER_ENABLED=0 bun src/server.ts<br><span class="exp">Then in a browser: (1) load :3947 — cards render, zero console errors, waiting/idle words appear on quiet sessions; (2) open a session — state word in header, click it, receipt opens and STAYS open across ws ticks; (3) send a chat message — flow unchanged; (4) button reads "clear chat". Run node --check public/assets/app.js as well. Kill the scratch server after.</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 6: commit</div>
+<div class="run">git add public/assets/app.js public/index.html<br>git commit -m "feat: attention state words + receipt drawer; reset button says clear chat"</div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="task" id="t11"><span class="tno">Task 11</span>README + final verification</h2>
+
+<div class="fi">
+  <span class="lbl">files</span>
+  <ul><li>Modify: <code>README.md</code> (new section after "What it does")</li></ul>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 1: README section</div>
+<pre>## States, and how sottochat knows
+
+Each session card shows an attention state: `running`, `needs decision`,
+`needs permission`, `plan review`, `waiting`, `idle`, `erred` — or `—`
+(unknown) when the signals conflict. Click the state in the detail header
+to see the receipt: which transcript event (or hook) produced it.
+
+By default states are inferred from the transcript. For authoritative
+permission/idle states, install the optional Claude Code hooks — get the
+exact snippet from your running instance:
+
+    curl localhost:3737/hooks/install
+
+Merge the `settings` object into `~/.claude/settings.json`. Hook-fed
+states show a `via hook` receipt. States inform, never interrupt: no
+badges, sounds, or flashing anywhere.</pre>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 2: full verification</div>
+<div class="run">bun run typecheck &amp;&amp; bun test<br><span class="exp">Expected: clean; ~50 tests green</span></div>
+<div class="run">git log --oneline main..HEAD<br><span class="exp">Expected: 9 commits (tasks 1-11)</span></div>
+</div>
+
+<div class="step"><div class="step-title"><input type="checkbox"> Step 3: commit + wrap</div>
+<div class="run">git add README.md<br>git commit -m "docs: states section — attention words and the hooks opt-in"</div>
+<p>Then: run the <code>superpowers:finishing-a-development-branch</code> flow (merge/PR decision belongs to the operator). Slice 2 (decision cards, reply ledger, auto-mirror) starts from masterplan §5 — a separate plan.</p>
+</div>
+
+<hr style="border:none;border-top:1px solid var(--border);margin:48px 0 20px" />
+<p style="font-size:13px;color:var(--fg-muted)">plan: state engine slice 1 · spec: notes/masterplan-2026-07-12.md §4 · tasks are sized for one fresh-context executor each; interfaces blocks carry everything a task needs from its neighbors.</p>
+
+</div>
+</body>
+</html>
