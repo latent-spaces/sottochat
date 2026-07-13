@@ -91,6 +91,8 @@ type SessionState = {
   totalOutputTokens: number;   // cumulative output across all assistant messages
   summary?: string;            // one-sentence session summary, refreshed every few closed turns
   summaryTs?: number;          // when the summary last changed (drives the card update pulse)
+  summaryLang?: string;        // explain-language code the summary was generated in — lets the
+                               // card show a "stale/updating" tag while a newer language re-feed is in flight
   closedTurnCount: number;     // total closed turns — the summary regenerates every 4th
   recentClosedTurns: Turn[];   // ring buffer (RECENT_CLOSED_TURNS) — feeds the summary + chat seed
   chatContextTurns: number;    // how many recent turns the chat seed includes (user-tunable, 1..10)
@@ -140,6 +142,7 @@ function collectPersisted(): Map<string, PersistedSession> {
       closedTurnCount: s.closedTurnCount,
       ...(s.summary ? { summary: s.summary } : {}),
       ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
+      ...(s.summaryLang ? { summaryLang: s.summaryLang } : {}),
     };
     const chat = chatThreads.get(k);
     if (chat && chat.length) p.chatThread = chat;
@@ -220,6 +223,7 @@ function getOrCreate(info: SessionInfo): SessionState {
       if (typeof p.closedTurnCount === "number") s.closedTurnCount = p.closedTurnCount;
       if (typeof p.summary === "string") s.summary = p.summary;
       if (typeof p.summaryTs === "number") s.summaryTs = p.summaryTs;
+      if (typeof p.summaryLang === "string") s.summaryLang = p.summaryLang;
     }
     sessions.set(k, s);
   } else {
@@ -280,6 +284,7 @@ function snapshot(s: SessionState) {
     chatContextTurns: s.chatContextTurns,
     ...(s.summary ? { summary: s.summary } : {}),
     ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
+    ...(s.summaryLang ? { summaryLang: s.summaryLang } : {}),
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
@@ -757,6 +762,7 @@ const observer = OBSERVER_ENABLED
         if (s.summary === d.summary) return; // no change → no repaint/pulse
         s.summary = d.summary;
         s.summaryTs = Date.now();
+        s.summaryLang = explainLang;
         persister.schedule();
         if (isVisible(s)) {
           broadcast({
@@ -764,6 +770,7 @@ const observer = OBSERVER_ENABLED
             sessionKey: d.sessionKey,
             summary: s.summary,
             summaryTs: s.summaryTs,
+            summaryLang: s.summaryLang,
           });
         }
       },

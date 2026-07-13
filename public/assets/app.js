@@ -27,14 +27,14 @@
     // stays english; only the ask box, quick-replies, and the copy card follow
     // the chosen language. the assistant answers in the language regardless.
     const UI_STRINGS = {
-      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", presets: ["תסכם", "הסבר במילים פשוטות", "מה כתוב פה", "מה קרה כאן?", "מה לענות?"] },
-      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", presets: ["summarize", "explain simply", "what does this say?", "what happened here?", "what should I answer?"] },
-      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", presets: ["لخّص", "اشرح ببساطة", "ماذا يقول هنا؟", "ماذا حدث هنا؟", "بماذا أرد؟"] },
-      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", presets: ["resume", "explícalo simple", "¿qué dice aquí?", "¿qué pasó aquí?", "¿qué respondo?"] },
-      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", presets: ["résume", "explique simplement", "qu'est-ce qui est écrit ici ?", "que s'est-il passé ?", "que répondre ?"] },
-      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", presets: ["кратко", "объясни просто", "что здесь написано?", "что здесь произошло?", "что ответить?"] },
-      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", presets: ["zusammenfassen", "einfach erklären", "was steht hier?", "was ist passiert?", "was soll ich antworten?"] },
-      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", presets: ["总结", "简单解释", "这里写了什么？", "这里发生了什么？", "该怎么回复？"] },
+      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", updating: "מתעדכן…", presets: ["תסכם", "הסבר במילים פשוטות", "מה כתוב פה", "מה קרה כאן?", "מה לענות?"] },
+      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", updating: "updating…", presets: ["summarize", "explain simply", "what does this say?", "what happened here?", "what should I answer?"] },
+      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", updating: "جارٍ التحديث…", presets: ["لخّص", "اشرح ببساطة", "ماذا يقول هنا؟", "ماذا حدث هنا؟", "بماذا أرد؟"] },
+      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", updating: "actualizando…", presets: ["resume", "explícalo simple", "¿qué dice aquí?", "¿qué pasó aquí?", "¿qué respondo?"] },
+      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", updating: "mise à jour…", presets: ["résume", "explique simplement", "qu'est-ce qui est écrit ici ?", "que s'est-il passé ?", "que répondre ?"] },
+      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", updating: "обновляется…", presets: ["кратко", "объясни просто", "что здесь написано?", "что здесь произошло?", "что ответить?"] },
+      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", updating: "wird aktualisiert…", presets: ["zusammenfassen", "einfach erklären", "was steht hier?", "was ist passiert?", "was soll ich antworten?"] },
+      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", updating: "更新中…", presets: ["总结", "简单解释", "这里写了什么？", "这里发生了什么？", "该怎么回复？"] },
     };
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.he; }
 
@@ -908,8 +908,17 @@
 
     function buildCardInnerHtml(sess, opts) {
       const modelLabel = shortModel(sess.model);
+      // a summary generated under a previous explain-language setting is stale
+      // until the observer re-feeds it (see /settings/language on the server) —
+      // show it dimmed with an "updating…" tag instead of pretending it's current.
+      const stale = !!(sess.summary && sess.summaryLang && sess.summaryLang !== explainLang);
       const summaryHtml = sess.summary
-        ? '<p class="card-insight" dir="auto">' + escapeHtml(sess.summary) + '</p>'
+        ? '<p class="card-insight' + (stale ? ' stale' : '') + '" dir="auto">' +
+            escapeHtml(sess.summary) +
+            (stale
+              ? ' <span class="typing-dots card-insight-dots" aria-label="' + escapeHtml(ui().updating) + '"><span></span><span></span><span></span></span>'
+              : '') +
+          '</p>'
         : '';
       const state = sessionState(sess);
       const ts = sess?.lastEventTs || 0;
@@ -964,6 +973,7 @@
         sess.lastEventTs || 0,
         sess.summaryTs || 0,
         sess.summary || "",
+        explainLang,
       ].join("\u0001");
     }
 
@@ -2373,6 +2383,7 @@
         totalOutputTokens: snap.totalOutputTokens || 0,
         summary: snap.summary || "",
         summaryTs: snap.summaryTs || 0,
+        summaryLang: snap.summaryLang || "",
         displayName: snap.displayName || null,
         chatContextTurns: clampCtxTurns(snap.chatContextTurns),
       });
@@ -2457,6 +2468,7 @@
           if (s && typeof msg.summary === "string") {
             s.summary = msg.summary;
             s.summaryTs = msg.summaryTs || Date.now();
+            s.summaryLang = msg.summaryLang || s.summaryLang;
             refresh();
           }
         } else if (msg.kind === "chat:chunk") {

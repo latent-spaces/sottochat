@@ -21,6 +21,7 @@ export type PersistedSession = {
   chatArchives?: ChatArchive[];
   summary?: string;
   summaryTs?: number;
+  summaryLang?: string;
   chatContextTurns?: number;
   closedTurnCount?: number;
 };
