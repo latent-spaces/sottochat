@@ -32,7 +32,7 @@ Scene: one developer, two monitors, afternoon or late-night ambient light, sever
 
 ## Visual Direction
 
-Light mode is intentional. The app lives next to terminals, but it is not terminal cosplay. The surface is warm paper, not black glass. A light culinary touch runs through the strawberry accent, a small cake mark, frosting caps on charts, and a few mascots, but the default read should be "precise local tool" before "dessert toy."
+Light mode is intentional. The app lives next to terminals, but it is not terminal cosplay. The surface is warm paper, not black glass. The split-paragraph logo uses the operative strawberry and agent-side plum; a light culinary touch remains in frosting caps on charts and a few mascots, but the default read should be "precise local tool" before "dessert toy."
 
 The playful visual layer is kept only where it earns its keep:
 

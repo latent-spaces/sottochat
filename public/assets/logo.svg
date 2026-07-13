@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">sottochat split paragraph mark</title>
+  <defs>
+    <clipPath id="card">
+      <rect x="12" y="32" width="104" height="64" rx="20"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#card)">
+    <rect x="12" y="32" width="70" height="64" fill="#ec4899"/>
+    <rect x="82" y="32" width="34" height="64" fill="#a855f7"/>
+  </g>
+  <rect x="12" y="32" width="104" height="64" rx="20" fill="none" stroke="#1a1a1f" stroke-width="4"/>
+  <path d="M82 32v64" stroke="#1a1a1f" stroke-width="4"/>
+  <path d="M28 54h42M28 72h42" fill="none" stroke="#1a1a1f" stroke-width="4" stroke-dasharray="8 6"/>
+  <path d="M92 52h16M92 65h16M92 78h16" fill="none" stroke="#1a1a1f" stroke-width="4" stroke-dasharray="7 5"/>
+</svg>

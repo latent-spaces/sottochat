@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>sottochat</title>
-  <link rel="icon" type="image/webp" href="/assets/logo.webp" />
+  <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
     :root {
@@ -185,8 +185,8 @@
       height: 32px;
       flex-shrink: 0;
       object-fit: contain;
-      /* gsap brand-jump hovers will scale + spin from this anchor — cake bottom. */
-      transform-origin: 50% 70%;
+      /* gsap brand-jump hovers scale + spin from the visual center. */
+      transform-origin: 50% 50%;
       will-change: transform;
     }
     .nav-wordmark {
@@ -551,6 +551,11 @@
       line-height: 1.45;
       margin: 4px 0 6px;
     }
+    /* stale — summary text left over from a previous explain-language
+       setting, shown dimmed with a loading indicator (reuses .typing-dots)
+       until the observer re-feeds it in the newly selected language. */
+    .card-insight.stale { opacity: 0.55; }
+    .card-insight-dots { vertical-align: middle; padding: 0; margin-inline-start: 2px; }
     .card-meta {
       display: flex;
       gap: 8px;
@@ -1529,7 +1534,7 @@
 
   <header class="top-nav">
     <div class="nav-left">
-      <img class="nav-logo" src="/assets/logo.webp" alt="" />
+      <img class="nav-logo" src="/assets/logo.svg" alt="" />
       <a class="nav-wordmark" href="#">sottochat</a>
       <span class="nav-tag">discuss the response, answer well</span>
     </div>
