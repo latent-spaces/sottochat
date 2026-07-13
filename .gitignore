@@ -45,5 +45,6 @@ brag-output/
 # session working docs (personal workflow, not product)
 state.html
 notes/
+plan/
 docs/superpowers/
 docs/product-audit-*.md
