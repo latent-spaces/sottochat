@@ -35,6 +35,14 @@
       ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", updating: "обновляется…", presets: ["кратко", "объясни просто", "что здесь написано?", "что здесь произошло?", "что ответить?"] },
       de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", updating: "wird aktualisiert…", presets: ["zusammenfassen", "einfach erklären", "was steht hier?", "was ist passiert?", "was soll ich antworten?"] },
       zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", updating: "更新中…", presets: ["总结", "简单解释", "这里写了什么？", "这里发生了什么？", "该怎么回复？"] },
+      pt: { ask: "pergunte sobre a saída…", toAgent: "responder ao agente", copy: "copiar", copied: "copiado", updating: "atualizando…", presets: ["resuma", "explique de forma simples", "o que diz aqui?", "o que aconteceu aqui?", "o que devo responder?"] },
+      it: { ask: "chiedi sull'output…", toAgent: "rispondi all'agente", copy: "copia", copied: "copiato", updating: "aggiornamento…", presets: ["riassumi", "spiega in modo semplice", "cosa c'è scritto qui?", "cosa è successo qui?", "cosa devo rispondere?"] },
+      ja: { ask: "出力について質問…", toAgent: "エージェントへの返信", copy: "コピー", copied: "コピーしました", updating: "更新中…", presets: ["要約して", "簡単に説明して", "ここには何が書いてある？", "ここで何が起きた？", "何と返信すべき？"] },
+      ko: { ask: "출력에 대해 질문하기…", toAgent: "에이전트에 답장", copy: "복사", copied: "복사됨", updating: "업데이트 중…", presets: ["요약해줘", "쉽게 설명해줘", "여기 뭐라고 쓰여 있어?", "여기서 무슨 일이 있었어?", "뭐라고 답해야 해?"] },
+      hi: { ask: "आउटपुट के बारे में पूछें…", toAgent: "एजेंट को जवाब", copy: "कॉपी", copied: "कॉपी हो गया", updating: "अपडेट हो रहा है…", presets: ["सारांश दें", "आसान भाषा में समझाएँ", "यहाँ क्या लिखा है?", "यहाँ क्या हुआ?", "क्या जवाब दूँ?"] },
+      id: { ask: "tanya tentang keluaran…", toAgent: "balas ke agen", copy: "salin", copied: "tersalin", updating: "memperbarui…", presets: ["ringkas", "jelaskan sederhana", "apa yang tertulis di sini?", "apa yang terjadi di sini?", "harus jawab apa?"] },
+      vi: { ask: "hỏi về kết quả…", toAgent: "trả lời tác nhân", copy: "sao chép", copied: "đã sao chép", updating: "đang cập nhật…", presets: ["tóm tắt", "giải thích đơn giản", "ở đây viết gì?", "chuyện gì đã xảy ra?", "nên trả lời thế nào?"] },
+      bn: { ask: "আউটপুট সম্পর্কে জিজ্ঞাসা করুন…", toAgent: "এজেন্টকে উত্তর", copy: "কপি", copied: "কপি হয়েছে", updating: "আপডেট হচ্ছে…", presets: ["সারসংক্ষেপ দাও", "সহজ করে বোঝাও", "এখানে কী লেখা আছে?", "এখানে কী হয়েছে?", "কী উত্তর দেব?"] },
     };
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.he; }
 

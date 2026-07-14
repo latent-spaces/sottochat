@@ -51,6 +51,14 @@ const LANGUAGE_NAMES: Record<string, string> = {
   ru: "Russian",
   de: "German",
   zh: "Chinese",
+  pt: "Portuguese",
+  it: "Italian",
+  ja: "Japanese",
+  ko: "Korean",
+  hi: "Hindi",
+  id: "Indonesian",
+  vi: "Vietnamese",
+  bn: "Bengali",
 };
 function isKnownLang(code: string): boolean {
   return Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, code);
