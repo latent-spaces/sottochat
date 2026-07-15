@@ -63,9 +63,9 @@ const LANGUAGE_NAMES: Record<string, string> = {
 function isKnownLang(code: string): boolean {
   return Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, code);
 }
-let explainLang = isKnownLang(Bun.env.META_EXPLAIN_LANG ?? "") ? Bun.env.META_EXPLAIN_LANG! : "he";
+let explainLang = isKnownLang(Bun.env.META_EXPLAIN_LANG ?? "") ? Bun.env.META_EXPLAIN_LANG! : "zh";
 function explainLanguageName(): string {
-  return isKnownLang(explainLang) ? LANGUAGE_NAMES[explainLang]! : "Hebrew";
+  return isKnownLang(explainLang) ? LANGUAGE_NAMES[explainLang]! : "Chinese";
 }
 // abtop-style PID-driven discovery (src/registry.ts) drives inbox visibility:
 // a claude-code/codex session shows only while its process is alive, or for a

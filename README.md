@@ -42,7 +42,7 @@ All configuration is via environment variables (see [.env.example](.env.example)
 | `META_PORT` | `3737` | HTTP/websocket port |
 | `META_OBSERVER_ENABLED` | `1` | Background observer that summarizes active sessions (`0` to disable) |
 | `META_CHAT_MODEL` / `META_OBSERVER_MODEL` | `claude-sonnet-5` | Models used by the chat and observer subprocesses |
-| `META_EXPLAIN_LANG` | `he` | Default explanation language for the Q&A thread (switchable in the UI) |
+| `META_EXPLAIN_LANG` | `zh` | Default explanation language for the Q&A thread (switchable in the UI; each browser remembers its own last-picked language) |
 | `META_INBOX_MINUTES` | `240` | How far back the inbox looks for recent sessions |
 | `META_PROJECT_SLUG` | *(unset)* | Restrict discovery to a single Claude Code project slug |
 

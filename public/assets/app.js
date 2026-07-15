@@ -21,7 +21,7 @@
     // the explanation language. localStorage is the source of truth for this
     // browser; the choice is pushed to the server (which threads it into the
     // assistant + observer prompts) and mirrored to other clients over ws.
-    let explainLang = localStorage.getItem(LANG_KEY) || "he";
+    let explainLang = localStorage.getItem(LANG_KEY) || "zh";
 
     // localized UI strings for the conversational surface. chrome elsewhere
     // stays english; only the ask box, quick-replies, and the copy card follow
@@ -44,7 +44,7 @@
       vi: { ask: "hỏi về kết quả…", toAgent: "trả lời tác nhân", copy: "sao chép", copied: "đã sao chép", updating: "đang cập nhật…", presets: ["tóm tắt", "giải thích đơn giản", "ở đây viết gì?", "chuyện gì đã xảy ra?", "nên trả lời thế nào?"] },
       bn: { ask: "আউটপুট সম্পর্কে জিজ্ঞাসা করুন…", toAgent: "এজেন্টকে উত্তর", copy: "কপি", copied: "কপি হয়েছে", updating: "আপডেট হচ্ছে…", presets: ["সারসংক্ষেপ দাও", "সহজ করে বোঝাও", "এখানে কী লেখা আছে?", "এখানে কী হয়েছে?", "কী উত্তর দেব?"] },
     };
-    function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.he; }
+    function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.zh; }
 
     // per-session "turns in context" stepper bounds — mirror the server clamps.
     const CHAT_CTX_MIN = 1, CHAT_CTX_MAX = 10, CHAT_CTX_DEFAULT = 5;
@@ -116,9 +116,30 @@
       });
       // only sync to the server when THIS browser has an explicit saved choice.
       // a fresh browser has no choice — it must adopt the server's language (via
-      // the hello handler), not clobber it (and every other client) with "he".
+      // the hello handler), not clobber it (and every other client) with "zh".
       if (localStorage.getItem(LANG_KEY)) pushLang(explainLang);
     }
+
+    // gh-star: live star count for the pill's repo, read straight off its href
+    // so this keeps working if the repo pointer ever moves again. best-effort —
+    // a network hiccup or GitHub rate-limit just leaves the "—" placeholder.
+    (async function () {
+      const ghStarEl = document.getElementById("gh-star");
+      const ghPillEl = document.querySelector(".gh-pill");
+      if (!ghStarEl || !ghPillEl) return;
+      const m = ghPillEl.href.match(/github\.com\/([^/]+\/[^/]+?)\/?$/);
+      if (!m) return;
+      try {
+        const res = await fetch(`https://api.github.com/repos/${m[1]}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (typeof data.stargazers_count === "number") {
+          ghStarEl.textContent = fmtCount(data.stargazers_count);
+        }
+      } catch (err) {
+        console.warn("[gh-star] fetch error", err);
+      }
+    })();
 
     // sessions sidebar collapse — thin rail of session color-dots. state
     // persists in localStorage so a reload keeps the chosen width.

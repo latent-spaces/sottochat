@@ -129,7 +129,7 @@ export function startChatHost(opts: ChatAgentOptions): {
 
     let lastLanguage: string | null = null;
     function push(text: string, seed?: string, language?: string) {
-      const lang = language && language.trim() ? language.trim() : "Hebrew";
+      const lang = language && language.trim() ? language.trim() : "Chinese";
       let content: string;
       if (firstPrompt) {
         const intro = systemIntro(lang);

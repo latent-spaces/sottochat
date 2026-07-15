@@ -360,7 +360,7 @@ export function startObserver(opts: ObserverOptions): {
 } {
   const summaryModel = opts.summaryModel ?? "claude-sonnet-5";
   const batchMs = opts.batchMs ?? 30_000;
-  const getLanguage = opts.getLanguage ?? (() => "Hebrew");
+  const getLanguage = opts.getLanguage ?? (() => "Chinese");
 
   const loop = startSdkLoop({
     model: summaryModel,
