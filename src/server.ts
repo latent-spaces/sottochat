@@ -6,6 +6,7 @@ import { evaluateTurn, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver, type TurnFeed } from "./observer";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
+import { staticAsset } from "./static-assets";
 import {
   loadPersistedSessions,
   startPersister,
@@ -462,19 +463,9 @@ const server = Bun.serve({
       return new Response("upgrade failed", { status: 400 });
     }
 
-    if (url.pathname === "/" || url.pathname === "/index.html") {
-      return new Response(Bun.file("public/index.html"));
-    }
-
-    // static assets — anything under /assets/ serves from public/assets/.
-    // basic path-traversal guard: refuse `..` segments before resolving.
-    if (url.pathname.startsWith("/assets/") && req.method === "GET") {
-      if (url.pathname.includes("..")) {
-        return new Response("not found", { status: 404 });
-      }
-      const file = Bun.file(`public${url.pathname}`);
-      if (await file.exists()) return new Response(file);
-      return new Response("not found", { status: 404 });
+    if (req.method === "GET") {
+      const asset = staticAsset(url.pathname);
+      if (asset) return new Response(asset);
     }
 
     if (url.pathname === "/state" && req.method === "GET") {
