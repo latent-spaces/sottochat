@@ -1,9 +1,30 @@
 {
   "name": "sottochat",
+  "version": "0.1.0",
   "description": "A quiet back-channel for long autonomous agent runs — tails Claude Code / Codex transcripts and gives you a multilingual Q&A thread about each session.",
   "license": "MIT",
-  "private": true,
   "type": "module",
+  "bin": {
+    "sottochat": "src/cli.ts"
+  },
+  "files": [
+    "src",
+    "public",
+    ".env.example",
+    "DESIGN.md",
+    "PRODUCT.md"
+  ],
+  "homepage": "https://github.com/latent-spaces/sottochat#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/latent-spaces/sottochat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/latent-spaces/sottochat/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "bun": ">=1.1.0"
   },
@@ -17,7 +38,9 @@
   ],
   "scripts": {
     "dev": "bun --hot src/server.ts",
-    "start": "bun src/server.ts",
+    "start": "bun src/cli.ts",
+    "build:binary": "bun build --compile --minify src/cli.ts --outfile dist/sottochat",
+    "pack:check": "bun pm pack --dry-run",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

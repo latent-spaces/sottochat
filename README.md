@@ -6,7 +6,7 @@ sottochat tails your local **Claude Code**, **Claude app (local agent mode)**, a
 
 The name comes from *sotto voce* ("under the voice"): the agent monologues at full voice in the terminal; sottochat is your undertone conversation on the side.
 
-![sottochat — discussing an agent session in your own language, then handing a prepared reply back to the agent](docs/demo.gif)
+![sottochat — discussing an agent session in your own language, then handing a prepared reply back to the agent](https://raw.githubusercontent.com/latent-spaces/sottochat/main/docs/demo.gif)
 
 ## What it does
 
@@ -18,9 +18,33 @@ The name comes from *sotto voce* ("under the voice"): the agent monologues at fu
 
 Full product definition: [PRODUCT.md](PRODUCT.md). Design language: [DESIGN.md](DESIGN.md).
 
+## Install
+
+With Bun installed, run without cloning the repository:
+
+```sh
+bunx sottochat
+```
+
+Or install the standalone macOS/Linux binary (Bun is not required):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/latent-spaces/sottochat/main/install.sh | sh
+sottochat
+```
+
+The installer verifies the release checksum and installs to `/usr/local/bin` by
+default (it may prompt for `sudo`). To choose a user-owned directory instead:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/latent-spaces/sottochat/main/install.sh | SOTTOCHAT_INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+Prebuilt archives are also attached to every [GitHub release](https://github.com/latent-spaces/sottochat/releases) for macOS and Linux on Apple Silicon/ARM64 and x64.
+
 ## Requirements
 
-- [Bun](https://bun.sh) ≥ 1.1
+- [Bun](https://bun.sh) ≥ 1.1 when using `bunx` (not needed for the standalone binary)
 - macOS or Linux (discovery paths and process scanning are only exercised there; Windows is untested)
 - Anthropic auth for the Q&A and observer features: the chat subprocesses run on the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk), which uses your existing Claude Code login if you have one, or an `ANTHROPIC_API_KEY` environment variable. Without either, transcript tailing still works but chat/summaries won't.
 
@@ -63,6 +87,27 @@ META_PORT=3947 META_OBSERVER_ENABLED=0 bun src/server.ts
 ```
 
 The frontend is deliberately build-free: plain script files under `public/assets/`, with third-party libraries vendored in [`public/assets/vendor/`](public/assets/vendor/README.md) — no bundler, no CDN tags.
+
+## Releasing
+
+Set the version in `package.json`, then push a matching tag such as `v0.1.0`.
+The release workflow tests the project, publishes the npm package, and attaches
+checksum-protected standalone binaries for macOS and Linux to a GitHub release.
+
+For the first npm publication, create a short-lived granular token at
+[npmjs.com → Access Tokens](https://www.npmjs.com/settings/~/tokens) with
+**Packages and scopes: Read and write** and **All Packages**. Enable **Bypass
+2FA** only if npm requires it for automated publishing. Add the token to this
+repository through the hidden GitHub CLI prompt (do not put it in the command
+or commit it):
+
+```sh
+gh secret set NPM_TOKEN --repo latent-spaces/sottochat
+gh secret list --repo latent-spaces/sottochat
+```
+
+After the first release, prefer npm trusted publishing and remove the
+long-lived `NPM_TOKEN` secret.
 
 ## Architecture at a glance
 

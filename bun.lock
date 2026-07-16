@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "claude-meta",
+      "name": "sottochat",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.128",
         "@anthropic-ai/sdk": "^0.92.0",
