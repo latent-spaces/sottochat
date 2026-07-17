@@ -24,6 +24,7 @@ export type PersistedSession = {
   summaryLang?: string;
   chatContextTurns?: number;
   closedTurnCount?: number;
+  customName?: string;
 };
 
 const STATE_DIR = join(homedir(), ".sottochat");

@@ -105,6 +105,7 @@ type SessionState = {
   closedTurnCount: number;     // total closed turns — the summary regenerates every 4th
   recentClosedTurns: Turn[];   // ring buffer (RECENT_CLOSED_TURNS) — feeds the summary + chat seed
   chatContextTurns: number;    // how many recent turns the chat seed includes (user-tunable, 1..10)
+  customName?: string;         // user-set override for the card/detail-header name
 };
 
 const sessions = new Map<string, SessionState>();
@@ -152,6 +153,7 @@ function collectPersisted(): Map<string, PersistedSession> {
       ...(s.summary ? { summary: s.summary } : {}),
       ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
       ...(s.summaryLang ? { summaryLang: s.summaryLang } : {}),
+      ...(s.customName ? { customName: s.customName } : {}),
     };
     const chat = chatThreads.get(k);
     if (chat && chat.length) p.chatThread = chat;
@@ -233,6 +235,7 @@ function getOrCreate(info: SessionInfo): SessionState {
       if (typeof p.summary === "string") s.summary = p.summary;
       if (typeof p.summaryTs === "number") s.summaryTs = p.summaryTs;
       if (typeof p.summaryLang === "string") s.summaryLang = p.summaryLang;
+      if (typeof p.customName === "string") s.customName = p.customName;
     }
     sessions.set(k, s);
   } else {
@@ -294,6 +297,7 @@ function snapshot(s: SessionState) {
     ...(s.summary ? { summary: s.summary } : {}),
     ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
     ...(s.summaryLang ? { summaryLang: s.summaryLang } : {}),
+    ...(s.customName ? { customName: s.customName } : {}),
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
     ...(status ? { chatStatus: status } : {}),
@@ -675,6 +679,37 @@ const server = Bun.serve({
         broadcast({ kind: "chat:context-turns", sessionKey, turns });
       }
       return Response.json({ ok: true, turns });
+    }
+
+    if (url.pathname === "/session/rename" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
+      if (!sessionKey) {
+        return Response.json({ error: "sessionKey required" }, { status: 400 });
+      }
+      const sess = sessions.get(sessionKey);
+      if (!sess) {
+        return Response.json({ error: "unknown sessionKey" }, { status: 404 });
+      }
+      if (typeof o.name !== "string") {
+        return Response.json({ error: "name must be a string" }, { status: 400 });
+      }
+      const name = o.name.trim();
+      const prev = sess.customName ?? null;
+      if (name) sess.customName = name;
+      else delete sess.customName;
+      const next = sess.customName ?? null;
+      if (prev !== next) {
+        persister.schedule();
+        broadcast({ kind: "session:rename", sessionKey, customName: next });
+      }
+      return Response.json({ ok: true, customName: next });
     }
 
     if (url.pathname === "/settings/language" && req.method === "POST") {

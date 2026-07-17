@@ -27,7 +27,7 @@
     // stays english; only the ask box, quick-replies, and the copy card follow
     // the chosen language. the assistant answers in the language regardless.
     const UI_STRINGS = {
-      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", updating: "מתעדכן…", presets: ["תסכם", "הסבר במילים פשוטות", "מה כתוב פה", "מה קרה כאן?", "מה לענות?"] },
+      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", updating: "מתעדכן…", presets: ["תסכם בקצרה", "מה כתוב פה"] },
       en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", updating: "updating…", presets: ["summarize", "explain simply", "what does this say?", "what happened here?", "what should I answer?"] },
       ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", updating: "جارٍ التحديث…", presets: ["لخّص", "اشرح ببساطة", "ماذا يقول هنا؟", "ماذا حدث هنا؟", "بماذا أرد؟"] },
       es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", updating: "actualizando…", presets: ["resume", "explícalo simple", "¿qué dice aquí?", "¿qué pasó aquí?", "¿qué respondo?"] },
@@ -63,6 +63,19 @@
         if (!res.ok) console.warn('[chat] context-turns set failed', res.status);
       } catch (err) {
         console.warn('[chat] context-turns set error', err);
+      }
+    }
+
+    async function setSessionName(sessionKey, name) {
+      try {
+        const res = await fetch('/session/rename', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sessionKey, name }),
+        });
+        if (!res.ok) console.warn('[session] rename failed', res.status);
+      } catch (err) {
+        console.warn('[session] rename error', err);
       }
     }
 
@@ -277,6 +290,8 @@
     }
     function sessionName(infoOrSess) {
       if (!infoOrSess) return "—";
+      // a user-set rename always wins.
+      if (infoOrSess.customName) return infoOrSess.customName;
       // server attaches a `displayName` for chat-agent sessions: parses their
       // sandbox-hash slug back to the upstream session's project name and uses
       // "<project> · chat" so the inbox card reads as the parent's helper, not
@@ -967,9 +982,14 @@
       const tok = fmtTokens(sess.contextTokens);
       const tokHtml = tok ? '<span class="tok-tag" title="context tokens">' + tok + '</span>' : '';
 
+      const isEditingThisCard = editingNameSurface === "card" && editingNameSessionId === sess?.info?.sessionId;
+      const titleHtml = isEditingThisCard
+        ? '<input class="name-edit-input" dir="auto" value="' + escapeHtml(editingNameDraft) + '" />'
+        : '<h3 class="card-name">' + escapeHtml(sessionName(sess)) + '</h3>';
+
       let html =
         '<div class="card-head">' +
-          '<h3>' + escapeHtml(sessionName(sess)) + '</h3>' +
+          titleHtml +
           '<div class="card-meta">' +
             miniStats +
             tokHtml +
@@ -1017,6 +1037,7 @@
       card.title = sessionName(sess);
       card.innerHTML = buildCardInnerHtml(sess, opts);
       applyCardClasses(card, sess, opts);
+      wireCardNameInput(card, sess);
       return card;
     }
 
@@ -1026,6 +1047,7 @@
       card.dataset.sig = newSig;
       card.innerHTML = buildCardInnerHtml(sess, opts);
       applyCardClasses(card, sess, opts);
+      wireCardNameInput(card, sess);
       if (changed && !reduceMotion()) {
         // re-trigger the keyframe by removing + reflowing + re-adding the class
         card.classList.remove("is-updated");
@@ -1033,6 +1055,99 @@
         card.classList.add("is-updated");
       }
     }
+
+    // ---- inline session-name editing (card title + detail header) ----
+    // at most one edit in progress at a time, tracked by which surface
+    // started it — the card and the detail header never both show an input
+    // for the same session, even when both are visible at once.
+    let editingNameSessionId = null;
+    let editingNameSurface = null; // "card" | "detail"
+    let editingNameDraft = "";
+
+    function startNameEdit(sessionId, surface) {
+      const sess = findSessionBySessionId(sessionId);
+      if (!sess) return;
+      editingNameSessionId = sessionId;
+      editingNameSurface = surface;
+      editingNameDraft = sessionName(sess);
+      refresh();
+    }
+
+    function cancelNameEdit() {
+      if (!editingNameSessionId) return;
+      editingNameSessionId = null;
+      editingNameSurface = null;
+      editingNameDraft = "";
+      refresh();
+    }
+
+    function commitNameEdit() {
+      const sessionId = editingNameSessionId;
+      if (!sessionId) return;
+      const sess = findSessionBySessionId(sessionId);
+      const name = editingNameDraft.trim();
+      editingNameSessionId = null;
+      editingNameSurface = null;
+      editingNameDraft = "";
+      if (!sess) { refresh(); return; }
+      const sessionKey = keyForSnapshot(sess);
+      if (name) sess.customName = name; else delete sess.customName; // optimistic; server echoes session:rename
+      setSessionName(sessionKey, name);
+      refresh();
+    }
+
+    // wires Enter/Escape/blur on a freshly-created edit <input> and keeps
+    // editingNameDraft in sync with keystrokes, so a mid-edit refresh
+    // (another session's tick, etc.) redraws the input with what's already
+    // been typed instead of resetting it.
+    function wireNameInput(input) {
+      input.addEventListener("input", () => { editingNameDraft = input.value; });
+      input.addEventListener("keydown", e => {
+        e.stopPropagation();
+        if (e.key === "Enter") { e.preventDefault(); commitNameEdit(); }
+        else if (e.key === "Escape") { e.preventDefault(); cancelNameEdit(); }
+      });
+      input.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); });
+      input.addEventListener("blur", () => { if (editingNameSessionId) commitNameEdit(); });
+    }
+
+    function focusNameInput(input) {
+      input.focus();
+      const pos = input.value.length;
+      try { input.setSelectionRange(pos, pos); } catch {}
+    }
+
+    function wireCardNameInput(card, sess) {
+      if (editingNameSurface !== "card" || editingNameSessionId !== sess?.info?.sessionId) return;
+      const input = card.querySelector(".name-edit-input");
+      if (!input) return;
+      wireNameInput(input);
+      focusNameInput(input);
+    }
+
+    // clicking a card's name enters edit mode instead of navigating — the
+    // whole card is an <a>, so this must stop the click from bubbling to it.
+    // delegated on the grid container since individual cards' innerHTML gets
+    // replaced on every refresh.
+    cardsEl.addEventListener("click", e => {
+      const nameEl = e.target.closest(".card-name");
+      if (!nameEl) return;
+      const card = nameEl.closest(".card");
+      const sessionId = card?.dataset.sessionId;
+      if (!sessionId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      startNameEdit(sessionId, "card");
+    });
+
+    // detail header's #d-name is a stable element (only its content is
+    // replaced, never itself) — a direct listener is enough, no delegation.
+    dName.addEventListener("click", e => {
+      if (e.target.closest(".name-edit-input")) return;
+      const sessionId = selectedSessionId();
+      if (!sessionId) return;
+      startNameEdit(sessionId, "detail");
+    });
 
     function selectedSessionId() {
       return decodeURIComponent((location.hash.match(/^#session\/(.+)$/) || [])[1] || "");
@@ -1299,7 +1414,13 @@
       detailContent.hidden = false;
       detailContent.style.cssText = sessionColorVars(sessionId);
       const events = sess.events || [];
-      dName.textContent = sessionName(sess);
+      if (editingNameSurface === "detail" && editingNameSessionId === sessionId) {
+        dName.innerHTML = '<input class="name-edit-input" dir="auto" value="' + escapeHtml(editingNameDraft) + '" />';
+        wireNameInput(dName.querySelector(".name-edit-input"));
+        focusNameInput(dName.querySelector(".name-edit-input"));
+      } else {
+        dName.textContent = sessionName(sess);
+      }
       const sourceEl = document.getElementById("d-source");
       if (sourceEl) sourceEl.textContent = sess?.info?.source || "claude-code";
       const cwdEl = document.getElementById("d-cwd");
@@ -2549,6 +2670,14 @@
           const s = sessionsByKey.get(msg.sessionKey);
           if (s && typeof msg.turns === "number" && s.chatContextTurns !== msg.turns) {
             s.chatContextTurns = msg.turns;
+            refresh();
+          }
+        } else if (msg.kind === "session:rename") {
+          const s = sessionsByKey.get(msg.sessionKey);
+          if (s) {
+            if (typeof msg.customName === "string" && msg.customName) s.customName = msg.customName;
+            else delete s.customName;
+            if (editingNameSessionId === msg.sessionKey) cancelNameEdit();
             refresh();
           }
         }
