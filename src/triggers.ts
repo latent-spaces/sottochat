@@ -3,10 +3,13 @@
 // phase 3 will add a sonnet-driven complexity trigger alongside.
 
 import type { Turn } from "./turns";
+import { readStartupSetting } from "./settings";
 
-const MAGNITUDE_TOK = Number(Bun.env.META_MAGNITUDE_TOK ?? 1500);
-const MAGNITUDE_TC = Number(Bun.env.META_MAGNITUDE_TC ?? 5);
-const MAGNITUDE_CHARS = Number(Bun.env.META_MAGNITUDE_CHARS ?? 6000);
+export const MAGNITUDE_THRESHOLDS = {
+  tokens: readStartupSetting("META_MAGNITUDE_TOK", 1500),
+  toolCalls: readStartupSetting("META_MAGNITUDE_TC", 5),
+  characters: readStartupSetting("META_MAGNITUDE_CHARS", 6000),
+} as const;
 
 export type Trigger = {
   kind: "magnitude";
@@ -19,14 +22,14 @@ export type Trigger = {
 export function evaluateTurn(turn: Turn): Trigger | null {
   const reasons: string[] = [];
 
-  if (turn.outputTokens > MAGNITUDE_TOK) {
+  if (turn.outputTokens > MAGNITUDE_THRESHOLDS.tokens) {
     reasons.push(`${turn.outputTokens} tok`);
-  } else if (turn.outputTokens === 0 && turn.outputChars > MAGNITUDE_CHARS) {
+  } else if (turn.outputTokens === 0 && turn.outputChars > MAGNITUDE_THRESHOLDS.characters) {
     // fallback when usage tokens aren't reported on this record
     reasons.push(`${turn.outputChars} chars`);
   }
 
-  if (turn.toolUseCount > MAGNITUDE_TC) {
+  if (turn.toolUseCount > MAGNITUDE_THRESHOLDS.toolCalls) {
     reasons.push(`${turn.toolUseCount} tools`);
   }
 

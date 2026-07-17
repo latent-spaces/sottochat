@@ -2,11 +2,18 @@ import { createHash } from "node:crypto";
 import { startTailer, type SessionInfo } from "./tailer";
 import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
-import { evaluateTurn, type Trigger } from "./triggers";
+import { evaluateTurn, MAGNITUDE_THRESHOLDS, type Trigger } from "./triggers";
 import { buildTurnFeed, startObserver, type TurnFeed } from "./observer";
 import { startChatHost, type ChatChunk } from "./chat-agent";
 import { startRegistry, type RegistrySnapshot } from "./registry";
 import { staticAsset } from "./static-assets";
+import {
+  buildSettingsCatalog,
+  readNextSetting,
+  readStartupSetting,
+  saveSettingsPatch,
+  SettingsValidationError,
+} from "./settings";
 import {
   loadPersistedSessions,
   startPersister,
@@ -14,19 +21,19 @@ import {
   type PersistedSession,
 } from "./persistence";
 
-const PORT = Number(Bun.env.META_PORT ?? Bun.env.PORT ?? 3737);
-const POLL_MS = Number(Bun.env.META_POLL_MS ?? 500);
-const PROJECT_SLUG = Bun.env.META_PROJECT_SLUG;
-const RECENT_MS = Number(Bun.env.META_INBOX_MINUTES ?? 240) * 60 * 1000;
+const PORT = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
+const POLL_MS = readStartupSetting("META_POLL_MS", 500);
+const PROJECT_SLUG = readStartupSetting("META_PROJECT_SLUG", "") || undefined;
+const RECENT_MS = readStartupSetting("META_INBOX_MINUTES", 240) * 60 * 1000;
 const MAX_EVENTS_PER_SESSION = 5000;
 // observer is on by default; set META_OBSERVER_ENABLED=0 to opt out
 // (e.g. when iterating in `bun run dev` to avoid orphaning the sdk subprocess
 // on every hot reload — see state.md issue #4).
-const OBSERVER_ENABLED = Bun.env.META_OBSERVER_ENABLED !== "0";
+const OBSERVER_ENABLED = readStartupSetting("META_OBSERVER_ENABLED", true);
 // META_OBSERVER_MODEL: per-turn decisions subprocess (sonnet by default — needs judgment).
-const OBSERVER_MODEL = Bun.env.META_OBSERVER_MODEL ?? "claude-sonnet-5";
-const CHAT_MODEL = Bun.env.META_CHAT_MODEL ?? "claude-sonnet-5";
-const OBSERVER_BATCH_MS = Number(Bun.env.META_OBSERVER_BATCH_MS ?? 30_000);
+const OBSERVER_MODEL = readStartupSetting("META_OBSERVER_MODEL", "claude-sonnet-5");
+const CHAT_MODEL = readStartupSetting("META_CHAT_MODEL", "claude-sonnet-5");
+const OBSERVER_BATCH_MS = readStartupSetting("META_OBSERVER_BATCH_MS", 30_000);
 // max chat chunks kept per session (in-memory only — lost on server restart).
 const MAX_CHAT_CHUNKS = 200;
 // last N closed turns we keep per session, used to seed the chat with the
@@ -64,7 +71,8 @@ const LANGUAGE_NAMES: Record<string, string> = {
 function isKnownLang(code: string): boolean {
   return Object.prototype.hasOwnProperty.call(LANGUAGE_NAMES, code);
 }
-let explainLang = isKnownLang(Bun.env.META_EXPLAIN_LANG ?? "") ? Bun.env.META_EXPLAIN_LANG! : "zh";
+const startupExplainLang = readStartupSetting("META_EXPLAIN_LANG", "zh");
+let explainLang: string = isKnownLang(startupExplainLang) ? startupExplainLang : "zh";
 function explainLanguageName(): string {
   return isKnownLang(explainLang) ? LANGUAGE_NAMES[explainLang]! : "Chinese";
 }
@@ -73,11 +81,11 @@ function explainLanguageName(): string {
 // grace window after its last event (so a just-finished run stays discussable).
 // claude-app sessions aren't process-discoverable and keep the plain time
 // window. set META_USE_PROCESS_DISCOVERY=0 to revert to the mtime-only view.
-const USE_PROCESS_DISCOVERY = Bun.env.META_USE_PROCESS_DISCOVERY !== "0";
-const DISCOVERY_GRACE_MS = Number(Bun.env.META_DISCOVERY_GRACE_MINUTES ?? 30) * 60 * 1000;
+const USE_PROCESS_DISCOVERY = readStartupSetting("META_USE_PROCESS_DISCOVERY", true);
+const DISCOVERY_GRACE_MS = readStartupSetting("META_DISCOVERY_GRACE_MINUTES", 30) * 60 * 1000;
 // only feed the observer turns whose close ts is within the last
 // OBSERVER_FRESH_MS — backfill of historical turns at startup is skipped.
-const OBSERVER_FRESH_MS = Number(Bun.env.META_OBSERVER_FRESH_MS ?? 5 * 60 * 1000);
+const OBSERVER_FRESH_MS = readStartupSetting("META_OBSERVER_FRESH_MS", 5 * 60 * 1000);
 
 export type Thread = {
   id: string;
@@ -457,6 +465,43 @@ function buildSummaryFeed(s: SessionState): TurnFeed {
   return { ...base, turnId: `sum-${summaryFeedSeq++}`, assistantExcerpt: clip(digest, 4000) };
 }
 
+function currentSettingsCatalog() {
+  return buildSettingsCatalog({
+    port: PORT,
+    pollMs: POLL_MS,
+    projectSlug: PROJECT_SLUG ?? "",
+    inboxMinutes: RECENT_MS / 60_000,
+    processDiscovery: USE_PROCESS_DISCOVERY,
+    discoveryGraceMinutes: DISCOVERY_GRACE_MS / 60_000,
+    observerEnabled: OBSERVER_ENABLED,
+    observerModel: OBSERVER_MODEL,
+    chatModel: CHAT_MODEL,
+    observerBatchMs: OBSERVER_BATCH_MS,
+    observerFreshMs: OBSERVER_FRESH_MS,
+    explainLanguage: explainLang,
+    magnitudeTokens: MAGNITUDE_THRESHOLDS.tokens,
+    magnitudeToolCalls: MAGNITUDE_THRESHOLDS.toolCalls,
+    magnitudeChars: MAGNITUDE_THRESHOLDS.characters,
+  }, LANGUAGE_NAMES);
+}
+
+function applyExplainLanguage(lang: string): void {
+  if (explainLang === lang) return;
+  explainLang = lang;
+  console.log(`[settings] explain language → ${lang} (${LANGUAGE_NAMES[lang]})`);
+  broadcast({ kind: "settings:language", language: explainLang });
+  if (!observer) return;
+  let refed = 0;
+  for (const s of sessions.values()) {
+    if (!isVisible(s) || !s.summary || s.recentClosedTurns.length === 0) continue;
+    observer.feed(buildSummaryFeed(s));
+    refed++;
+  }
+  if (refed > 0) {
+    console.log(`[settings] re-queued ${refed} card summaries in ${LANGUAGE_NAMES[lang]}`);
+  }
+}
+
 const server = Bun.serve({
   port: PORT,
   async fetch(req, server) {
@@ -474,6 +519,41 @@ const server = Bun.serve({
 
     if (url.pathname === "/state" && req.method === "GET") {
       return Response.json({ sessions: recentSessions() });
+    }
+
+    if (url.pathname === "/api/settings" && req.method === "GET") {
+      return Response.json(currentSettingsCatalog());
+    }
+
+    if (url.pathname === "/api/settings" && req.method === "POST") {
+      let body: unknown;
+      try {
+        body = await req.json();
+      } catch {
+        return Response.json({ error: "invalid json" }, { status: 400 });
+      }
+      const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+      if (!o.values || typeof o.values !== "object" || Array.isArray(o.values)) {
+        return Response.json({ error: "values object required" }, { status: 400 });
+      }
+      const values = o.values as Record<string, unknown>;
+      try {
+        saveSettingsPatch(values, LANGUAGE_NAMES);
+        if (Object.prototype.hasOwnProperty.call(values, "META_EXPLAIN_LANG")) {
+          const requested = values.META_EXPLAIN_LANG;
+          const lang = requested === null
+            ? readNextSetting("META_EXPLAIN_LANG", "zh")
+            : String(requested);
+          if (isKnownLang(lang)) applyExplainLanguage(lang);
+        }
+      } catch (error) {
+        if (error instanceof SettingsValidationError) {
+          return Response.json({ error: error.message, key: error.key }, { status: 400 });
+        }
+        console.error("[settings] save failed:", error);
+        return Response.json({ error: "settings could not be saved" }, { status: 500 });
+      }
+      return Response.json({ ok: true, settings: currentSettingsCatalog() });
     }
 
     if (url.pathname === "/sessions" && req.method === "GET") {
@@ -724,25 +804,13 @@ const server = Bun.serve({
       if (!isKnownLang(lang)) {
         return Response.json({ error: "unknown language" }, { status: 400 });
       }
-      // no-op guard: only mutate + broadcast on an actual change, so a client
-      // syncing its (matching) saved choice on load doesn't clobber other clients.
-      if (explainLang !== lang) {
-        explainLang = lang;
-        console.log(`[settings] explain language → ${lang} (${LANGUAGE_NAMES[lang]})`);
-        broadcast({ kind: "settings:language", language: explainLang });
-        // re-run every visible session's one-liner through the summarizer so
-        // the inbox cards flip to the new language instead of waiting for the
-        // next closed turn.
-        if (observer) {
-          let refed = 0;
-          for (const s of sessions.values()) {
-            if (!isVisible(s) || !s.summary || s.recentClosedTurns.length === 0) continue;
-            observer.feed(buildSummaryFeed(s));
-            refed++;
-          }
-          if (refed > 0) console.log(`[settings] re-queued ${refed} card summaries in ${LANGUAGE_NAMES[lang]}`);
-        }
+      try {
+        saveSettingsPatch({ META_EXPLAIN_LANG: lang }, LANGUAGE_NAMES);
+      } catch (error) {
+        console.error("[settings] language save failed:", error);
+        return Response.json({ error: "language could not be saved" }, { status: 500 });
       }
+      applyExplainLanguage(lang);
       return Response.json({ ok: true, language: explainLang });
     }
 

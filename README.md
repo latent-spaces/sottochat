@@ -59,7 +59,7 @@ Open <http://localhost:3737>. Any recent Claude Code or Codex session on this ma
 
 ## Configuration
 
-All configuration is via environment variables (see [.env.example](.env.example)). The main ones:
+Open <http://localhost:3737/settings> to edit every setting. Language changes immediately; startup settings are saved to `~/.sottochat/settings.json` and apply after a restart. CLI flags and environment variables override saved settings. The environment equivalents are documented in [.env.example](.env.example). The main ones:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
