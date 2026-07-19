@@ -1,0 +1,101 @@
+:root,
+:root[data-color-system="quiet-berry"] {
+  --bg: oklch(98% 0.008 350);
+  --surface: oklch(99.4% 0.005 350);
+  --surface-soft: oklch(96.5% 0.014 350);
+  --fg: oklch(22% 0.014 320);
+  --fg-soft: oklch(45% 0.018 320);
+  --fg-muted: oklch(58% 0.018 320);
+  --border: oklch(89.5% 0.016 350);
+  --border-strong: oklch(80% 0.028 350);
+  --chip-tint: oklch(96.5% 0.014 350);
+  --accent: oklch(57% 0.205 354);
+  --accent-hover: oklch(51% 0.205 354);
+  --accent-soft: oklch(94.2% 0.038 350);
+  --plum: oklch(58% 0.15 310);
+  --success: oklch(50% 0.12 150);
+  --warning: oklch(55% 0.13 63);
+  --danger: oklch(54% 0.18 25);
+  --diff-green: oklch(50% 0.12 150);
+  --diff-red: oklch(54% 0.18 25);
+  --glass-paper: oklch(98% 0.008 350 / 0.82);
+  --ambient-1: oklch(94% 0.05 0);
+  --ambient-2: oklch(94% 0.06 305);
+  --ambient-3: oklch(94% 0.04 280);
+}
+
+:root[data-color-system="ink-ember"] {
+  --bg: oklch(97.5% 0.008 45);
+  --surface: oklch(99.1% 0.005 55);
+  --surface-soft: oklch(95.5% 0.012 45);
+  --fg: oklch(21% 0.018 35);
+  --fg-soft: oklch(43% 0.022 35);
+  --fg-muted: oklch(57% 0.02 35);
+  --border: oklch(87.5% 0.018 45);
+  --border-strong: oklch(77% 0.032 42);
+  --chip-tint: oklch(95.5% 0.012 45);
+  --accent: oklch(56% 0.17 34);
+  --accent-hover: oklch(49% 0.17 34);
+  --accent-soft: oklch(93.5% 0.04 38);
+  --plum: oklch(48% 0.09 255);
+  --success: oklch(49% 0.105 145);
+  --warning: oklch(56% 0.12 72);
+  --danger: oklch(53% 0.17 28);
+  --diff-green: oklch(49% 0.105 145);
+  --diff-red: oklch(53% 0.17 28);
+  --glass-paper: oklch(97.5% 0.008 45 / 0.82);
+  --ambient-1: oklch(93% 0.045 35);
+  --ambient-2: oklch(94% 0.025 70);
+  --ambient-3: oklch(94% 0.025 250);
+}
+
+:root[data-color-system="session-spectrum"] {
+  --bg: oklch(97% 0.009 265);
+  --surface: oklch(99% 0.005 265);
+  --surface-soft: oklch(95% 0.018 265);
+  --fg: oklch(21% 0.022 270);
+  --fg-soft: oklch(43% 0.03 270);
+  --fg-muted: oklch(57% 0.026 270);
+  --border: oklch(87% 0.024 265);
+  --border-strong: oklch(75% 0.05 270);
+  --chip-tint: oklch(95% 0.018 265);
+  --accent: oklch(52% 0.19 273);
+  --accent-hover: oklch(46% 0.18 273);
+  --accent-soft: oklch(93% 0.042 270);
+  --plum: oklch(56% 0.15 190);
+  --success: oklch(50% 0.12 150);
+  --warning: oklch(55% 0.13 70);
+  --danger: oklch(54% 0.18 25);
+  --diff-green: oklch(50% 0.12 150);
+  --diff-red: oklch(54% 0.18 25);
+  --glass-paper: oklch(97% 0.009 265 / 0.82);
+  --ambient-1: oklch(93% 0.055 275);
+  --ambient-2: oklch(94% 0.05 195);
+  --ambient-3: oklch(94% 0.045 330);
+}
+
+/* Published @radix-ui/colors 3.0.0 values, intentionally unchanged. */
+:root[data-color-system="radix-ruby"] {
+  --bg: #fdfcfd;
+  --surface: #faf9fb;
+  --surface-soft: #f2eff3;
+  --fg: #211f26;
+  --fg-soft: #65636d;
+  --fg-muted: #65636d;
+  --border: #dbd8e0;
+  --border-strong: #bcbac7;
+  --chip-tint: #f2eff3;
+  --accent: #e54666;
+  --accent-hover: #dc3b5d;
+  --accent-soft: #feeaed;
+  --plum: #ab4aba;
+  --success: #29a383;
+  --warning: #ab6400;
+  --danger: #e54d2e;
+  --diff-green: #29a383;
+  --diff-red: #e54d2e;
+  --glass-paper: color(display-p3 0.991 0.988 0.992 / 0.84);
+  --ambient-1: #feeaed;
+  --ambient-2: #fbebfb;
+  --ambient-3: #e6f7ed;
+}

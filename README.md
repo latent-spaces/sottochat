@@ -20,11 +20,21 @@ Full product definition: [PRODUCT.md](PRODUCT.md). Design language: [DESIGN.md](
 
 ## Install
 
-With Bun installed, run without cloning the repository:
+With Bun installed, install the command globally:
 
 ```sh
-bunx sottochat
+bun add --global sottochat
 ```
+
+Then start it now or any time later with:
+
+```sh
+sottochat
+```
+
+To try it without installing, use `bunx sottochat`. `bunx` immediately starts
+the server in the foreground; press `Ctrl-C` to stop it, and run the same
+`bunx sottochat` command again next time.
 
 Or install the standalone macOS/Linux binary (Bun is not required):
 
@@ -59,7 +69,11 @@ Open <http://localhost:3737>. Any recent Claude Code or Codex session on this ma
 
 ## Configuration
 
-Open <http://localhost:3737/settings> to edit every setting. Language changes immediately; startup settings are saved to `~/.sottochat/settings.json` and apply after a restart. CLI flags and environment variables override saved settings. The environment equivalents are documented in [.env.example](.env.example). The main ones:
+Open <http://localhost:3737/settings> to edit every setting. Language and the
+browser-local color system change immediately; startup settings are saved to
+`~/.sottochat/settings.json` and apply after a restart. CLI flags and
+environment variables override saved settings. The environment equivalents are
+documented in [.env.example](.env.example). The main ones:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

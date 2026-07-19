@@ -246,6 +246,9 @@
       return h % SESSION_PALETTE.length;
     }
     function sessionColorVars(sessionId) {
+      // Per-session hues are the defining behavior of Session Spectrum. Other
+      // systems keep one operative accent so selection and action stay stable.
+      if (document.documentElement.dataset.colorSystem !== "session-spectrum") return "";
       const c = SESSION_PALETTE[sessionColorIdx(sessionId)];
       return (
         "--accent: rgb(" + c.accent + ");" +
@@ -254,6 +257,7 @@
         "--plum: rgb(" + c.plum + ");"
       );
     }
+    window.addEventListener("sottochat:color-system", () => refresh());
 
     // state — one entry per discovered session, keyed by server-side key
     // ("<source>:<path>"). Each carries its own events/threads/lastEventTs.
@@ -550,18 +554,6 @@
       dChartsToggle.setAttribute("aria-expanded", open ? "true" : "false");
       dChartsToggle.title = open ? "hide charts" : "show charts";
     }
-    // first-look intro: the very first time charts have anything to show for a
-    // session, we open the band so the user discovers it exists, then collapse
-    // it with an animation back to the .mini-stats glance. flag is persisted in
-    // localStorage so refreshes don't replay it.
-    function chartsIntroducedKey(sessionId) { return "charts-introduced:" + sessionId; }
-    function chartsIntroducedHas(sessionId) {
-      try { return localStorage.getItem(chartsIntroducedKey(sessionId)) === "1"; }
-      catch { return false; }
-    }
-    function chartsIntroducedSet(sessionId) {
-      try { localStorage.setItem(chartsIntroducedKey(sessionId), "1"); } catch {}
-    }
     // entrance: bars grow up from the floor with a forward stagger; band
     // itself rises + scales unless the renderDetail blur-fade cascade is
     // already animating the chart-cards (the `opening` case). also clears any
@@ -687,9 +679,6 @@
       dChartsToggle.addEventListener("click", () => {
         const sid = selectedSessionId();
         if (!sid) return;
-        // user clicking the toggle counts as "introduced" — skip the auto-intro
-        // collapse on later renders.
-        chartsIntroducedSet(sid);
         // kill any in-flight expand/collapse tweens so a re-click mid-animation
         // reverses direction cleanly.
         if (typeof gsap !== "undefined") {
@@ -1475,32 +1464,7 @@
       dChartsBand.classList.toggle("single-chart", hasCharts && !(hasComplexity && hasCode));
       dChartsToggle.hidden = !hasCharts;
       if (!hasCharts) chartsBandExpanded.delete(sessionId);
-      // first-look intro: when the band first has anything to show for a fresh
-      // session, open it so the user notices it, then auto-collapse after a
-      // beat. skipped if the user has already opened the band manually — that
-      // also marks them as introduced. flag persists in localStorage so
-      // reloads stay calm.
-      let firingIntro = false;
-      if (hasCharts && !chartsIntroducedHas(sessionId)) {
-        if (!chartsBandExpanded.has(sessionId)) {
-          chartsBandExpanded.add(sessionId);
-          firingIntro = true;
-        }
-        chartsIntroducedSet(sessionId);
-      }
       applyChartsBandExpanded(sessionId);
-      if (firingIntro) {
-        // animate the entrance in the next frame so the band has been unhidden
-        // by applyChartsBandExpanded above; schedule the auto-collapse after
-        // the user has had a beat to see the charts.
-        requestAnimationFrame(() => animateExpandChartsBand(sessionId, opening));
-        setTimeout(() => {
-          if (selectedSessionId() !== sessionId) return;
-          if (!chartsBandExpanded.has(sessionId)) return; // user closed it manually
-          chartsBandExpanded.delete(sessionId);
-          animateCollapseChartsBand(sessionId);
-        }, 2200);
-      }
 
       const lastViewed = getLastViewed(sessionId);
       const untouchedMs = lastViewed ? (Date.now() - lastViewed) : 0;
@@ -1717,41 +1681,6 @@
       convoLastSession = sessionId;
       convoLastTurnCount = turns.length;
     }
-
-    /* ambient sprinkle layer — small dots/dashes drifting via gsap yoyo.
-       respects prefers-reduced-motion. spawned once on first paint. */
-    function spawnSprinkles() {
-      const layer = document.querySelector("[data-sprinkles]");
-      if (!layer) return;
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const COLORS = [
-        "#ec4899", "#f9a8d4", "#a855f7", "#fbbf24", "#fde68a",
-      ];
-      const count = window.innerWidth < 720 ? 14 : 30;
-      for (let i = 0; i < count; i++) {
-        const s = document.createElement("span");
-        s.className = Math.random() < 0.3 ? "sprinkle round" : "sprinkle";
-        s.style.background = COLORS[i % COLORS.length];
-        s.style.left = (Math.random() * 100) + "%";
-        s.style.top = (Math.random() * 200) + "%";
-        s.style.transform = "rotate(" + (Math.random() * 360) + "deg)";
-        s.style.opacity = (0.5 + Math.random() * 0.35).toFixed(2);
-        layer.appendChild(s);
-        if (!reduce && typeof gsap !== "undefined") {
-          gsap.to(s, {
-            y: "+=" + (20 + Math.random() * 30),
-            x: "+=" + (-10 + Math.random() * 20),
-            rotation: "+=" + (30 + Math.random() * 60),
-            duration: 4 + Math.random() * 4,
-            repeat: -1,
-            yoyo: true,
-            ease: "sine.inOut",
-            delay: Math.random() * 3,
-          });
-        }
-      }
-    }
-    spawnSprinkles();
 
     // hover-burst: when the cursor enters a frosted bar, fling a handful of
     // sprinkles out of its frosting cap. delegated via mouseover (mouseenter

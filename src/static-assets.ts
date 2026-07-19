@@ -2,6 +2,8 @@ import indexHtml from "../public/index.html" with { type: "file" };
 import settingsHtml from "../public/settings.html" with { type: "file" };
 import appJs from "../public/assets/app.js" with { type: "file" };
 import settingsJs from "../public/assets/settings.js" with { type: "file" };
+import themeJs from "../public/assets/theme.js" with { type: "file" };
+import themesCss from "../public/assets/themes.css" with { type: "file" };
 import frostingSvg from "../public/assets/frosting-new.svg" with { type: "file" };
 import logoSvg from "../public/assets/logo.svg" with { type: "file" };
 import mascot1Svg from "../public/assets/mascot-uni-1.svg" with { type: "file" };
@@ -21,6 +23,8 @@ const STATIC_ASSETS = new Map<string, string>([
   ["/settings.html", settingsHtml as unknown as string],
   ["/assets/app.js", appJs],
   ["/assets/settings.js", settingsJs],
+  ["/assets/theme.js", themeJs],
+  ["/assets/themes.css", themesCss],
   ["/assets/frosting-new.svg", frostingSvg],
   ["/assets/logo.svg", logoSvg],
   ["/assets/mascot-uni-1.svg", mascot1Svg],

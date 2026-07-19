@@ -2,20 +2,20 @@
 name: sottochat
 description: a multilingual meta-discussion layer for autonomous coding agents
 colors:
-  bg: "#fdf9fa"
-  surface: "#fffdfd"
-  fg: "#1a1a1f"
-  fg-soft: "#6e6e7a"
-  fg-muted: "#9090a0"
-  border: "#efe8eb"
-  border-strong: "#dcd2d6"
-  chip-tint: "#f5eef1"
-  accent: "#ec4899"
-  accent-hover: "#db2777"
-  accent-soft: "#fce7f3"
-  plum: "#a855f7"
-  diff-green: "#10b981"
-  diff-red: "#ef4444"
+  bg: "oklch(98% 0.008 350)"
+  surface: "oklch(99.4% 0.005 350)"
+  fg: "oklch(22% 0.014 320)"
+  fg-soft: "oklch(45% 0.018 320)"
+  fg-muted: "oklch(58% 0.018 320)"
+  border: "oklch(89.5% 0.016 350)"
+  border-strong: "oklch(80% 0.028 350)"
+  chip-tint: "oklch(96.5% 0.014 350)"
+  accent: "oklch(57% 0.205 354)"
+  accent-hover: "oklch(51% 0.205 354)"
+  accent-soft: "oklch(94.2% 0.038 350)"
+  plum: "oklch(58% 0.15 310)"
+  diff-green: "oklch(50% 0.12 150)"
+  diff-red: "oklch(54% 0.18 25)"
 typography:
   sans: "-apple-system, BlinkMacSystemFont, Inter, Segoe UI, sans-serif"
   mono: "ui-monospace, SF Mono, Menlo, Consolas, monospace"
@@ -42,25 +42,30 @@ The playful visual layer is kept only where it earns its keep:
 - chart frosting caps
 - frosted-bar sprinkle burst
 
-Ambient sprinkles and over-the-top mascot specials are implementation drift. Keep them only if they can be made almost invisible and fully motion-respectful; otherwise cut them.
+Ambient background sprinkles are removed. Hover effects attached to a direct
+chart interaction may remain if they are subtle and motion-respectful.
 
 ## Color
 
-Primary strategy: restrained product UI with one operative accent.
+Primary strategy: restrained product UI with one operative accent. The browser
+can choose among four complete light color systems in Settings: Quiet Berry
+(default), Ink and Ember, Session Spectrum, and Radix Ruby. The first three are
+defined in OKLCH; Radix Ruby uses the published Radix Colors 3.0.0 values.
 
-- **Paper** `#fdf9fa`: page background.
-- **Surface** `#fffdfd`: cards and controls. Avoid pure white in new work.
-- **Ink** `#1a1a1f`: primary text.
-- **Pewter** `#9090a0`: metadata and instrument labels.
-- **Strawberry** `#ec4899`: current selection, focus, send, live, and brand mark.
-- **Strawberry tint** `#fce7f3`: selected card and active chip fills.
-- **Plum** `#a855f7`: agent-side role only where paired with user-side accent.
+- **Paper** `oklch(98% 0.008 350)`: page background.
+- **Surface** `oklch(99.4% 0.005 350)`: cards and controls.
+- **Ink** `oklch(22% 0.014 320)`: primary text.
+- **Pewter** `oklch(58% 0.018 320)`: metadata and instrument labels.
+- **Strawberry** `oklch(57% 0.205 354)`: current selection, focus, send, live, and brand mark.
+- **Strawberry tint** `oklch(94.2% 0.038 350)`: selected card and active chip fills.
+- **Plum** `oklch(58% 0.15 310)`: agent-side role only where paired with user-side accent.
 - **Diff green/red**: code change chart only.
 
 Rules:
 
 - Accent means action or current selection. Do not use it for decoration.
-- Per-session colors may scope to the card and selected detail pane only.
+- Per-session colors may scope to the card and selected detail pane only when
+  Session Spectrum is active. The other systems keep a stable accent.
 - Green and red are data colors, not status badges.
 - New colors should be written as OKLCH in CSS when touched.
 - No gradient text, gradient borders, or new glass surfaces.
@@ -170,9 +175,7 @@ Allowed:
 
 Needs restraint:
 
-- Ambient sprinkles.
 - Mascot specials.
-- Auto chart intro.
 
 Ban:
 
