@@ -11,6 +11,7 @@
   const mobileChangeSummary = document.getElementById("mobile-change-summary");
   const restartHint = document.getElementById("restart-hint");
   const LANG_KEY = "cutCakeLang";
+  const theme = window.SottochatTheme;
 
   let catalog = null;
   const itemsByKey = new Map();
@@ -257,6 +258,71 @@
     return row;
   }
 
+  function renderAppearanceSection() {
+    const indexLink = element("a", "index-link");
+    indexLink.href = "#appearance";
+    indexLink.append(element("span", "", "appearance"), element("span", "index-count", "1"));
+    index.appendChild(indexLink);
+
+    const section = element("section", "settings-section");
+    section.id = "appearance";
+    const heading = element("div", "group-head");
+    heading.append(
+      element("h2", "", "appearance"),
+      element("p", "", "Browser-local visual preferences that apply immediately."),
+    );
+
+    const row = element("div", "setting-row");
+    const info = element("div", "setting-info");
+    const label = element("label", "setting-label", "color system");
+    label.htmlFor = "setting-color-system";
+    info.append(
+      label,
+      element("p", "setting-description", "Choose the palette for sessions and settings on this browser."),
+    );
+    const browserMeta = element("div", "setting-env");
+    browserMeta.append(
+      element("span", "env-key", "browser preference"),
+      element("span", "source-label", "saved in local storage"),
+    );
+    info.appendChild(browserMeta);
+
+    const controlWrap = element("div", "setting-control");
+    const select = element("select");
+    select.id = "setting-color-system";
+    select.setAttribute("aria-label", "color system");
+    for (const system of theme.systems) {
+      const option = element("option", "", system.label);
+      option.value = system.id;
+      select.appendChild(option);
+    }
+
+    const swatches = element("div", "theme-swatches");
+    swatches.setAttribute("aria-hidden", "true");
+    const description = element("div", "value-meta");
+    function paintThemeChoice(id) {
+      const system = theme.systems.find((candidate) => candidate.id === id) || theme.systems[0];
+      select.value = system.id;
+      swatches.replaceChildren(...system.swatches.map((color) => {
+        const swatch = element("i", "theme-swatch");
+        swatch.style.setProperty("--swatch", color);
+        return swatch;
+      }));
+      description.textContent = system.description;
+    }
+    paintThemeChoice(theme.current());
+    select.addEventListener("change", () => {
+      const next = theme.apply(select.value, true);
+      paintThemeChoice(next);
+      const selected = theme.systems.find((system) => system.id === next);
+      showStatus(`${selected.label} applied`);
+    });
+    controlWrap.append(select, swatches, description);
+    row.append(info, controlWrap);
+    section.append(heading, row);
+    root.appendChild(section);
+  }
+
   function renderCatalog(nextCatalog) {
     catalog = nextCatalog;
     root.replaceChildren();
@@ -269,6 +335,8 @@
     resetKeys.clear();
     if (catalog.note) note.textContent = catalog.note;
     if (catalog.storage) storage.textContent = catalog.storage;
+
+    renderAppearanceSection();
 
     for (const group of catalog.groups || []) {
       const indexLink = element("a", "index-link");

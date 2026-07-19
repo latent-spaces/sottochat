@@ -68,25 +68,9 @@
       border-radius: 50%;
       filter: blur(80px);
     }
-    .blob-1 { width: 520px; height: 520px; background: oklch(94% 0.05 0); top: -120px; left: -160px; opacity: 0.55; }
-    .blob-2 { width: 420px; height: 420px; background: oklch(94% 0.06 305); top: 40px; right: -120px; opacity: 0.5; }
-    .blob-3 { width: 600px; height: 600px; background: oklch(94% 0.04 280); top: 60vh; left: 28%; opacity: 0.35; }
-
-    .sprinkles {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      overflow: hidden;
-    }
-    .sprinkle {
-      position: absolute;
-      width: 5px;
-      height: 14px;
-      border-radius: 999px;
-      will-change: transform;
-    }
-    .sprinkle.round { width: 6px; height: 6px; }
+    .blob-1 { width: 520px; height: 520px; background: var(--ambient-1); top: -120px; left: -160px; opacity: 0.55; }
+    .blob-2 { width: 420px; height: 420px; background: var(--ambient-2); top: 40px; right: -120px; opacity: 0.5; }
+    .blob-3 { width: 600px; height: 600px; background: var(--ambient-3); top: 60vh; left: 28%; opacity: 0.35; }
 
     /* hover-burst sprinkles spawned out of a bar's frosting cap. positioned
        absolute inside the bar — the bar uses overflow:visible already so they
@@ -1546,6 +1530,8 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="/assets/themes.css" />
+  <script src="/assets/theme.js"></script>
 </head>
 <body>
   <div class="bg-blobs" aria-hidden="true">
@@ -1553,8 +1539,6 @@
     <span class="blob blob-2"></span>
     <span class="blob blob-3"></span>
   </div>
-  <div class="sprinkles" aria-hidden="true" data-sprinkles></div>
-
   <header class="top-nav">
     <div class="nav-left">
       <img class="nav-logo" src="/assets/logo.svg" alt="" />

@@ -71,11 +71,13 @@ else
   install_dir="$fallback"
 fi
 
-say "Installed sottochat to $install_dir/sottochat"
+say ""
+say "sottochat installed"
+say "  Binary: $install_dir/sottochat"
 case ":$PATH:" in
-  *":$install_dir:"*) say "Run: sottochat" ;;
+  *":$install_dir:"*) say "  Start:  sottochat" ;;
   *)
-    say "Add $install_dir to PATH, then run: sottochat"
-    say "  export PATH=\"$install_dir:\$PATH\""
+    say "  PATH:   export PATH=\"$install_dir:\$PATH\""
+    say "  Start:  sottochat"
     ;;
 esac
