@@ -1,6 +1,6 @@
 {
   "name": "sottochat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A quiet back-channel for long autonomous agent runs — tails Claude Code / Codex transcripts and gives you a multilingual Q&A thread about each session.",
   "license": "MIT",
   "type": "module",
