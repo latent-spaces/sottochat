@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
 import packageJson from "../package.json" with { type: "json" };
+import { formatStartupMessage, terminalSupportsColor } from "./startup-message";
 
 const HELP = `sottochat ${packageJson.version}
 
@@ -85,7 +86,10 @@ const { readStartupSetting } = await import("./settings");
 const port = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
 if (await sottochatRunningAt(port)) {
   const url = `http://localhost:${port}/`;
-  console.log(`sottochat is already running · ${url}`);
+  console.log(formatStartupMessage(url, {
+    alreadyRunning: true,
+    color: terminalSupportsColor(),
+  }));
   openInBrowser(url);
   process.exit(0);
 }

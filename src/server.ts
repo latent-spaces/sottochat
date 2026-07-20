@@ -836,13 +836,12 @@ const server = Bun.serve({
   },
 });
 
-console.log(`
-  sottochat is ready
-
-  Local        http://localhost:${server.port}
-  Stop         Ctrl-C
-  Start again  sottochat  (or bunx sottochat)
-`);
+const { formatStartupMessage, terminalSupportsColor } = await import("./startup-message");
+console.log(
+  formatStartupMessage(`http://localhost:${server.port}/`, {
+    color: terminalSupportsColor(),
+  })
+);
 
 // the chat host — a per-session claude subprocess the user talks to (see chat-agent.ts).
 const chatHost = startChatHost({
