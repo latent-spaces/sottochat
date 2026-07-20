@@ -58,4 +58,36 @@ for (let i = 0; i < args.length; i++) {
   fail(`unknown option '${arg}'`);
 }
 
+async function sottochatRunningAt(port: number): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/state`, {
+      signal: AbortSignal.timeout(500),
+    });
+    if (!res.ok) return false;
+    const body = (await res.json()) as { sessions?: unknown };
+    return Array.isArray(body?.sessions);
+  } catch {
+    return false;
+  }
+}
+
+function openInBrowser(url: string): void {
+  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+  try {
+    Bun.spawn([cmd, url], { stdout: "ignore", stderr: "ignore" });
+  } catch {
+    // best-effort; the URL is already printed
+  }
+}
+
+// Env flags parsed above must land before settings loads its startup snapshot.
+const { readStartupSetting } = await import("./settings");
+const port = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
+if (await sottochatRunningAt(port)) {
+  const url = `http://localhost:${port}/`;
+  console.log(`sottochat is already running · ${url}`);
+  openInBrowser(url);
+  process.exit(0);
+}
+
 await import("./server");

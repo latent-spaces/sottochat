@@ -32,6 +32,9 @@ Then start it now or any time later with:
 sottochat
 ```
 
+If a sottochat server is already running on the target port, `sottochat`
+doesn't start a second one — it prints the URL and opens it in your browser.
+
 To try it without installing, use `bunx sottochat`. `bunx` immediately starts
 the server in the foreground; press `Ctrl-C` to stop it, and run the same
 `bunx sottochat` command again next time.
@@ -66,6 +69,10 @@ bun run start          # serves http://localhost:3737
 ```
 
 Open <http://localhost:3737>. Any recent Claude Code or Codex session on this machine appears in the inbox; open one to see its turns and start a discussion.
+
+Working from a checkout, run `bun link` once to register a global `sottochat`
+command that points at your working copy — every launch runs current source,
+no republish or rebuild needed.
 
 ## Configuration
 
