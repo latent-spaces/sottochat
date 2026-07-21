@@ -20,7 +20,7 @@ export function formatStartupMessage(
   const border = "#".repeat(width);
   const edge = color ? `${ANSI.cyan}#${ANSI.reset}` : "#";
   const line = (content = "") => `${edge}${content.padEnd(width - 2)}${edge}`;
-  const title = "S O T T O C H A T";
+  const title = "S O T T O - C H A T";
   const titleLine = line(`   ${title}`).replace(
     title,
     color ? `${ANSI.bold}${title}${ANSI.reset}` : title

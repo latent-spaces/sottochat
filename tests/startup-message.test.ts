@@ -6,7 +6,7 @@ describe("startup message", () => {
     expect(formatStartupMessage("http://localhost:3737/")).toBe(`
 ##########################################################
 #                                                        #
-#   S O T T O C H A T                                    #
+#   S O T T O - C H A T                                  #
 #   Discuss the response. Answer well.                   #
 #                                                        #
 #   OPEN  >>>  http://localhost:3737/                    #
