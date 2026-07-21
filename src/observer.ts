@@ -13,6 +13,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { SessionInfo } from "./tailer";
 import type { Turn } from "./turns";
+import { logInfo } from "./log";
 import type { MetaEvent } from "./jsonl";
 
 export type TurnFeed = {
@@ -246,7 +247,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
     const content = firstPrompt ? `${opts.systemIntro}\n\n---\n\n${body}` : body;
     firstPrompt = false;
     pushPrompt(content);
-    console.log(`[${opts.label}] sent batch of ${batch.length} turn(s) to ${opts.model}`);
+    logInfo(`[${opts.label}] sent batch of ${batch.length} turn(s) to ${opts.model}`);
   }, opts.batchMs);
 
   async function runSdkLoopOnce(): Promise<void> {
@@ -291,7 +292,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
         const batch = inflightBatches.shift();
         if (!batch) {
           // safety: model spoke without a pending batch (shouldn't happen).
-          console.log(`[${opts.label}] response with no inflight batch — dropping`);
+          logInfo(`[${opts.label}] response with no inflight batch — dropping`);
           continue;
         }
         opts.onResponse(text, batch);
@@ -313,7 +314,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
     while (!stopped) {
       attempts++;
       if (attempts > 1) {
-        console.log(`[${opts.label}] respawning sdk subprocess (attempt ${attempts})`);
+        logInfo(`[${opts.label}] respawning sdk subprocess (attempt ${attempts})`);
       }
       try {
         await runSdkLoopOnce();
@@ -374,7 +375,7 @@ export function startObserver(opts: ObserverOptions): {
     onResponse(text, batch) {
       const parsed = parseSummaryResponse(text);
       if (!parsed) {
-        console.log(`[observer] could not parse: ${clip(text, 200)}`);
+        logInfo(`[observer] could not parse: ${clip(text, 200)}`);
         return;
       }
       const byTurn = new Map<string, TurnFeed>();
@@ -382,12 +383,12 @@ export function startObserver(opts: ObserverOptions): {
       for (const d of parsed) {
         const feed = byTurn.get(d.turnId);
         if (!feed) {
-          console.log(`[observer] unknown turnId in response: ${d.turnId}`);
+          logInfo(`[observer] unknown turnId in response: ${d.turnId}`);
           continue;
         }
         const summary: ObserverSummary = { ...d, sessionKey: feed.sessionKey };
         opts.onSummary?.(summary);
-        console.log(`[observer] ${feed.sessionKey.slice(-24)} — ${clip(summary.summary ?? "(none)", 80)}`);
+        logInfo(`[observer] ${feed.sessionKey.slice(-24)} — ${clip(summary.summary ?? "(none)", 80)}`);
       }
     },
   });

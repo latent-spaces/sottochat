@@ -81,6 +81,10 @@ function openInBrowser(url: string): void {
   }
 }
 
+// quiet by default: the packaged `sottochat` entry only prints the startup
+// box, nothing else. `bun src/server.ts` (scratch/dev instances) stays verbose.
+process.env.META_QUIET ??= "1";
+
 // Env flags parsed above must land before settings loads its startup snapshot.
 const { readStartupSetting } = await import("./settings");
 const port = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
@@ -95,3 +99,4 @@ if (await sottochatRunningAt(port)) {
 }
 
 await import("./server");
+openInBrowser(`http://localhost:${port}/`);

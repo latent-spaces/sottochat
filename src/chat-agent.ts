@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { logInfo } from "./log";
 
 // the chat companion the user talks to. one persistent sdk subprocess per upstream
 // session — lazily spawned on the user's first send, reused for follow-ups.
@@ -228,14 +229,14 @@ ${text}`;
             if (!text.trim()) continue;
             opts.onChunk?.({ sessionKey, role: "assistant", text, ts: Date.now() });
             opts.onStatus?.({ sessionKey, status: "idle" });
-            console.log(`[chat] ${sessionKey.slice(0, 24)} ← ${clip(text, 120)}`);
+            logInfo(`[chat] ${sessionKey.slice(0, 24)} ← ${clip(text, 120)}`);
           }
           consecutiveFailures = 0;
         } catch (err) {
           if (stopped) return;
           consecutiveFailures++;
           const message = err instanceof Error ? err.message : String(err);
-          console.log(`[chat] error in ${sessionKey.slice(0, 24)} (${consecutiveFailures}/5): ${message}`);
+          logInfo(`[chat] error in ${sessionKey.slice(0, 24)} (${consecutiveFailures}/5): ${message}`);
           opts.onStatus?.({ sessionKey, status: "respawning", message });
           await new Promise((r) => setTimeout(r, 5_000));
         } finally {
@@ -254,7 +255,7 @@ ${text}`;
     })();
 
     opts.onStatus?.({ sessionKey, status: "spawned" });
-    console.log(`[chat] spawned for ${sessionKey.slice(0, 32)} (cwd ${cwd})`);
+    logInfo(`[chat] spawned for ${sessionKey.slice(0, 32)} (cwd ${cwd})`);
     return { push, stop };
   }
 

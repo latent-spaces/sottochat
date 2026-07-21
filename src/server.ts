@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { logInfo } from "./log";
 import { startTailer, type SessionInfo } from "./tailer";
 import type { MetaEvent } from "./jsonl";
 import { createTurnsState, ingestEvent, type Turn, type TurnsState } from "./turns";
@@ -488,7 +489,7 @@ function currentSettingsCatalog() {
 function applyExplainLanguage(lang: string): void {
   if (explainLang === lang) return;
   explainLang = lang;
-  console.log(`[settings] explain language → ${lang} (${LANGUAGE_NAMES[lang]})`);
+  logInfo(`[settings] explain language → ${lang} (${LANGUAGE_NAMES[lang]})`);
   broadcast({ kind: "settings:language", language: explainLang });
   if (!observer) return;
   let refed = 0;
@@ -498,7 +499,7 @@ function applyExplainLanguage(lang: string): void {
     refed++;
   }
   if (refed > 0) {
-    console.log(`[settings] re-queued ${refed} card summaries in ${LANGUAGE_NAMES[lang]}`);
+    logInfo(`[settings] re-queued ${refed} card summaries in ${LANGUAGE_NAMES[lang]}`);
   }
 }
 
@@ -856,7 +857,7 @@ const chatHost = startChatHost({
     broadcast({ kind: "chat:status", sessionKey: u.sessionKey, ...s });
   },
 });
-console.log(`[chat] enabled · model=${CHAT_MODEL}`);
+logInfo(`[chat] enabled · model=${CHAT_MODEL}`);
 
 const observer = OBSERVER_ENABLED
   ? startObserver({
@@ -884,7 +885,7 @@ const observer = OBSERVER_ENABLED
     })
   : null;
 if (observer) {
-  console.log(
+  logInfo(
     `[observer] enabled · summarizer=${OBSERVER_MODEL} · batch=${OBSERVER_BATCH_MS}ms`
   );
 }
@@ -893,7 +894,7 @@ if (observer) {
 // before the server process exits, otherwise claude subprocesses can be orphaned.
 {
   const onSignal = async (sig: string) => {
-    console.log(`[server] received ${sig} — stopping observer + chat host + registry`);
+    logInfo(`[server] received ${sig} — stopping observer + chat host + registry`);
     persister.flush();
     observer?.stop();
     chatHost.stop();
@@ -919,7 +920,7 @@ const registry = startRegistry({
     syncVisibility();
   },
 });
-console.log(
+logInfo(
   `[registry] enabled · use-as-driver=${USE_PROCESS_DISCOVERY} · grace=${Math.round(DISCOVERY_GRACE_MS / 60000)}m · diag at /diag/discovery`,
 );
 
@@ -928,7 +929,7 @@ startTailer({
   pollMs: POLL_MS,
   recentMs: RECENT_MS,
   onSession(info) {
-    console.log(`[tailer] new session ${info.source}/${info.sessionId.slice(0, 8)} (${info.slug})`);
+    logInfo(`[tailer] new session ${info.source}/${info.sessionId.slice(0, 8)} (${info.slug})`);
   },
   onEvent(info, ev) {
     // our own sdk subprocesses (observer + chat hosts, now under ~/.sottochat/)
