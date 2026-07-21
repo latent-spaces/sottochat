@@ -5,7 +5,7 @@ import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { logInfo } from "./log";
-import { isAuthError, AUTH_ERROR_MESSAGE } from "./sdk-errors";
+import { isAuthError, authErrorHint } from "./sdk-errors";
 
 // the chat companion the user talks to. one persistent sdk subprocess per upstream
 // session — lazily spawned on the user's first send, reused for follow-ups.
@@ -241,7 +241,7 @@ ${text}`;
           const message = err instanceof Error ? err.message : String(err);
           if (isAuthError(message)) {
             logInfo(`[chat] auth error in ${sessionKey.slice(0, 24)}: ${message}`);
-            opts.onStatus?.({ sessionKey, status: "error", message: AUTH_ERROR_MESSAGE });
+            opts.onStatus?.({ sessionKey, status: "error", message: authErrorHint() });
             authFailed = true;
             break;
           }
