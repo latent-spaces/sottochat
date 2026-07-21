@@ -89,10 +89,12 @@ process.env.META_QUIET ??= "1";
 const { readStartupSetting } = await import("./settings");
 const port = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
 if (await sottochatRunningAt(port)) {
+  const { hasClaudeCredentials } = await import("./auth-check");
   const url = `http://localhost:${port}/`;
   console.log(formatStartupMessage(url, {
     alreadyRunning: true,
     color: terminalSupportsColor(),
+    authHint: !hasClaudeCredentials(),
   }));
   openInBrowser(url);
   process.exit(0);

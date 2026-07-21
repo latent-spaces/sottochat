@@ -838,9 +838,11 @@ const server = Bun.serve({
 });
 
 const { formatStartupMessage, terminalSupportsColor } = await import("./startup-message");
+const { hasClaudeCredentials } = await import("./auth-check");
 console.log(
   formatStartupMessage(`http://localhost:${server.port}/`, {
     color: terminalSupportsColor(),
+    authHint: !hasClaudeCredentials(),
   })
 );
 

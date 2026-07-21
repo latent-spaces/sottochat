@@ -8,7 +8,7 @@ const ANSI = {
 
 export function formatStartupMessage(
   url: string,
-  options: { alreadyRunning?: boolean; color?: boolean } = {}
+  options: { alreadyRunning?: boolean; color?: boolean; authHint?: boolean } = {}
 ): string {
   const color = options.color ?? false;
   const hook = "Discuss the response. Answer well.";
@@ -39,6 +39,15 @@ export function formatStartupMessage(
     line(),
   ];
 
+  if (options.authHint) {
+    for (const hint of [
+      "   chat & summaries need a Claude Code login",
+      "   run `claude` once to sign in",
+    ]) {
+      lines.push(line(hint).replace(hint, color ? `${ANSI.dim}${hint}${ANSI.reset}` : hint));
+    }
+    lines.push(line());
+  }
   if (!options.alreadyRunning) {
     const hint = "   Ctrl-C to stop";
     const hintLine = line(hint).replace(
