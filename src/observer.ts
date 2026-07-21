@@ -14,6 +14,7 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { SessionInfo } from "./tailer";
 import type { Turn } from "./turns";
 import { logInfo } from "./log";
+import { isAuthError } from "./sdk-errors";
 import type { MetaEvent } from "./jsonl";
 
 export type TurnFeed = {
@@ -321,8 +322,12 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
         // sdk loop exited cleanly (e.g. abort during shutdown) — counts as not a failure
         consecutiveFailures = 0;
       } catch (err) {
-        consecutiveFailures++;
         const msg = err instanceof Error ? err.message : String(err);
+        if (isAuthError(msg)) {
+          console.error(`[${opts.label}] not signed in to Claude Code — run \`claude\` in a terminal and log in: ${msg}`);
+          return;
+        }
+        consecutiveFailures++;
         console.error(
           `[${opts.label}] sdk error (consecutive failures ${consecutiveFailures}/${maxConsecutiveFailures}): ${msg}`
         );

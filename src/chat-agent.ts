@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { logInfo } from "./log";
+import { isAuthError, AUTH_ERROR_MESSAGE } from "./sdk-errors";
 
 // the chat companion the user talks to. one persistent sdk subprocess per upstream
 // session — lazily spawned on the user's first send, reused for follow-ups.
@@ -55,7 +56,8 @@ Rules:
 - Use the supplied session context, especially the latest exchange.
 - When asked what to send, write, or reply, prepare a targeted message for the original session. Include exactly one fenced block tagged \`to-agent\`.
 - Otherwise do not include a \`to-agent\` block.
-- Text outside a \`to-agent\` block stays in ${answerLanguage}.`;
+- Text outside a \`to-agent\` block stays in ${answerLanguage}.
+- If ${answerLanguage} grammatically marks the addressee's gender (e.g. Hebrew, Arabic), address the developer in a gender-neutral or inclusive way — don't default to masculine forms.`;
 }
 
 function findClaudeExecutable(): string {
@@ -146,6 +148,7 @@ export function startChatHost(opts: ChatAgentOptions): {
 - Answers to the developer: ${lang}
 - Text outside a \`to-agent\` block stays in ${lang}.
 - Suggested replies to the coding agent: unchanged (the agent's own language, usually English)
+- If ${lang} grammatically marks the addressee's gender (e.g. Hebrew, Arabic), address the developer in a gender-neutral or inclusive way — don't default to masculine forms.
 
 ${text}`;
       } else {
@@ -186,6 +189,7 @@ ${text}`;
 
     void (async () => {
       let consecutiveFailures = 0;
+      let authFailed = false;
       while (!stopped && consecutiveFailures < 5) {
         // a respawned subprocess has no memory of the prior conversation — re-send
         // the persona + language on the next message (mirrors the observer loop).
@@ -234,8 +238,14 @@ ${text}`;
           consecutiveFailures = 0;
         } catch (err) {
           if (stopped) return;
-          consecutiveFailures++;
           const message = err instanceof Error ? err.message : String(err);
+          if (isAuthError(message)) {
+            logInfo(`[chat] auth error in ${sessionKey.slice(0, 24)}: ${message}`);
+            opts.onStatus?.({ sessionKey, status: "error", message: AUTH_ERROR_MESSAGE });
+            authFailed = true;
+            break;
+          }
+          consecutiveFailures++;
           logInfo(`[chat] error in ${sessionKey.slice(0, 24)} (${consecutiveFailures}/5): ${message}`);
           opts.onStatus?.({ sessionKey, status: "respawning", message });
           await new Promise((r) => setTimeout(r, 5_000));
@@ -248,7 +258,7 @@ ${text}`;
           abort = null;
         }
       }
-      if (consecutiveFailures >= 5) {
+      if (!authFailed && consecutiveFailures >= 5) {
         opts.onStatus?.({ sessionKey, status: "error", message: "too many consecutive failures" });
       }
       agents.delete(sessionKey);
