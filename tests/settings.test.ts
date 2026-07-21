@@ -81,6 +81,18 @@ describe("settings catalog", () => {
     expect(readStartupSetting("META_USE_PROCESS_DISCOVERY", true, { META_USE_PROCESS_DISCOVERY: "0" }, [], {})).toBe(false);
   });
 
+  test("injected snapshots drive nextValue and pendingRestart, not the live file", () => {
+    const catalog = buildSettingsCatalog(values, languages, {}, {
+      startup: {},
+      current: { META_PORT: 4500 },
+    });
+    const port = catalog.groups.flatMap((g) => g.settings).find((s) => s.key === "META_PORT");
+
+    expect(port?.savedValue).toBe(4500);
+    expect(port?.nextValue).toBe(4500);
+    expect(port?.pendingRestart).toBe(true);
+  });
+
   test("saved settings fall back below the environment", () => {
     expect(readStartupSetting("META_PORT", 3737, {}, [], { META_PORT: 4500 })).toBe(4500);
     expect(readStartupSetting("META_PORT", 3737, { META_PORT: "4400" }, [], { META_PORT: 4500 })).toBe(4400);

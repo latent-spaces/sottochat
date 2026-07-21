@@ -201,10 +201,11 @@ function nextSettingValue<T extends SettingValue>(
   defaultValue: T,
   env: Environment,
   aliases: string[] = [],
+  saved: SavedSettings = savedSettings,
 ): T {
   const environmentValue = rawEnvironmentValue(key, env, aliases);
   if (environmentValue !== undefined) return safeSettingValue(key, environmentValue, defaultValue);
-  if (savedSettings[key] !== undefined) return safeSettingValue(key, savedSettings[key], defaultValue);
+  if (saved[key] !== undefined) return safeSettingValue(key, saved[key], defaultValue);
   return defaultValue;
 }
 
@@ -261,7 +262,7 @@ function makeSettingBuilder(startupSaved: SavedSettings, currentSaved: SavedSett
     const externalSource = environmentSource(input.key, env, environmentAliases);
     const source = externalSource
       ?? (startupSaved[input.key] !== undefined ? "saved" : "default");
-    const nextValue = nextSettingValue(input.key, input.defaultValue, env, environmentAliases);
+    const nextValue = nextSettingValue(input.key, input.defaultValue, env, environmentAliases, currentSaved);
     const savedValue = currentSaved[input.key];
     return {
       ...publicInput,
