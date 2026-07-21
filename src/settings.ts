@@ -56,7 +56,7 @@ export type EffectiveSettings = {
 };
 
 type Environment = Record<string, string | undefined>;
-type SavedSettings = Record<string, SettingValue>;
+export type SavedSettings = Record<string, SettingValue>;
 
 type SettingRule = {
   kind: "boolean" | "number" | "string" | "select";
@@ -186,11 +186,12 @@ export function readStartupSetting<T extends SettingValue>(
   defaultValue: T,
   env: Environment = Bun.env,
   aliases: string[] = [],
+  saved: SavedSettings = startupSavedSettings,
 ): T {
   const environmentValue = rawEnvironmentValue(key, env, aliases);
   if (environmentValue !== undefined) return safeSettingValue(key, environmentValue, defaultValue);
-  if (startupSavedSettings[key] !== undefined) {
-    return safeSettingValue(key, startupSavedSettings[key], defaultValue);
+  if (saved[key] !== undefined) {
+    return safeSettingValue(key, saved[key], defaultValue);
   }
   return defaultValue;
 }
@@ -254,20 +255,22 @@ type SettingInput = Omit<
   environmentAliases?: string[];
 };
 
-function setting(input: SettingInput): PublicSetting {
-  const { env, environmentAliases = [], ...publicInput } = input;
-  const externalSource = environmentSource(input.key, env, environmentAliases);
-  const source = externalSource
-    ?? (startupSavedSettings[input.key] !== undefined ? "saved" : "default");
-  const nextValue = nextSettingValue(input.key, input.defaultValue, env, environmentAliases);
-  const savedValue = savedSettings[input.key];
-  return {
-    ...publicInput,
-    source,
-    nextValue,
-    ...(savedValue !== undefined ? { savedValue } : {}),
-    pendingRestart: input.restartRequired && nextValue !== input.value,
-    editable: !input.restartRequired || !externalSource,
+function makeSettingBuilder(startupSaved: SavedSettings, currentSaved: SavedSettings) {
+  return function setting(input: SettingInput): PublicSetting {
+    const { env, environmentAliases = [], ...publicInput } = input;
+    const externalSource = environmentSource(input.key, env, environmentAliases);
+    const source = externalSource
+      ?? (startupSaved[input.key] !== undefined ? "saved" : "default");
+    const nextValue = nextSettingValue(input.key, input.defaultValue, env, environmentAliases);
+    const savedValue = currentSaved[input.key];
+    return {
+      ...publicInput,
+      source,
+      nextValue,
+      ...(savedValue !== undefined ? { savedValue } : {}),
+      pendingRestart: input.restartRequired && nextValue !== input.value,
+      editable: !input.restartRequired || !externalSource,
+    };
   };
 }
 
@@ -275,7 +278,13 @@ export function buildSettingsCatalog(
   values: EffectiveSettings,
   languages: Record<string, string>,
   env: Environment = Bun.env,
+  // test seam: inject the saved-settings snapshots so the catalog never
+  // depends on the live ~/.sottochat/settings.json read at module load.
+  savedSnapshots?: { startup?: SavedSettings; current?: SavedSettings },
 ) {
+  const startupSaved = savedSnapshots?.startup ?? startupSavedSettings;
+  const currentSaved = savedSnapshots?.current ?? savedSettings;
+  const setting = makeSettingBuilder(startupSaved, currentSaved);
   const languageDefault = "zh";
   const languageSetting = setting({
     env,
@@ -288,7 +297,7 @@ export function buildSettingsCatalog(
     options: Object.entries(languages).map(([value, label]) => ({ value, label })),
     restartRequired: false,
   });
-  const startupLanguage = readStartupSetting("META_EXPLAIN_LANG", languageDefault, env);
+  const startupLanguage = readStartupSetting("META_EXPLAIN_LANG", languageDefault, env, [], startupSaved);
   if (values.explainLanguage !== startupLanguage) languageSetting.source = "runtime";
   languageSetting.nextValue = values.explainLanguage;
 

@@ -27,9 +27,12 @@ const values: EffectiveSettings = {
 
 const languages = { en: "English", zh: "Chinese" };
 
+// empty snapshots isolate the suite from the live ~/.sottochat/settings.json
+const noSaved = { startup: {}, current: {} };
+
 describe("settings catalog", () => {
   test("lists every public environment knob exactly once", () => {
-    const catalog = buildSettingsCatalog(values, languages, {});
+    const catalog = buildSettingsCatalog(values, languages, {}, noSaved);
     const settings = catalog.groups.flatMap((group) => group.settings);
     const keys = settings.map((item) => item.key);
 
@@ -45,6 +48,7 @@ describe("settings catalog", () => {
       { ...values, port: 4400, explainLanguage: "en" },
       languages,
       { PORT: "4400" },
+      noSaved,
     );
     const settings = catalog.groups.flatMap((group) => group.settings);
 
@@ -73,7 +77,12 @@ describe("settings catalog", () => {
   });
 
   test("environment values still win at startup", () => {
-    expect(readStartupSetting("META_PORT", 3737, { META_PORT: "4400" })).toBe(4400);
-    expect(readStartupSetting("META_USE_PROCESS_DISCOVERY", true, { META_USE_PROCESS_DISCOVERY: "0" })).toBe(false);
+    expect(readStartupSetting("META_PORT", 3737, { META_PORT: "4400" }, [], {})).toBe(4400);
+    expect(readStartupSetting("META_USE_PROCESS_DISCOVERY", true, { META_USE_PROCESS_DISCOVERY: "0" }, [], {})).toBe(false);
+  });
+
+  test("saved settings fall back below the environment", () => {
+    expect(readStartupSetting("META_PORT", 3737, {}, [], { META_PORT: 4500 })).toBe(4500);
+    expect(readStartupSetting("META_PORT", 3737, { META_PORT: "4400" }, [], { META_PORT: 4500 })).toBe(4400);
   });
 });
