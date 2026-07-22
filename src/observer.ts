@@ -15,6 +15,7 @@ import type { SessionInfo } from "./tailer";
 import type { Turn } from "./turns";
 import { logInfo } from "./log";
 import { isAuthError, authErrorHint } from "./sdk-errors";
+import { sdkSubprocessEnv } from "./auth-check";
 import type { MetaEvent } from "./jsonl";
 import { tokenUsageFromSdkMessage, type TokenUsage } from "./usage-ledger";
 
@@ -212,6 +213,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
   let lifecycleRunning = false;
   let resolvePending: ((msg: SDKUserMessage | null) => void) | null = null;
   let currentAbort: AbortController | null = null;
+  let lastSpawnEnv: Record<string, string | undefined> | undefined;
 
   function pushPrompt(content: string) {
     const msg: SDKUserMessage = {
@@ -270,6 +272,10 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
     const abort = new AbortController();
     currentAbort = abort;
     const gen = makeMessageGenerator();
+    // recomputed per spawn so a login (or unset key) done after a failure is
+    // picked up on the next attempt without restarting the server.
+    const spawnEnv = await sdkSubprocessEnv();
+    lastSpawnEnv = spawnEnv;
     try {
       const result = query({
         prompt: gen,
@@ -277,6 +283,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
           model: opts.model,
           cwd: opts.cwd,
           pathToClaudeCodeExecutable: claudePath,
+          env: spawnEnv,
           // empty allowlist: no built-in tools at all — a deny-list would
           // silently admit tools added in future sdk releases.
           tools: [],
@@ -336,7 +343,9 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (isAuthError(msg)) {
-          const hint = authErrorHint();
+          // hint against the env the subprocess actually ran with — if the
+          // key override was stripped, the login is what failed.
+          const hint = authErrorHint(lastSpawnEnv);
           console.error(`[${opts.label}] ${hint} (${msg})`);
           const unsummarized = inflightBatches.splice(0).flat();
           if (unsummarized.length > 0) queue.unshift(...unsummarized);

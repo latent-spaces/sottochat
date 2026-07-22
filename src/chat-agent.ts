@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { logInfo } from "./log";
 import { isAuthError, authErrorHint } from "./sdk-errors";
+import { sdkSubprocessEnv } from "./auth-check";
 import { tokenUsageFromSdkMessage, type TokenUsage } from "./usage-ledger";
 
 // the chat companion the user talks to. one persistent sdk subprocess per upstream
@@ -200,6 +201,9 @@ ${text}`;
         lastLanguage = null;
         const ac = new AbortController();
         abort = ac;
+        // recomputed per spawn so a login (or unset key) done after a failure
+        // is picked up on the next attempt without restarting the server.
+        const spawnEnv = await sdkSubprocessEnv();
         try {
           const result = query({
             prompt: makeGen(),
@@ -207,6 +211,7 @@ ${text}`;
               model,
               cwd,
               pathToClaudeCodeExecutable: claudePath,
+              env: spawnEnv,
               // empty allowlist: no built-in tools at all — a deny-list would
               // silently admit tools added in future sdk releases.
               tools: [],
@@ -249,7 +254,9 @@ ${text}`;
             opts.onStatus?.({
               sessionKey,
               status: "error",
-              message: authErrorHint(),
+              // hint against the env the subprocess actually ran with — if the
+              // key override was stripped, the login is what failed.
+              message: authErrorHint(spawnEnv),
               reason: "auth",
             });
             authFailed = true;
