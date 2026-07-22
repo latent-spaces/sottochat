@@ -187,6 +187,7 @@ type SdkLoopOptions = {
 
 type SdkLoopHandle = {
   feed: (t: TurnFeed) => void;
+  retry: () => void;
   stop: () => void;
 };
 
@@ -205,6 +206,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
   const pendingMsgs: SDKUserMessage[] = [];
   let stopped = false;
   let firstPrompt = true;
+  let lifecycleRunning = false;
   let resolvePending: ((msg: SDKUserMessage | null) => void) | null = null;
   let currentAbort: AbortController | null = null;
 
@@ -244,7 +246,9 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
   // when nothing closed in this window, queue is empty → no model call.
   // the batch interval is a ceiling on send rate, not a heartbeat.
   const tick = setInterval(() => {
-    if (queue.length === 0) return;
+    // Keep work queued while auth is unavailable. A manual auth re-check can
+    // restart the loop without silently dropping turns collected meanwhile.
+    if (!lifecycleRunning || queue.length === 0) return;
     const batch = queue.splice(0, queue.length);
     inflightBatches.push(batch);
     const body = formatBatch(batch, opts.formatTrailing());
@@ -329,6 +333,9 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
         if (isAuthError(msg)) {
           const hint = authErrorHint();
           console.error(`[${opts.label}] ${hint} (${msg})`);
+          const unsummarized = inflightBatches.splice(0).flat();
+          if (unsummarized.length > 0) queue.unshift(...unsummarized);
+          pendingMsgs.length = 0;
           opts.onAuthError?.(hint);
           return;
         }
@@ -346,11 +353,22 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
     }
   }
 
-  void lifecycle();
+  function runLifecycle(): void {
+    if (stopped || lifecycleRunning) return;
+    lifecycleRunning = true;
+    void lifecycle().finally(() => {
+      lifecycleRunning = false;
+    });
+  }
+
+  runLifecycle();
 
   return {
     feed(t) {
       queue.push(t);
+    },
+    retry() {
+      runLifecycle();
     },
     stop() {
       stopped = true;
@@ -367,6 +385,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
 
 export function startObserver(opts: ObserverOptions): {
   feed: (t: TurnFeed) => void;
+  retry: () => void;
   stop: () => void;
 } {
   const summaryModel = opts.summaryModel ?? "claude-sonnet-5";
@@ -407,6 +426,9 @@ export function startObserver(opts: ObserverOptions): {
   return {
     feed(t) {
       loop.feed(t);
+    },
+    retry() {
+      loop.retry();
     },
     stop() {
       loop.stop();

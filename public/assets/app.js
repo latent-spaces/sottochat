@@ -56,8 +56,8 @@
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.zh; }
 
     // Claude auth is optional. The server reports only whether a supported
-    // method is configured; the browser stores only a harmless read-only
-    // acknowledgement. No credential value crosses this UI boundary.
+    // method is configured; the browser stores only the harmless setup path
+    // the user picked. No credential value crosses this UI boundary.
     let currentAuth = { status: "missing", method: "none" };
     let authSetupForced = false;
 
@@ -89,12 +89,17 @@
     function paintAuth(auth) {
       if (!auth || !["ready", "missing", "failed"].includes(auth.status)) return;
       currentAuth = auth;
-      const readOnly = storedAuthChoice() === "read-only";
+      const storedChoice = storedAuthChoice();
+      const readOnly = storedChoice === "read-only";
 
       if (auth.status === "ready") {
+        storeAuthChoice(null);
         authSetupForced = false;
         if (authSetup) authSetup.hidden = true;
-        if (authTrigger) authTrigger.hidden = true;
+        if (authTrigger) {
+          authTrigger.hidden = true;
+          authTrigger.setAttribute("aria-expanded", "false");
+        }
         showAuthInstructions(null);
         return;
       }
@@ -106,7 +111,11 @@
 
       const shouldShow = authSetupForced || !readOnly;
       if (authSetup) authSetup.hidden = !shouldShow;
-      if (!shouldShow) return;
+      if (authTrigger) authTrigger.setAttribute("aria-expanded", shouldShow ? "true" : "false");
+      if (!shouldShow) {
+        showAuthInstructions(null);
+        return;
+      }
 
       if (auth.status === "failed") {
         if (authKicker) authKicker.textContent = "authentication failed";
@@ -122,7 +131,17 @@
         if (authKicker) authKicker.textContent = "first run";
         if (authTitle) authTitle.textContent = "enable chat and summaries";
         if (authDescription) authDescription.textContent = "Session tailing already works. Choose how Claude-backed discussion should authenticate, or keep using the read-only transcript view.";
+        showAuthInstructions(["claude-code", "api-key", "cloud"].includes(storedChoice) ? storedChoice : null);
       }
+    }
+
+    function openAuthSetup() {
+      authSetupForced = true;
+      paintAuth(currentAuth);
+      authSetup?.scrollIntoView({
+        behavior: reduceMotionOn() ? "auto" : "smooth",
+        block: "start",
+      });
     }
 
     document.querySelectorAll("[data-auth-choice]").forEach((button) => {
@@ -131,24 +150,18 @@
         if (choice === "read-only") {
           storeAuthChoice("read-only");
           authSetupForced = false;
-          showAuthInstructions(null);
           paintAuth(currentAuth);
+          renderDetail();
           return;
         }
-        storeAuthChoice(null);
+        storeAuthChoice(choice);
         authSetupForced = true;
-        showAuthInstructions(choice);
         paintAuth(currentAuth);
-        showAuthInstructions(choice);
       });
     });
 
     if (authTrigger) {
-      authTrigger.addEventListener("click", () => {
-        authSetupForced = true;
-        paintAuth(currentAuth);
-        authSetup?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
+      authTrigger.addEventListener("click", openAuthSetup);
     }
 
     if (authCheck) {
@@ -160,6 +173,7 @@
           const body = await res.json();
           if (!res.ok || !body?.auth) throw new Error("status unavailable");
           paintAuth(body.auth);
+          renderDetail();
           if (body.auth.status !== "ready" && authCheckResult) {
             authCheckResult.textContent = "not detected yet";
           }
@@ -2239,6 +2253,22 @@
 
     function renderChatInput(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
+      if (currentAuth.status !== "ready") {
+        const failed = currentAuth.status === "failed";
+        const readOnly = storedAuthChoice() === "read-only";
+        const copy = failed
+          ? "Claude authentication failed. Transcript viewing still works."
+          : readOnly
+            ? "read-only mode. Connect Claude when you want to discuss this session."
+            : "Connect Claude to discuss this session. Transcript viewing already works.";
+        dChatInput.innerHTML =
+          '<div class="chat-auth-disabled" role="status">' +
+            '<span>' + copy + '</span>' +
+            '<button class="chat-auth-action" type="button">' + (failed ? "repair auth" : "connect claude") + '</button>' +
+          '</div>';
+        dChatInput.querySelector(".chat-auth-action")?.addEventListener("click", openAuthSetup);
+        return;
+      }
       // the ask box starts empty (or restores the user's in-progress draft) —
       // you ask about the latest output in your own language; no prefill.
       const initial = chatDrafts.has(sessionKey) ? chatDrafts.get(sessionKey) : "";
@@ -2698,6 +2728,7 @@
         } else if (msg.kind === "auth:state") {
           if (msg.auth?.status === "failed") authSetupForced = true;
           paintAuth(msg.auth);
+          renderDetail();
         } else if (msg.kind === "chat:cleared") {
           chatThreadByKey.delete(msg.sessionKey);
           chatStatusByKey.delete(msg.sessionKey);

@@ -96,18 +96,56 @@ documented in [.env.example](.env.example). The main ones:
 
 Runtime state (chat sandboxes, persistence) lives under `~/.sottochat/`.
 
-## Development
+## Run and debug locally with Bun
+
+Install dependencies once, then start the normal foreground server:
 
 ```sh
-bun run dev            # serve with hot reload
-bun run typecheck      # tsc, no emit
-bun test               # parser/turn tests under tests/
+bun install
+bun run start
 ```
 
-For manual testing, run a scratch instance so you don't disturb a live one:
+This serves <http://localhost:3737>, opens it in the browser, and stops cleanly
+with `Ctrl-C`. For code changes, use Bun's hot reload on a scratch port so an
+installed or already-running sottochat instance is not disturbed:
 
 ```sh
-META_PORT=3947 META_OBSERVER_ENABLED=0 bun src/server.ts
+META_PORT=3947 META_OBSERVER_ENABLED=0 bun --hot src/server.ts
+```
+
+Open <http://localhost:3947>. Leave the observer disabled for ordinary UI and
+transcript work to avoid spawning a background summary subprocess. Enable it
+only when testing summaries.
+
+To attach Bun's interactive debugger, replace `--hot` with `--inspect`:
+
+```sh
+META_PORT=3947 META_OBSERVER_ENABLED=0 bun --inspect src/server.ts
+```
+
+Bun prints a `debug.bun.sh` URL where you can set breakpoints, inspect local
+variables, and use the debugger console. Use `--inspect-wait` instead when the
+server must pause before executing its first line. See the
+[Bun debugger documentation](https://bun.sh/docs/runtime/debugger) for the
+available inspector modes.
+
+Useful diagnostics while the scratch server is running:
+
+```sh
+curl http://localhost:3947/state
+curl http://localhost:3947/api/auth/status
+curl http://localhost:3947/diag/discovery
+```
+
+If the port is already occupied, choose another `META_PORT` instead of stopping
+an unknown process. Runtime state is written under `~/.sottochat/`; use a
+scratch instance carefully when testing persistence or chat history.
+
+## Development checks
+
+```sh
+bun run typecheck      # tsc, no emit
+bun test               # parser/turn tests under tests/
 ```
 
 The frontend is deliberately build-free: plain script files under `public/assets/`, with third-party libraries vendored in [`public/assets/vendor/`](public/assets/vendor/README.md) — no bundler, no CDN tags.

@@ -487,6 +487,8 @@ function currentSettingsCatalog() {
   }, LANGUAGE_NAMES);
 }
 
+let observer: ReturnType<typeof startObserver> | null = null;
+
 function applyExplainLanguage(lang: string): void {
   if (explainLang === lang) return;
   explainLang = lang;
@@ -528,6 +530,7 @@ function broadcastClaudeAuthState(): void {
 async function refreshClaudeAuthState(): Promise<PublicClaudeAuthState> {
   detectedClaudeAuth = await claudeAuthState();
   claudeAuthFailed = false;
+  if (detectedClaudeAuth.configured) observer?.retry();
   broadcastClaudeAuthState();
   return publicClaudeAuthState();
 }
@@ -914,7 +917,7 @@ const chatHost = startChatHost({
 });
 logInfo(`[chat] enabled · model=${CHAT_MODEL}`);
 
-const observer = OBSERVER_ENABLED
+observer = OBSERVER_ENABLED
   ? startObserver({
       summaryModel: OBSERVER_MODEL,
       batchMs: OBSERVER_BATCH_MS,

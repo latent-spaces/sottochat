@@ -40,10 +40,15 @@ export async function claudeAuthState(
         ["security", "find-generic-password", "-s", "Claude Code-credentials"],
         { stdout: "ignore", stderr: "ignore" },
       );
-      const timeout = new Promise<number>((r) => setTimeout(() => r(1), 2_000));
+      const timedOut = Symbol("timed-out");
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<typeof timedOut>((resolve) => {
+        timeoutId = setTimeout(() => resolve(timedOut), 2_000);
+      });
       const code = await Promise.race([proc.exited, timeout]);
+      if (timeoutId) clearTimeout(timeoutId);
       if (code === 0) return { configured: true, method: "claude-code" };
-      proc.kill();
+      if (code === timedOut) proc.kill();
     } catch {
       // `security` unavailable — fall through
     }

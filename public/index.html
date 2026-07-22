@@ -197,7 +197,7 @@
       font-size: 11px;
       color: var(--fg-muted);
     }
-    .auth-trigger { cursor: pointer; font: inherit; }
+    .auth-trigger { min-height: 36px; cursor: pointer; font: inherit; }
     .auth-setup {
       background: var(--surface);
       border-bottom: 1px solid var(--border-strong);
@@ -262,7 +262,8 @@
     .auth-option[aria-pressed="true"] { background: var(--accent-soft); }
     .auth-option:focus-visible,
     .auth-check:focus-visible,
-    .auth-trigger:focus-visible {
+    .auth-trigger:focus-visible,
+    .chat-auth-action:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
     }
@@ -319,7 +320,7 @@
       font-size: 12px;
     }
     .auth-check {
-      min-height: 36px;
+      min-height: 44px;
       margin-top: 12px;
       padding: 7px 12px;
       border: 1px solid var(--border-strong);
@@ -1383,6 +1384,33 @@
       border-radius: var(--r-panel);
       padding: 14px 16px;
     }
+    .chat-auth-disabled {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      color: var(--fg-soft);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .chat-auth-action {
+      flex: 0 0 auto;
+      min-height: 44px;
+      padding: 8px 14px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-pill);
+      background: var(--surface);
+      color: var(--fg);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-auth-action:hover { border-color: var(--accent); }
+    @media (max-width: 560px) {
+      .chat-auth-disabled { align-items: flex-start; flex-direction: column; }
+    }
     /* preset chips + turns-in-context stepper — sit above the textarea, always
        shown. click a chip to send its text through the same /chat/send path. */
     .chat-quickreplies {
@@ -1729,7 +1757,7 @@
           <option value="bn">বাংলা</option>
         </select>
       </label>
-      <button class="gh-pill auth-trigger" id="auth-trigger" type="button" hidden>connect claude</button>
+      <button class="gh-pill auth-trigger" id="auth-trigger" type="button" aria-controls="auth-setup" aria-expanded="false" hidden>connect claude</button>
       <a class="gh-pill" href="/settings">settings</a>
       <a class="gh-pill" href="https://github.com/latent-spaces/sottochat" target="_blank" rel="noreferrer noopener" aria-label="GitHub repo">
         <span class="gh-glyph">★</span>
@@ -1738,7 +1766,7 @@
     </div>
   </header>
 
-  <section class="auth-setup" id="auth-setup" aria-labelledby="auth-title" hidden>
+  <section class="auth-setup" id="auth-setup" aria-labelledby="auth-title" aria-describedby="auth-description" hidden>
     <div class="auth-setup-inner">
       <div class="auth-copy">
         <p class="auth-kicker" id="auth-kicker">first run</p>
@@ -1773,7 +1801,7 @@
             <span class="auth-option-title">continue read-only</span>
             <span class="auth-option-note">browse live transcripts without chat or generated summaries</span>
           </span>
-          <span class="auth-option-arrow" aria-hidden="true">×</span>
+          <span class="auth-option-arrow" aria-hidden="true">›</span>
         </button>
       </div>
 
