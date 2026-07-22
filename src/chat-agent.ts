@@ -218,7 +218,7 @@ ${text}`;
           });
 
           for await (const m of result as AsyncIterable<unknown>) {
-            const usage = tokenUsageFromSdkMessage(m);
+            const usage = tokenUsageFromSdkMessage(m, model);
             if (usage) opts.onUsage?.(usage);
             // if the session was cleared/stopped mid-response, drop any buffered
             // message the aborted iterator still delivers — otherwise a late

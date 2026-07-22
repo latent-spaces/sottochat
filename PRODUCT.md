@@ -51,7 +51,7 @@ The product reads transcripts only. It does not pause the agent, write into the 
 - Per-session recent-turn context depth from 1 to 10.
 - Browser-local color-system cycling from the top navigation.
 - Browser-local automatic first-chip discussion threshold: off, 350+, 700+, or 1,200+ words.
-- Daily history of the additional model tokens used by sottochat chat and observer calls, retained locally for 90 days.
+- Daily, per-model history of the additional tokens used by sottochat chat and observer calls, retained locally for 90 days.
 - Manual reset of a session's Q&A state; cleared discussions are archived per session (last 10) and can be viewed or restored from a history control.
 - Chat threads, summaries, and chat settings persist across server restarts (`~/.sottochat/state.json`).
 - Process-driven discovery drives inbox visibility: a session shows while its agent process is alive, plus a 30-minute grace window after its last event. `/diag/discovery` remains for inspection.

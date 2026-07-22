@@ -288,7 +288,7 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
       });
 
       for await (const m of result as AsyncIterable<unknown>) {
-        const usage = tokenUsageFromSdkMessage(m);
+        const usage = tokenUsageFromSdkMessage(m, opts.model);
         if (usage) opts.onUsage?.(usage);
         const msg = m as { type?: string; message?: { content?: unknown } };
         if (msg.type !== "assistant") continue;

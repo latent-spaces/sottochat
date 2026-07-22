@@ -11,7 +11,7 @@ const values: EffectiveSettings = {
   port: 3737,
   pollMs: 500,
   projectSlug: "",
-  inboxMinutes: 240,
+  inboxMinutes: 1_440,
   processDiscovery: true,
   discoveryGraceMinutes: 30,
   observerEnabled: true,
@@ -41,6 +41,7 @@ describe("settings catalog", () => {
     expect(keys).toContain("META_DISCOVERY_GRACE_MINUTES");
     expect(keys).toContain("META_OBSERVER_FRESH_MS");
     expect(keys.some((key) => key.includes("ANTHROPIC"))).toBe(false);
+    expect(settings.find((item) => item.key === "META_INBOX_MINUTES")?.defaultValue).toBe(1_440);
   });
 
   test("reports the source of effective values", () => {

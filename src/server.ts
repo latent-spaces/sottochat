@@ -27,7 +27,7 @@ import { startUsageLedger, type UsageSnapshot, type UsageSource, type TokenUsage
 const PORT = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
 const POLL_MS = readStartupSetting("META_POLL_MS", 500);
 const PROJECT_SLUG = readStartupSetting("META_PROJECT_SLUG", "") || undefined;
-const RECENT_MS = readStartupSetting("META_INBOX_MINUTES", 240) * 60 * 1000;
+const RECENT_MS = readStartupSetting("META_INBOX_MINUTES", 1_440) * 60 * 1000;
 const MAX_EVENTS_PER_SESSION = 5000;
 // observer is on by default; set META_OBSERVER_ENABLED=0 to opt out
 // (e.g. when iterating in `bun run dev` to avoid orphaning the sdk subprocess

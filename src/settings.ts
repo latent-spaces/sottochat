@@ -361,7 +361,7 @@ export function buildSettingsCatalog(
           label: "inbox window",
           description: "Hide sessions after this many minutes without a transcript event.",
           value: values.inboxMinutes,
-          defaultValue: 240,
+          defaultValue: 1_440,
           kind: "number",
           unit: "minutes",
           restartRequired: true,

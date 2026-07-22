@@ -16,19 +16,35 @@ import { dirname, join } from "node:path";
 
 export type UsageSource = "chat" | "observer";
 
-export type TokenUsage = {
+export type TokenCounts = {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheCreationTokens: number;
 };
 
-export type DailyUsage = TokenUsage & {
+export type ModelTokenUsage = TokenCounts & {
+  model: string;
+};
+
+export type TokenUsage = TokenCounts & {
+  models: ModelTokenUsage[];
+};
+
+export type DailyModelUsage = ModelTokenUsage & {
+  requests: number;
+  chatTokens: number;
+  observerTokens: number;
+  totalTokens: number;
+};
+
+export type DailyUsage = TokenCounts & {
   date: string;
   requests: number;
   chatTokens: number;
   observerTokens: number;
   totalTokens: number;
+  models: DailyModelUsage[];
 };
 
 export type UsageSnapshot = {
@@ -36,9 +52,22 @@ export type UsageSnapshot = {
   days: DailyUsage[];
 };
 
+type StoredModelUsage = TokenCounts & {
+  requests: number;
+  chatTokens: number;
+  observerTokens: number;
+};
+
+type StoredDay = TokenCounts & {
+  requests: number;
+  chatTokens: number;
+  observerTokens: number;
+  models: Record<string, StoredModelUsage>;
+};
+
 type StoredUsage = {
-  version: 1;
-  days: Record<string, Omit<DailyUsage, "date" | "totalTokens">>;
+  version: 2;
+  days: Record<string, StoredDay>;
 };
 
 const USAGE_FILE = join(homedir(), ".sottochat", "usage.json");
@@ -50,21 +79,61 @@ function nonNegativeInt(value: unknown): number {
     : 0;
 }
 
-export function tokenUsageFromSdkMessage(message: unknown): TokenUsage | null {
+function countsFrom(value: Record<string, unknown>, style: "snake" | "camel"): TokenCounts {
+  return style === "snake"
+    ? {
+        inputTokens: nonNegativeInt(value.input_tokens),
+        outputTokens: nonNegativeInt(value.output_tokens),
+        cacheReadTokens: nonNegativeInt(value.cache_read_input_tokens),
+        cacheCreationTokens: nonNegativeInt(value.cache_creation_input_tokens),
+      }
+    : {
+        inputTokens: nonNegativeInt(value.inputTokens),
+        outputTokens: nonNegativeInt(value.outputTokens),
+        cacheReadTokens: nonNegativeInt(value.cacheReadTokens ?? value.cacheReadInputTokens),
+        cacheCreationTokens: nonNegativeInt(value.cacheCreationTokens ?? value.cacheCreationInputTokens),
+      };
+}
+
+function addCounts(target: TokenCounts, added: TokenCounts): void {
+  target.inputTokens += nonNegativeInt(added.inputTokens);
+  target.outputTokens += nonNegativeInt(added.outputTokens);
+  target.cacheReadTokens += nonNegativeInt(added.cacheReadTokens);
+  target.cacheCreationTokens += nonNegativeInt(added.cacheCreationTokens);
+}
+
+function blankCounts(): TokenCounts {
+  return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
+}
+
+export function tokenUsageFromSdkMessage(message: unknown, fallbackModel = "unknown"): TokenUsage | null {
   if (!message || typeof message !== "object") return null;
   const result = message as Record<string, unknown>;
   if (result.type !== "result" || !result.usage || typeof result.usage !== "object") return null;
-  const usage = result.usage as Record<string, unknown>;
-  const normalized: TokenUsage = {
-    inputTokens: nonNegativeInt(usage.input_tokens),
-    outputTokens: nonNegativeInt(usage.output_tokens),
-    cacheReadTokens: nonNegativeInt(usage.cache_read_input_tokens),
-    cacheCreationTokens: nonNegativeInt(usage.cache_creation_input_tokens),
-  };
-  return totalTokens(normalized) > 0 ? normalized : null;
+
+  const models: ModelTokenUsage[] = [];
+  if (result.modelUsage && typeof result.modelUsage === "object") {
+    for (const [model, raw] of Object.entries(result.modelUsage as Record<string, unknown>)) {
+      if (!raw || typeof raw !== "object") continue;
+      const counts = countsFrom(raw as Record<string, unknown>, "camel");
+      if (totalTokens(counts) > 0) models.push({ model, ...counts });
+    }
+  }
+
+  const aggregate = blankCounts();
+  if (models.length > 0) {
+    for (const model of models) addCounts(aggregate, model);
+  } else {
+    addCounts(aggregate, countsFrom(result.usage as Record<string, unknown>, "snake"));
+    if (totalTokens(aggregate) > 0) {
+      models.push({ model: fallbackModel.trim() || "unknown", ...aggregate });
+    }
+  }
+
+  return totalTokens(aggregate) > 0 ? { ...aggregate, models } : null;
 }
 
-export function totalTokens(usage: TokenUsage): number {
+export function totalTokens(usage: TokenCounts): number {
   return usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens;
 }
 
@@ -76,41 +145,58 @@ export function localDateKey(timestamp = Date.now()): string {
   return `${year}-${month}-${day}`;
 }
 
-function blankDay(): Omit<DailyUsage, "date" | "totalTokens"> {
-  return {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheCreationTokens: 0,
-    requests: 0,
-    chatTokens: 0,
-    observerTokens: 0,
-  };
+function blankStoredModel(): StoredModelUsage {
+  return { ...blankCounts(), requests: 0, chatTokens: 0, observerTokens: 0 };
+}
+
+function blankDay(): StoredDay {
+  return { ...blankCounts(), requests: 0, chatTokens: 0, observerTokens: 0, models: {} };
 }
 
 function loadUsage(filePath: string): StoredUsage {
   try {
-    const raw = JSON.parse(readFileSync(filePath, "utf8")) as Partial<StoredUsage>;
+    const raw = JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
     if (!raw || typeof raw !== "object" || !raw.days || typeof raw.days !== "object") {
-      return { version: 1, days: {} };
+      return { version: 2, days: {} };
     }
     const days: StoredUsage["days"] = {};
-    for (const [date, value] of Object.entries(raw.days)) {
+    for (const [date, value] of Object.entries(raw.days as Record<string, unknown>)) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !value || typeof value !== "object") continue;
       const entry = value as Record<string, unknown>;
-      days[date] = {
-        inputTokens: nonNegativeInt(entry.inputTokens),
-        outputTokens: nonNegativeInt(entry.outputTokens),
-        cacheReadTokens: nonNegativeInt(entry.cacheReadTokens),
-        cacheCreationTokens: nonNegativeInt(entry.cacheCreationTokens),
+      const day: StoredDay = {
+        ...countsFrom(entry, "camel"),
         requests: nonNegativeInt(entry.requests),
         chatTokens: nonNegativeInt(entry.chatTokens),
         observerTokens: nonNegativeInt(entry.observerTokens),
+        models: {},
       };
+      if (entry.models && typeof entry.models === "object") {
+        for (const [model, rawModel] of Object.entries(entry.models as Record<string, unknown>)) {
+          if (!rawModel || typeof rawModel !== "object") continue;
+          const stored = rawModel as Record<string, unknown>;
+          day.models[model] = {
+            ...countsFrom(stored, "camel"),
+            requests: nonNegativeInt(stored.requests),
+            chatTokens: nonNegativeInt(stored.chatTokens),
+            observerTokens: nonNegativeInt(stored.observerTokens),
+          };
+        }
+      }
+      // Version 1 did not retain model names. Keep those totals intact and
+      // label them honestly instead of attributing them to the current model.
+      if (Object.keys(day.models).length === 0 && totalTokens(day) > 0) {
+        day.models.unattributed = {
+          ...countsFrom(entry, "camel"),
+          requests: day.requests,
+          chatTokens: day.chatTokens,
+          observerTokens: day.observerTokens,
+        };
+      }
+      days[date] = day;
     }
-    return { version: 1, days };
+    return { version: 2, days };
   } catch {
-    return { version: 1, days: {} };
+    return { version: 2, days: {} };
   }
 }
 
@@ -135,7 +221,20 @@ export function startUsageLedger(
     prune();
     const days = Object.entries(state.days)
       .sort(([a], [b]) => b.localeCompare(a))
-      .map(([date, day]) => ({ ...day, date, totalTokens: totalTokens(day) }));
+      .map(([date, day]) => ({
+        inputTokens: day.inputTokens,
+        outputTokens: day.outputTokens,
+        cacheReadTokens: day.cacheReadTokens,
+        cacheCreationTokens: day.cacheCreationTokens,
+        requests: day.requests,
+        chatTokens: day.chatTokens,
+        observerTokens: day.observerTokens,
+        date,
+        totalTokens: totalTokens(day),
+        models: Object.entries(day.models)
+          .map(([model, usage]) => ({ ...usage, model, totalTokens: totalTokens(usage) }))
+          .sort((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model)),
+      }));
     return { today: localDateKey(now()), days };
   }
 
@@ -167,13 +266,22 @@ export function startUsageLedger(
       const date = localDateKey(now());
       const day = state.days[date] ?? blankDay();
       const added = totalTokens(usage);
-      day.inputTokens += nonNegativeInt(usage.inputTokens);
-      day.outputTokens += nonNegativeInt(usage.outputTokens);
-      day.cacheReadTokens += nonNegativeInt(usage.cacheReadTokens);
-      day.cacheCreationTokens += nonNegativeInt(usage.cacheCreationTokens);
+      addCounts(day, usage);
       day.requests += 1;
       if (source === "chat") day.chatTokens += added;
       else day.observerTokens += added;
+
+      for (const modelUsage of usage.models) {
+        const model = modelUsage.model.trim() || "unknown";
+        const stored = day.models[model] ?? blankStoredModel();
+        const modelAdded = totalTokens(modelUsage);
+        addCounts(stored, modelUsage);
+        stored.requests += 1;
+        if (source === "chat") stored.chatTokens += modelAdded;
+        else stored.observerTokens += modelAdded;
+        day.models[model] = stored;
+      }
+
       state.days[date] = day;
       flush();
       return snapshot();

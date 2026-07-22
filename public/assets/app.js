@@ -28,6 +28,7 @@
     const usageTodayTotal = document.getElementById("usage-today-total");
     const usageTodayDate = document.getElementById("usage-today-date");
     const usageBreakdown = document.getElementById("usage-breakdown");
+    const usageModels = document.getElementById("usage-models");
     const usageHistory = document.getElementById("usage-history");
     const authSetup = document.getElementById("auth-setup");
     const authTrigger = document.getElementById("auth-trigger");
@@ -347,6 +348,18 @@
       if (usageBreakdown) {
         usageBreakdown.textContent = `chat ${fmtUsageTokens(today.chatTokens)} · summaries ${fmtUsageTokens(today.observerTokens)} · ${Number(today.requests) || 0} calls`;
       }
+      const todayModels = Array.isArray(today.models) ? today.models : [];
+      if (usageModels) {
+        usageModels.hidden = todayModels.length === 0;
+        usageModels.innerHTML = todayModels.length === 0 ? "" :
+          '<p class="usage-section-label">today by model</p>' + todayModels.map((model) =>
+            '<div class="usage-model-row">' +
+              '<span class="usage-model-id" title="' + escapeHtml(model.model || "unknown") + '">' + escapeHtml(model.model || "unknown") + '</span>' +
+              '<span class="usage-model-total">' + fmtUsageTokens(model.totalTokens) + '</span>' +
+              '<span class="usage-model-source">chat ' + fmtUsageTokens(model.chatTokens) + ' · summaries ' + fmtUsageTokens(model.observerTokens) + '</span>' +
+            '</div>'
+          ).join("");
+      }
       if (usageTrigger) {
         usageTrigger.setAttribute("aria-label", `sottochat additional token usage today: ${Number(today.totalTokens) || 0}`);
         usageTrigger.title = `${totalLabel} additional tokens today`;
@@ -358,10 +371,17 @@
       }
       usageHistory.innerHTML = usageState.days.map((day) => {
         const date = day.date === usageState.today ? "today" : day.date;
+        const models = Array.isArray(day.models) ? day.models : [];
+        const modelLine = models.length
+          ? models.map((model) => escapeHtml(model.model || "unknown") + ' ' + fmtUsageTokens(model.totalTokens)).join(' · ')
+          : 'model not recorded';
         return '<div class="usage-row">' +
-          '<span class="usage-row-date">' + escapeHtml(date) + '</span>' +
-          '<span class="usage-row-sources">chat ' + fmtUsageTokens(day.chatTokens) + ' · sum ' + fmtUsageTokens(day.observerTokens) + '</span>' +
-          '<span class="usage-row-total">' + fmtUsageTokens(day.totalTokens) + '</span>' +
+          '<div class="usage-row-head">' +
+            '<span class="usage-row-date">' + escapeHtml(date) + '</span>' +
+            '<span class="usage-row-sources">chat ' + fmtUsageTokens(day.chatTokens) + ' · sum ' + fmtUsageTokens(day.observerTokens) + '</span>' +
+            '<span class="usage-row-total">' + fmtUsageTokens(day.totalTokens) + '</span>' +
+          '</div>' +
+          '<div class="usage-row-models">' + modelLine + '</div>' +
           '</div>';
       }).join("");
     }
