@@ -503,6 +503,11 @@ function applyExplainLanguage(lang: string): void {
   }
 }
 
+// whether the startup credential check found nothing — surfaced to the web UI
+// via the ws hello so browser-first users see the sign-in hint too. false until
+// the async check below completes; assigned before any real user traffic.
+let needsClaudeAuth = false;
+
 const server = Bun.serve({
   port: PORT,
   async fetch(req, server) {
@@ -825,6 +830,7 @@ const server = Bun.serve({
           kind: "hello",
           sessions: recentSessions(),
           language: explainLang,
+          ...(needsClaudeAuth ? { needsClaudeAuth: true } : {}),
         })
       );
     },
@@ -839,10 +845,12 @@ const server = Bun.serve({
 
 const { formatStartupMessage, terminalSupportsColor } = await import("./startup-message");
 const { hasClaudeCredentials } = await import("./auth-check");
+// startup snapshot — cleared by a restart after the user signs in.
+needsClaudeAuth = !(await hasClaudeCredentials());
 console.log(
   formatStartupMessage(`http://localhost:${server.port}/`, {
     color: terminalSupportsColor(),
-    authHint: !hasClaudeCredentials(),
+    authHint: needsClaudeAuth,
   })
 );
 

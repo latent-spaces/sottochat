@@ -94,7 +94,7 @@ if (await sottochatRunningAt(port)) {
   console.log(formatStartupMessage(url, {
     alreadyRunning: true,
     color: terminalSupportsColor(),
-    authHint: !hasClaudeCredentials(),
+    authHint: !(await hasClaudeCredentials()),
   }));
   openInBrowser(url);
   process.exit(0);

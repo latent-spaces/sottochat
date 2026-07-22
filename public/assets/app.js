@@ -2530,6 +2530,8 @@
             explainLang = msg.language;
             paintLang();
           }
+          const authNotice = document.getElementById("auth-notice");
+          if (authNotice) authNotice.hidden = msg.needsClaudeAuth !== true;
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
