@@ -166,8 +166,29 @@
       });
     }
 
+    async function refreshAuthStatus() {
+      if (authCheck?.disabled) return;
+      if (authCheck) authCheck.disabled = true;
+      if (authCheckResult) authCheckResult.textContent = "checking subscription…";
+      try {
+        const res = await fetch("/api/auth/status");
+        const body = await res.json();
+        if (!res.ok || !body?.auth) throw new Error("status unavailable");
+        paintAuth(body.auth);
+        renderDetail();
+        if (body.auth.status !== "ready" && authCheckResult) {
+          authCheckResult.textContent = "not connected yet";
+        }
+      } catch (err) {
+        if (authCheckResult) authCheckResult.textContent = "check failed";
+        console.warn("[auth] status check failed", err);
+      } finally {
+        if (authCheck) authCheck.disabled = false;
+      }
+    }
+
     document.querySelectorAll("[data-auth-choice]").forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", async () => {
         const choice = button.dataset.authChoice;
         if (choice === "read-only") {
           storeAuthChoice("read-only");
@@ -179,6 +200,7 @@
         storeAuthChoice(choice);
         authSetupForced = true;
         paintAuth(currentAuth);
+        if (choice === "claude-code") await refreshAuthStatus();
       });
     });
 
@@ -187,25 +209,7 @@
     }
 
     if (authCheck) {
-      authCheck.addEventListener("click", async () => {
-        authCheck.disabled = true;
-        if (authCheckResult) authCheckResult.textContent = "checking…";
-        try {
-          const res = await fetch("/api/auth/status");
-          const body = await res.json();
-          if (!res.ok || !body?.auth) throw new Error("status unavailable");
-          paintAuth(body.auth);
-          renderDetail();
-          if (body.auth.status !== "ready" && authCheckResult) {
-            authCheckResult.textContent = "not detected yet";
-          }
-        } catch (err) {
-          if (authCheckResult) authCheckResult.textContent = "check failed";
-          console.warn("[auth] status check failed", err);
-        } finally {
-          authCheck.disabled = false;
-        }
-      });
+      authCheck.addEventListener("click", refreshAuthStatus);
     }
 
     // per-session "turns in context" stepper bounds — mirror the server clamps.
