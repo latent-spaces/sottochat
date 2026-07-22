@@ -59,7 +59,7 @@ Prebuilt archives are also attached to every [GitHub release](https://github.com
 
 - [Bun](https://bun.sh) ≥ 1.1 when using `bunx` (not needed for the standalone binary)
 - macOS or Linux (discovery paths and process scanning are only exercised there; Windows is untested)
-- Anthropic auth for the Q&A and observer features: the first-run panel supports an existing Claude Code login, `ANTHROPIC_API_KEY`, Amazon Bedrock, and Google Vertex AI. Authentication is optional; transcript tailing remains available in read-only mode.
+- Anthropic auth for the Q&A and observer features: the first-run panel supports a Claude Code Subscription, `ANTHROPIC_API_KEY`, Amazon Bedrock, and Google Vertex AI. Authentication is optional; transcript tailing remains available in read-only mode.
 
 ## Quick start
 
