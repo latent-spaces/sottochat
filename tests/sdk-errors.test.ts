@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isAuthError, authErrorHint } from "../src/sdk-errors";
-import { flagEnabled } from "../src/auth-check";
+import { claudeAuthState, flagEnabled } from "../src/auth-check";
 
 describe("isAuthError", () => {
   test("matches the real not-signed-in error from the SDK subprocess", () => {
@@ -44,5 +44,25 @@ describe("flagEnabled", () => {
     expect(flagEnabled(undefined)).toBe(false);
     expect(flagEnabled("1")).toBe(true);
     expect(flagEnabled("true")).toBe(true);
+  });
+});
+
+describe("claudeAuthState", () => {
+  test("reports the configured method without exposing its value", async () => {
+    const state = await claudeAuthState({ ANTHROPIC_API_KEY: "sk-ant-secret" });
+
+    expect(state).toEqual({ configured: true, method: "api-key" });
+    expect(JSON.stringify(state)).not.toContain("sk-ant-secret");
+  });
+
+  test("distinguishes externally authenticated cloud providers", async () => {
+    expect(await claudeAuthState({ CLAUDE_CODE_USE_BEDROCK: "1" })).toEqual({
+      configured: true,
+      method: "bedrock",
+    });
+    expect(await claudeAuthState({ CLAUDE_CODE_USE_VERTEX: "true" })).toEqual({
+      configured: true,
+      method: "vertex",
+    });
   });
 });

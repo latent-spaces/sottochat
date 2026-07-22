@@ -34,6 +34,7 @@ export type ChatStatusUpdate = {
   sessionKey: string;
   status: ChatStatus;
   message?: string;
+  reason?: "auth";
 };
 
 export type ChatAgentOptions = {
@@ -241,7 +242,12 @@ ${text}`;
           const message = err instanceof Error ? err.message : String(err);
           if (isAuthError(message)) {
             logInfo(`[chat] auth error in ${sessionKey.slice(0, 24)}: ${message}`);
-            opts.onStatus?.({ sessionKey, status: "error", message: authErrorHint() });
+            opts.onStatus?.({
+              sessionKey,
+              status: "error",
+              message: authErrorHint(),
+              reason: "auth",
+            });
             authFailed = true;
             break;
           }

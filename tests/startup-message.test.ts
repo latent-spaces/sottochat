@@ -26,14 +26,14 @@ describe("startup message", () => {
   test("shows a sign-in hint when Claude credentials are missing", () => {
     const message = formatStartupMessage("http://localhost:3737/", { authHint: true });
 
-    expect(message).toContain("chat & summaries need a Claude Code login");
-    expect(message).toContain("run `claude` once to sign in");
+    expect(message).toContain("chat & summaries need Claude authentication");
+    expect(message).toContain("choose a setup path in the browser");
   });
 
   test("omits the sign-in hint by default", () => {
     const message = formatStartupMessage("http://localhost:3737/");
 
-    expect(message).not.toContain("Claude Code login");
+    expect(message).not.toContain("Claude authentication");
   });
 
   test("does not show a stop hint for an existing server", () => {

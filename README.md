@@ -59,7 +59,7 @@ Prebuilt archives are also attached to every [GitHub release](https://github.com
 
 - [Bun](https://bun.sh) ≥ 1.1 when using `bunx` (not needed for the standalone binary)
 - macOS or Linux (discovery paths and process scanning are only exercised there; Windows is untested)
-- Anthropic auth for the Q&A and observer features: the chat subprocesses run on the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk), which uses your existing Claude Code login if you have one, or an `ANTHROPIC_API_KEY` environment variable. Without either, transcript tailing still works but chat/summaries won't.
+- Anthropic auth for the Q&A and observer features: the first-run panel supports an existing Claude Code login, `ANTHROPIC_API_KEY`, Amazon Bedrock, and Google Vertex AI. Authentication is optional; transcript tailing remains available in read-only mode.
 
 ## Quick start
 
@@ -68,7 +68,10 @@ bun install
 bun run start          # serves http://localhost:3737
 ```
 
-Open <http://localhost:3737>. Any recent Claude Code or Codex session on this machine appears in the inbox; open one to see its turns and start a discussion.
+Open <http://localhost:3737>. On first run, choose how Claude-backed chat and
+summaries should authenticate, or continue read-only. The browser never asks
+for or stores an API key. Any recent Claude Code or Codex session on this
+machine appears in the inbox; open one to see its turns and start a discussion.
 
 Working from a checkout, run `bun link` once to register a global `sottochat`
 command that points at your working copy — every launch runs current source,

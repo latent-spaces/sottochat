@@ -41,8 +41,8 @@ export function formatStartupMessage(
 
   if (options.authHint) {
     for (const hint of [
-      "   chat & summaries need a Claude Code login",
-      "   run `claude` once to sign in",
+      "   chat & summaries need Claude authentication",
+      "   choose a setup path in the browser, or continue read-only",
     ]) {
       lines.push(line(hint).replace(hint, color ? `${ANSI.dim}${hint}${ANSI.reset}` : hint));
     }

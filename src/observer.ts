@@ -48,6 +48,8 @@ export type ObserverOptions = {
   /** english name of the language the summary should be written in (e.g. "Hebrew").
    *  read fresh each batch so a runtime language change takes effect without a respawn. */
   getLanguage?: () => string;
+  /** tells the host that summaries stopped because Claude rejected auth. */
+  onAuthError?: (message: string) => void;
 };
 
 // observer cwd under ~/.sottochat/observer/. (older sessions still on disk under
@@ -180,6 +182,7 @@ type SdkLoopOptions = {
   sdkSessionId: string;
   /** called with raw assistant text + the batch that produced it. */
   onResponse: (text: string, batch: TurnFeed[]) => void;
+  onAuthError?: (message: string) => void;
 };
 
 type SdkLoopHandle = {
@@ -324,7 +327,9 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (isAuthError(msg)) {
-          console.error(`[${opts.label}] ${authErrorHint()} (${msg})`);
+          const hint = authErrorHint();
+          console.error(`[${opts.label}] ${hint} (${msg})`);
+          opts.onAuthError?.(hint);
           return;
         }
         consecutiveFailures++;
@@ -377,6 +382,7 @@ export function startObserver(opts: ObserverOptions): {
     formatTrailing: () =>
       `Reply with a JSON object: {"summaries": [...one per session in input order...]}. Write every summary in ${getLanguage()}. No other text.`,
     sdkSessionId: "sottochat-observer",
+    onAuthError: opts.onAuthError,
     onResponse(text, batch) {
       const parsed = parseSummaryResponse(text);
       if (!parsed) {

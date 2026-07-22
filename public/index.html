@@ -187,24 +187,166 @@
       white-space: nowrap;
       margin-left: 6px;
     }
-    @media (max-width: 720px) { .nav-tag { display: none; } }
+    @media (max-width: 720px) {
+      .nav-tag,
+      .nav-right > a[href*="github.com"] { display: none; }
+    }
     .nav-right { display: flex; align-items: center; gap: 12px; }
     .reconnect-indicator {
       font-family: var(--mono);
       font-size: 11px;
       color: var(--fg-muted);
     }
-    .auth-notice {
-      padding: 6px 20px;
+    .auth-trigger { cursor: pointer; font: inherit; }
+    .auth-setup {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-strong);
+    }
+    .auth-setup-inner {
+      width: min(1080px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 24px 0 26px;
+      display: grid;
+      grid-template-columns: minmax(190px, 0.72fr) minmax(420px, 1.7fr);
+      gap: 18px 34px;
+      align-items: start;
+    }
+    .auth-kicker {
+      margin: 0 0 5px;
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .auth-copy h2 {
+      margin: 0 0 7px;
+      color: var(--fg);
+      font-size: 20px;
+      line-height: 1.25;
+      letter-spacing: -0.015em;
+    }
+    .auth-copy p:last-child {
+      max-width: 38ch;
+      margin: 0;
+      color: var(--fg-soft);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .auth-options {
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-card);
+      background: var(--surface);
+    }
+    .auth-option {
+      width: 100%;
+      min-height: 60px;
+      padding: 11px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border: 0;
+      border-top: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      transition: background 180ms var(--ease-out), color 180ms var(--ease-out);
+    }
+    .auth-option:first-child { border-top: 0; }
+    .auth-option:hover,
+    .auth-option[aria-pressed="true"] { background: var(--accent-soft); }
+    .auth-option:focus-visible,
+    .auth-check:focus-visible,
+    .auth-trigger:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .auth-option-main { min-width: 0; }
+    .auth-option-title {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .auth-option-note {
+      display: block;
+      margin-top: 2px;
+      color: var(--fg-soft);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .auth-recommended {
+      padding: 1px 6px;
+      border-radius: var(--r-pill);
+      background: var(--chip-tint);
+      color: var(--accent-hover);
+      font-family: var(--mono);
+      font-size: 9px;
+      font-weight: 500;
+    }
+    .auth-option-arrow {
+      flex: 0 0 auto;
+      color: var(--fg-muted);
       font-family: var(--mono);
       font-size: 12px;
-      color: var(--fg-soft);
-      background: var(--accent-soft);
-      border-bottom: 1px solid var(--border);
     }
-    .auth-notice code {
+    .auth-instructions {
+      grid-column: 2;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      background: var(--chip-tint);
+      color: var(--fg-soft);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .auth-instructions p { margin: 0; }
+    .auth-instructions p + p { margin-top: 8px; }
+    .auth-instructions code {
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: var(--surface);
+      color: var(--fg);
       font-family: var(--mono);
-      color: var(--accent-hover);
+      font-size: 12px;
+    }
+    .auth-check {
+      min-height: 36px;
+      margin-top: 12px;
+      padding: 7px 12px;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-pill);
+      background: var(--surface);
+      color: var(--fg);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .auth-check:hover { border-color: var(--accent); }
+    .auth-check:disabled { cursor: wait; opacity: 0.6; }
+    .auth-check-result {
+      margin-left: 8px;
+      color: var(--fg-muted);
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    @media (max-width: 760px) {
+      .auth-setup-inner {
+        width: min(100% - 28px, 620px);
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .auth-instructions { grid-column: 1; }
+      .auth-option { align-items: flex-start; }
     }
     .gh-pill {
       display: inline-flex;
@@ -292,6 +434,14 @@
       cursor: pointer;
     }
     .lang-pill select option { color: var(--fg); }
+    @media (max-width: 560px) {
+      .top-nav { padding-inline: 12px; gap: 8px; }
+      .nav-wordmark { display: none; }
+      .nav-right { gap: 6px; }
+      .gh-pill { padding: 5px 9px; font-size: 12px; }
+      .lang-pill select { padding: 5px 22px 5px 9px; font-size: 12px; }
+      .lang-pill::after { right: 8px; }
+    }
 
     main.layout {
       max-width: 1280px;
@@ -1579,6 +1729,7 @@
           <option value="bn">বাংলা</option>
         </select>
       </label>
+      <button class="gh-pill auth-trigger" id="auth-trigger" type="button" hidden>connect claude</button>
       <a class="gh-pill" href="/settings">settings</a>
       <a class="gh-pill" href="https://github.com/latent-spaces/sottochat" target="_blank" rel="noreferrer noopener" aria-label="GitHub repo">
         <span class="gh-glyph">★</span>
@@ -1587,9 +1738,62 @@
     </div>
   </header>
 
-  <div class="auth-notice" id="auth-notice" hidden>
-    chat &amp; summaries need a Claude Code login — run <code>claude</code> once in a terminal to sign in, then restart sotto-chat
-  </div>
+  <section class="auth-setup" id="auth-setup" aria-labelledby="auth-title" hidden>
+    <div class="auth-setup-inner">
+      <div class="auth-copy">
+        <p class="auth-kicker" id="auth-kicker">first run</p>
+        <h2 id="auth-title">enable chat and summaries</h2>
+        <p id="auth-description">Session tailing already works. Choose how Claude-backed discussion should authenticate, or keep using the read-only transcript view.</p>
+      </div>
+
+      <div class="auth-options" aria-label="Claude authentication choices">
+        <button class="auth-option" type="button" data-auth-choice="claude-code" aria-pressed="false">
+          <span class="auth-option-main">
+            <span class="auth-option-title">use Claude Code login <span class="auth-recommended">recommended</span></span>
+            <span class="auth-option-note">use the Claude subscription already connected on this machine</span>
+          </span>
+          <span class="auth-option-arrow" aria-hidden="true">›</span>
+        </button>
+        <button class="auth-option" type="button" data-auth-choice="api-key" aria-pressed="false">
+          <span class="auth-option-main">
+            <span class="auth-option-title">use an API key</span>
+            <span class="auth-option-note">provide ANTHROPIC_API_KEY to the sottochat process</span>
+          </span>
+          <span class="auth-option-arrow" aria-hidden="true">›</span>
+        </button>
+        <button class="auth-option" type="button" data-auth-choice="cloud" aria-pressed="false">
+          <span class="auth-option-main">
+            <span class="auth-option-title">use Bedrock or Vertex</span>
+            <span class="auth-option-note">keep authentication in your cloud provider environment</span>
+          </span>
+          <span class="auth-option-arrow" aria-hidden="true">›</span>
+        </button>
+        <button class="auth-option" type="button" data-auth-choice="read-only" aria-pressed="false">
+          <span class="auth-option-main">
+            <span class="auth-option-title">continue read-only</span>
+            <span class="auth-option-note">browse live transcripts without chat or generated summaries</span>
+          </span>
+          <span class="auth-option-arrow" aria-hidden="true">×</span>
+        </button>
+      </div>
+
+      <div class="auth-instructions" id="auth-instructions" aria-live="polite" hidden>
+        <div data-auth-instructions="claude-code" hidden>
+          <p>Run <code>claude</code> in a terminal and complete its login flow. Return here when it is signed in.</p>
+          <button class="auth-check" id="auth-check" type="button">check again</button>
+          <span class="auth-check-result" id="auth-check-result"></span>
+        </div>
+        <div data-auth-instructions="api-key" hidden>
+          <p>Set <code>ANTHROPIC_API_KEY</code> in the shell or service that starts sottochat, then restart it.</p>
+          <p>The key never enters this page or sottochat settings.</p>
+        </div>
+        <div data-auth-instructions="cloud" hidden>
+          <p>Start sottochat with <code>CLAUDE_CODE_USE_BEDROCK=1</code> or <code>CLAUDE_CODE_USE_VERTEX=1</code>, plus your provider's normal credentials.</p>
+          <p>Restart after changing the process environment.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <main class="layout">
     <aside class="sidebar">

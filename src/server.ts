@@ -21,6 +21,7 @@ import {
   type ChatArchive,
   type PersistedSession,
 } from "./persistence";
+import { claudeAuthState, type ClaudeAuthState } from "./auth-check";
 
 const PORT = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
 const POLL_MS = readStartupSetting("META_POLL_MS", 500);
@@ -503,10 +504,44 @@ function applyExplainLanguage(lang: string): void {
   }
 }
 
-// whether the startup credential check found nothing — surfaced to the web UI
-// via the ws hello so browser-first users see the sign-in hint too. false until
-// the async check below completes; assigned before any real user traffic.
-let needsClaudeAuth = false;
+type PublicClaudeAuthState = {
+  status: "ready" | "missing" | "failed";
+  method: ClaudeAuthState["method"];
+};
+
+// The browser receives only capability metadata. Credentials remain in Claude
+// Code, the process environment, or the selected cloud provider.
+let detectedClaudeAuth: ClaudeAuthState = { configured: false, method: "none" };
+let claudeAuthFailed = false;
+
+function publicClaudeAuthState(): PublicClaudeAuthState {
+  return {
+    status: claudeAuthFailed ? "failed" : detectedClaudeAuth.configured ? "ready" : "missing",
+    method: detectedClaudeAuth.method,
+  };
+}
+
+function broadcastClaudeAuthState(): void {
+  broadcast({ kind: "auth:state", auth: publicClaudeAuthState() });
+}
+
+async function refreshClaudeAuthState(): Promise<PublicClaudeAuthState> {
+  detectedClaudeAuth = await claudeAuthState();
+  claudeAuthFailed = false;
+  broadcastClaudeAuthState();
+  return publicClaudeAuthState();
+}
+
+function markClaudeAuthFailed(): void {
+  if (claudeAuthFailed) return;
+  claudeAuthFailed = true;
+  broadcastClaudeAuthState();
+}
+
+function markClaudeAuthWorking(): void {
+  if (!claudeAuthFailed && detectedClaudeAuth.configured) return;
+  void refreshClaudeAuthState();
+}
 
 const server = Bun.serve({
   port: PORT,
@@ -524,7 +559,11 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/state" && req.method === "GET") {
-      return Response.json({ sessions: recentSessions() });
+      return Response.json({ sessions: recentSessions(), auth: publicClaudeAuthState() });
+    }
+
+    if (url.pathname === "/api/auth/status" && req.method === "GET") {
+      return Response.json({ auth: await refreshClaudeAuthState() });
     }
 
     if (url.pathname === "/api/settings" && req.method === "GET") {
@@ -830,7 +869,8 @@ const server = Bun.serve({
           kind: "hello",
           sessions: recentSessions(),
           language: explainLang,
-          ...(needsClaudeAuth ? { needsClaudeAuth: true } : {}),
+          auth: publicClaudeAuthState(),
+          ...(publicClaudeAuthState().status !== "ready" ? { needsClaudeAuth: true } : {}),
         })
       );
     },
@@ -844,13 +884,11 @@ const server = Bun.serve({
 });
 
 const { formatStartupMessage, terminalSupportsColor } = await import("./startup-message");
-const { hasClaudeCredentials } = await import("./auth-check");
-// startup snapshot — cleared by a restart after the user signs in.
-needsClaudeAuth = !(await hasClaudeCredentials());
+detectedClaudeAuth = await claudeAuthState();
 console.log(
   formatStartupMessage(`http://localhost:${server.port}/`, {
     color: terminalSupportsColor(),
-    authHint: needsClaudeAuth,
+    authHint: publicClaudeAuthState().status !== "ready",
   })
 );
 
@@ -862,8 +900,15 @@ const chatHost = startChatHost({
     broadcast({ kind: "chat:chunk", sessionKey: c.sessionKey, chunk: c });
   },
   onStatus(u) {
-    const s = { status: u.status, ts: Date.now(), ...(u.message ? { message: u.message } : {}) };
+    const s = {
+      status: u.status,
+      ts: Date.now(),
+      ...(u.message ? { message: u.message } : {}),
+      ...(u.reason ? { reason: u.reason } : {}),
+    };
     chatStatuses.set(u.sessionKey, s);
+    if (u.reason === "auth") markClaudeAuthFailed();
+    else if (u.status === "idle") markClaudeAuthWorking();
     broadcast({ kind: "chat:status", sessionKey: u.sessionKey, ...s });
   },
 });
@@ -874,7 +919,11 @@ const observer = OBSERVER_ENABLED
       summaryModel: OBSERVER_MODEL,
       batchMs: OBSERVER_BATCH_MS,
       getLanguage: () => explainLanguageName(),
+      onAuthError() {
+        markClaudeAuthFailed();
+      },
       onSummary(d) {
+        markClaudeAuthWorking();
         const s = sessions.get(d.sessionKey);
         if (!s || !d.summary) return;
         if (s.summary === d.summary) return; // no change → no repaint/pulse

@@ -17,7 +17,16 @@
     const dChatThread = document.getElementById("d-chat-thread");
     const dChatInput = document.getElementById("d-chat-input");
     const langSelect = document.getElementById("lang-select");
+    const authSetup = document.getElementById("auth-setup");
+    const authTrigger = document.getElementById("auth-trigger");
+    const authKicker = document.getElementById("auth-kicker");
+    const authTitle = document.getElementById("auth-title");
+    const authDescription = document.getElementById("auth-description");
+    const authInstructions = document.getElementById("auth-instructions");
+    const authCheck = document.getElementById("auth-check");
+    const authCheckResult = document.getElementById("auth-check-result");
     const LANG_KEY = "cutCakeLang";
+    const AUTH_CHOICE_KEY = "sottochatAuthChoice";
     // the explanation language. localStorage is the source of truth for this
     // browser; the choice is pushed to the server (which threads it into the
     // assistant + observer prompts) and mirrored to other clients over ws.
@@ -45,6 +54,123 @@
       bn: { ask: "আউটপুট সম্পর্কে জিজ্ঞাসা করুন…", toAgent: "এজেন্টকে উত্তর", copy: "কপি", copied: "কপি হয়েছে", updating: "আপডেট হচ্ছে…", presets: ["সংক্ষেপে সারাংশ দাও", "এখানে কী লেখা আছে?"] },
     };
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.zh; }
+
+    // Claude auth is optional. The server reports only whether a supported
+    // method is configured; the browser stores only a harmless read-only
+    // acknowledgement. No credential value crosses this UI boundary.
+    let currentAuth = { status: "missing", method: "none" };
+    let authSetupForced = false;
+
+    function storedAuthChoice() {
+      try { return localStorage.getItem(AUTH_CHOICE_KEY); } catch { return null; }
+    }
+
+    function storeAuthChoice(value) {
+      try {
+        if (value) localStorage.setItem(AUTH_CHOICE_KEY, value);
+        else localStorage.removeItem(AUTH_CHOICE_KEY);
+      } catch {}
+    }
+
+    function showAuthInstructions(choice) {
+      document.querySelectorAll("[data-auth-choice]").forEach((button) => {
+        button.setAttribute("aria-pressed", button.dataset.authChoice === choice ? "true" : "false");
+      });
+      let visible = false;
+      document.querySelectorAll("[data-auth-instructions]").forEach((panel) => {
+        const selected = panel.dataset.authInstructions === choice;
+        panel.hidden = !selected;
+        if (selected) visible = true;
+      });
+      if (authInstructions) authInstructions.hidden = !visible;
+      if (authCheckResult) authCheckResult.textContent = "";
+    }
+
+    function paintAuth(auth) {
+      if (!auth || !["ready", "missing", "failed"].includes(auth.status)) return;
+      currentAuth = auth;
+      const readOnly = storedAuthChoice() === "read-only";
+
+      if (auth.status === "ready") {
+        authSetupForced = false;
+        if (authSetup) authSetup.hidden = true;
+        if (authTrigger) authTrigger.hidden = true;
+        showAuthInstructions(null);
+        return;
+      }
+
+      if (authTrigger) {
+        authTrigger.hidden = false;
+        authTrigger.textContent = auth.status === "failed" ? "auth failed" : readOnly ? "read-only" : "connect claude";
+      }
+
+      const shouldShow = authSetupForced || !readOnly;
+      if (authSetup) authSetup.hidden = !shouldShow;
+      if (!shouldShow) return;
+
+      if (auth.status === "failed") {
+        if (authKicker) authKicker.textContent = "authentication failed";
+        if (authTitle) authTitle.textContent = "reconnect Claude";
+        if (authDescription) authDescription.textContent = "The configured method was rejected. Transcript tailing still works while you repair it or continue read-only.";
+        const choice = auth.method === "api-key"
+          ? "api-key"
+          : auth.method === "bedrock" || auth.method === "vertex"
+            ? "cloud"
+            : "claude-code";
+        showAuthInstructions(choice);
+      } else {
+        if (authKicker) authKicker.textContent = "first run";
+        if (authTitle) authTitle.textContent = "enable chat and summaries";
+        if (authDescription) authDescription.textContent = "Session tailing already works. Choose how Claude-backed discussion should authenticate, or keep using the read-only transcript view.";
+      }
+    }
+
+    document.querySelectorAll("[data-auth-choice]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const choice = button.dataset.authChoice;
+        if (choice === "read-only") {
+          storeAuthChoice("read-only");
+          authSetupForced = false;
+          showAuthInstructions(null);
+          paintAuth(currentAuth);
+          return;
+        }
+        storeAuthChoice(null);
+        authSetupForced = true;
+        showAuthInstructions(choice);
+        paintAuth(currentAuth);
+        showAuthInstructions(choice);
+      });
+    });
+
+    if (authTrigger) {
+      authTrigger.addEventListener("click", () => {
+        authSetupForced = true;
+        paintAuth(currentAuth);
+        authSetup?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+
+    if (authCheck) {
+      authCheck.addEventListener("click", async () => {
+        authCheck.disabled = true;
+        if (authCheckResult) authCheckResult.textContent = "checking…";
+        try {
+          const res = await fetch("/api/auth/status");
+          const body = await res.json();
+          if (!res.ok || !body?.auth) throw new Error("status unavailable");
+          paintAuth(body.auth);
+          if (body.auth.status !== "ready" && authCheckResult) {
+            authCheckResult.textContent = "not detected yet";
+          }
+        } catch (err) {
+          if (authCheckResult) authCheckResult.textContent = "check failed";
+          console.warn("[auth] status check failed", err);
+        } finally {
+          authCheck.disabled = false;
+        }
+      });
+    }
 
     // per-session "turns in context" stepper bounds — mirror the server clamps.
     const CHAT_CTX_MIN = 1, CHAT_CTX_MAX = 10, CHAT_CTX_DEFAULT = 5;
@@ -138,7 +264,7 @@
     // a network hiccup or GitHub rate-limit just leaves the "—" placeholder.
     (async function () {
       const ghStarEl = document.getElementById("gh-star");
-      const ghPillEl = document.querySelector(".gh-pill");
+      const ghPillEl = document.querySelector('a.gh-pill[href*="github.com"]');
       if (!ghStarEl || !ghPillEl) return;
       const m = ghPillEl.href.match(/github\.com\/([^/]+\/[^/]+?)\/?$/);
       if (!m) return;
@@ -2530,8 +2656,12 @@
             explainLang = msg.language;
             paintLang();
           }
-          const authNotice = document.getElementById("auth-notice");
-          if (authNotice) authNotice.hidden = msg.needsClaudeAuth !== true;
+          const helloAuth = msg.auth || {
+            status: msg.needsClaudeAuth === true ? "missing" : "ready",
+            method: "none",
+          };
+          if (helloAuth.status === "failed") authSetupForced = true;
+          paintAuth(helloAuth);
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
@@ -2565,6 +2695,9 @@
             chatStatusByKey.set(msg.sessionKey, { status: msg.status, message: msg.message, ts: msg.ts || Date.now() });
             refresh();
           }
+        } else if (msg.kind === "auth:state") {
+          if (msg.auth?.status === "failed") authSetupForced = true;
+          paintAuth(msg.auth);
         } else if (msg.kind === "chat:cleared") {
           chatThreadByKey.delete(msg.sessionKey);
           chatStatusByKey.delete(msg.sessionKey);
