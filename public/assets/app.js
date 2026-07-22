@@ -41,13 +41,13 @@
     const LANG_KEY = "cutCakeLang";
     const AUTH_CHOICE_KEY = "sottochatAuthChoice";
     const AUTO_EXPLAIN_KEY = "sottochatAutoExplainLong";
-    const AUTO_EXPLAIN_THRESHOLDS = new Set([0, 350, 700, 1200]);
+    const AUTO_EXPLAIN_THRESHOLDS = new Set([0, 275, 700, 1200]);
     // the explanation language. localStorage is the source of truth for this
     // browser; the choice is pushed to the server (which threads it into the
     // assistant + observer prompts) and mirrored to other clients over ws.
     let explainLang = localStorage.getItem(LANG_KEY) || "zh";
     function readAutoExplainThreshold(value) {
-      if (value === "1") return 350; // migrate the original boolean preference
+      if (value === "1" || value === "350") return 275; // migrate earlier defaults
       const parsed = Number(value);
       return AUTO_EXPLAIN_THRESHOLDS.has(parsed) ? parsed : 0;
     }

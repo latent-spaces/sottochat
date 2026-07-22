@@ -50,7 +50,7 @@ The product reads transcripts only. It does not pause the agent, write into the 
 - Suggested replies stay in the agent's own language inside a fenced `to-agent` block.
 - Per-session recent-turn context depth from 1 to 10.
 - Browser-local color-system cycling from the top navigation.
-- Browser-local automatic first-chip discussion threshold: off, 350+, 700+, or 1,200+ words.
+- Browser-local automatic first-chip discussion threshold: off, 275+, 700+, or 1,200+ words.
 - Daily, per-model history of the additional tokens used by sottochat chat and observer calls, retained locally for 90 days.
 - Manual reset of a session's Q&A state; cleared discussions are archived per session (last 10) and can be viewed or restored from a history control.
 - Chat threads, summaries, and chat settings persist across server restarts (`~/.sottochat/state.json`).
