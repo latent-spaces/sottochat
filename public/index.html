@@ -462,6 +462,17 @@
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.01em;
     }
+    .auto-explain-trigger[data-enabled="true"] {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .nav-menu-caret {
+      color: var(--fg-muted);
+      font-family: var(--mono);
+      font-size: 9px;
+      transition: transform 160ms var(--ease-out);
+    }
+    .auto-explain-trigger[aria-expanded="true"] .nav-menu-caret { transform: rotate(180deg); }
     .nav-menu-wrap { position: relative; }
     .nav-menu-wrap > .nav-toggle[aria-expanded="true"] {
       border-color: var(--accent);
@@ -1186,9 +1197,15 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .session-title-wrap {
+      position: relative;
       order: 1;
       flex: 0 1 auto;
       min-width: 0;
+      /* The h2 clips long text for ellipsis. The mascot is a sibling in this
+         wrapper so its out-of-box perch is not clipped with the title text. */
+      overflow: visible;
     }
     #d-name .name-edit-input {
       font-size: 26px;
@@ -1984,9 +2001,9 @@
         </span>
       </button>
       <div class="nav-menu-wrap" id="auto-explain-wrap">
-        <button class="nav-toggle nav-compact" id="auto-explain-trigger" type="button" aria-haspopup="menu" aria-controls="auto-explain-menu" aria-expanded="false">
-          <span class="toggle-dot" aria-hidden="true"></span>
+        <button class="nav-toggle nav-compact auto-explain-trigger" id="auto-explain-trigger" type="button" aria-haspopup="menu" aria-controls="auto-explain-menu" aria-expanded="false">
           <span class="auto-threshold">350+</span>
+          <span class="nav-menu-caret" aria-hidden="true">▾</span>
         </button>
         <div class="nav-popover" id="auto-explain-menu" role="menu" aria-label="automatic quick action threshold" hidden>
           <div class="nav-popover-head">
@@ -2113,7 +2130,7 @@
       </div>
       <article class="detail-content" id="detail-content" hidden>
         <div class="session-head">
-          <h2 id="d-name">—</h2>
+          <div class="session-title-wrap"><h2 id="d-name">—</h2></div>
           <p class="source"><span class="src-glyph">◆</span><span id="d-source">claude-code</span> · <span id="d-elapsed">—</span><span id="d-tokens" class="d-tokens"></span></p>
           <p class="d-cwd-line" id="d-cwd" hidden></p>
           <button class="charts-toggle" id="d-charts-toggle" type="button" aria-expanded="false" aria-controls="d-charts-band" title="show charts">

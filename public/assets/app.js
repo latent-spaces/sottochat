@@ -305,12 +305,12 @@
         ? `${(autoExplainThreshold / 1000).toFixed(1).replace(/\.0$/, "")}k+`
         : enabled ? `${autoExplainThreshold}+` : "off";
       autoExplainTrigger.querySelector(".auto-threshold").textContent = label;
-      autoExplainTrigger.setAttribute("aria-pressed", enabled ? "true" : "false");
+      autoExplainTrigger.dataset.enabled = enabled ? "true" : "false";
       autoExplainTrigger.setAttribute(
         "aria-label",
         enabled
-          ? `${action} automatically for agent replies of ${autoExplainThreshold} words or more`
-          : `${action} automatically: off`,
+          ? `${action} automatically for agent replies of ${autoExplainThreshold} words or more. open threshold menu`
+          : `${action} automatically: off. open threshold menu`,
       );
       autoExplainTrigger.title = enabled
         ? `${action} at ${autoExplainThreshold}+ words`
@@ -416,9 +416,15 @@
 
     if (autoExplainTrigger && autoExplainMenu) {
       paintAutoExplainControl();
-      autoExplainTrigger.addEventListener("click", () => toggleNavPopover(autoExplainTrigger, autoExplainMenu));
+      autoExplainTrigger.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleNavPopover(autoExplainTrigger, autoExplainMenu);
+      });
       autoExplainMenu.querySelectorAll("[data-auto-threshold]").forEach((option) => {
-        option.addEventListener("click", () => {
+        option.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
           autoExplainThreshold = readAutoExplainThreshold(option.dataset.autoThreshold);
           try { localStorage.setItem(AUTO_EXPLAIN_KEY, String(autoExplainThreshold)); } catch {}
           closeNavPopovers();
@@ -792,8 +798,9 @@
         valid: (el) => !!el.querySelector(".bar-frost") },
       // top-right corner of either chart card.
       { selectorAll: "#detail-content .chart-card",          size: 38, anchor: "card-top-right" },
-      // floating off the session-head heading.
-      { selectorAll: "#detail-content .session-head h2",     size: 30, anchor: "head-right" },
+      // floating off the title wrapper. The h2 itself clips for ellipsis, so
+      // mounting there would cut off the mascot outside the text box.
+      { selectorAll: "#detail-content .session-title-wrap",  size: 30, anchor: "head-right" },
       // top-right of the chat-input panel.
       { selectorAll: "#detail-content .chat-input",          size: 36, anchor: "input-top-right" },
     ];
