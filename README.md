@@ -95,6 +95,9 @@ documented in [.env.example](.env.example). The main ones:
 | `META_PROJECT_SLUG` | *(unset)* | Restrict discovery to a single Claude Code project slug |
 
 Runtime state (chat sandboxes, persistence) lives under `~/.sottochat/`.
+Sottochat's own chat and summary token history is retained by local calendar day
+for 90 days in `~/.sottochat/usage.json`; it does not include token usage from
+the watched coding-agent sessions.
 
 ## Run and debug locally with Bun
 
@@ -134,6 +137,7 @@ Useful diagnostics while the scratch server is running:
 ```sh
 curl http://localhost:3947/state
 curl http://localhost:3947/api/auth/status
+curl http://localhost:3947/api/usage
 curl http://localhost:3947/diag/discovery
 ```
 

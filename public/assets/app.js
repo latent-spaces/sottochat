@@ -17,6 +17,18 @@
     const dChatThread = document.getElementById("d-chat-thread");
     const dChatInput = document.getElementById("d-chat-input");
     const langSelect = document.getElementById("lang-select");
+    const themeCycle = document.getElementById("theme-cycle");
+    const autoExplainWrap = document.getElementById("auto-explain-wrap");
+    const autoExplainTrigger = document.getElementById("auto-explain-trigger");
+    const autoExplainMenu = document.getElementById("auto-explain-menu");
+    const usageWrap = document.getElementById("usage-wrap");
+    const usageTrigger = document.getElementById("usage-trigger");
+    const usagePanel = document.getElementById("usage-panel");
+    const usageButtonTotal = document.getElementById("usage-button-total");
+    const usageTodayTotal = document.getElementById("usage-today-total");
+    const usageTodayDate = document.getElementById("usage-today-date");
+    const usageBreakdown = document.getElementById("usage-breakdown");
+    const usageHistory = document.getElementById("usage-history");
     const authSetup = document.getElementById("auth-setup");
     const authTrigger = document.getElementById("auth-trigger");
     const authKicker = document.getElementById("auth-kicker");
@@ -27,31 +39,40 @@
     const authCheckResult = document.getElementById("auth-check-result");
     const LANG_KEY = "cutCakeLang";
     const AUTH_CHOICE_KEY = "sottochatAuthChoice";
+    const AUTO_EXPLAIN_KEY = "sottochatAutoExplainLong";
+    const AUTO_EXPLAIN_THRESHOLDS = new Set([0, 350, 700, 1200]);
     // the explanation language. localStorage is the source of truth for this
     // browser; the choice is pushed to the server (which threads it into the
     // assistant + observer prompts) and mirrored to other clients over ws.
     let explainLang = localStorage.getItem(LANG_KEY) || "zh";
+    function readAutoExplainThreshold(value) {
+      if (value === "1") return 350; // migrate the original boolean preference
+      const parsed = Number(value);
+      return AUTO_EXPLAIN_THRESHOLDS.has(parsed) ? parsed : 0;
+    }
+    let autoExplainThreshold = readAutoExplainThreshold(localStorage.getItem(AUTO_EXPLAIN_KEY));
+    let usageState = { today: "", days: [] };
 
     // localized UI strings for the conversational surface. chrome elsewhere
     // stays english; only the ask box, quick-replies, and the copy card follow
     // the chosen language. the assistant answers in the language regardless.
     const UI_STRINGS = {
-      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", updating: "מתעדכן…", presets: ["תסכם בקצרה", "מה כתוב פה"] },
-      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", updating: "updating…", presets: ["summarize briefly", "what does this say?"] },
-      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", updating: "جارٍ التحديث…", presets: ["لخّص باختصار", "ماذا يقول هنا؟"] },
-      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", updating: "actualizando…", presets: ["resume brevemente", "¿qué dice aquí?"] },
-      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", updating: "mise à jour…", presets: ["résume brièvement", "qu'est-ce qui est écrit ici ?"] },
-      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", updating: "обновляется…", presets: ["подытожь кратко", "что здесь написано?"] },
-      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", updating: "wird aktualisiert…", presets: ["kurz zusammenfassen", "was steht hier?"] },
-      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", updating: "更新中…", presets: ["简短总结", "这里写了什么？"] },
-      pt: { ask: "pergunte sobre a saída…", toAgent: "responder ao agente", copy: "copiar", copied: "copiado", updating: "atualizando…", presets: ["resuma brevemente", "o que diz aqui?"] },
-      it: { ask: "chiedi sull'output…", toAgent: "rispondi all'agente", copy: "copia", copied: "copiato", updating: "aggiornamento…", presets: ["riassumi in breve", "cosa c'è scritto qui?"] },
-      ja: { ask: "出力について質問…", toAgent: "エージェントへの返信", copy: "コピー", copied: "コピーしました", updating: "更新中…", presets: ["簡潔に要約して", "ここには何が書いてある？"] },
-      ko: { ask: "출력에 대해 질문하기…", toAgent: "에이전트에 답장", copy: "복사", copied: "복사됨", updating: "업데이트 중…", presets: ["간단히 요약해줘", "여기 뭐라고 쓰여 있어?"] },
-      hi: { ask: "आउटपुट के बारे में पूछें…", toAgent: "एजेंट को जवाब", copy: "कॉपी", copied: "कॉपी हो गया", updating: "अपडेट हो रहा है…", presets: ["संक्षेप में सारांश दें", "यहाँ क्या लिखा है?"] },
-      id: { ask: "tanya tentang keluaran…", toAgent: "balas ke agen", copy: "salin", copied: "tersalin", updating: "memperbarui…", presets: ["ringkas singkat", "apa yang tertulis di sini?"] },
-      vi: { ask: "hỏi về kết quả…", toAgent: "trả lời tác nhân", copy: "sao chép", copied: "đã sao chép", updating: "đang cập nhật…", presets: ["tóm tắt ngắn gọn", "ở đây viết gì?"] },
-      bn: { ask: "আউটপুট সম্পর্কে জিজ্ঞাসা করুন…", toAgent: "এজেন্টকে উত্তর", copy: "কপি", copied: "কপি হয়েছে", updating: "আপডেট হচ্ছে…", presets: ["সংক্ষেপে সারাংশ দাও", "এখানে কী লেখা আছে?"] },
+      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", updating: "מתעדכן…", presets: ["מה כתוב פה", "תסכם בקצרה"] },
+      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", updating: "updating…", presets: ["what does this say?", "summarize briefly"] },
+      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", updating: "جارٍ التحديث…", presets: ["ماذا يقول هنا؟", "لخّص باختصار"] },
+      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", updating: "actualizando…", presets: ["¿qué dice aquí?", "resume brevemente"] },
+      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", updating: "mise à jour…", presets: ["qu'est-ce qui est écrit ici ?", "résume brièvement"] },
+      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", updating: "обновляется…", presets: ["что здесь написано?", "подытожь кратко"] },
+      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", updating: "wird aktualisiert…", presets: ["was steht hier?", "kurz zusammenfassen"] },
+      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", updating: "更新中…", presets: ["这里写了什么？", "简短总结"] },
+      pt: { ask: "pergunte sobre a saída…", toAgent: "responder ao agente", copy: "copiar", copied: "copiado", updating: "atualizando…", presets: ["o que diz aqui?", "resuma brevemente"] },
+      it: { ask: "chiedi sull'output…", toAgent: "rispondi all'agente", copy: "copia", copied: "copiato", updating: "aggiornamento…", presets: ["cosa c'è scritto qui?", "riassumi in breve"] },
+      ja: { ask: "出力について質問…", toAgent: "エージェントへの返信", copy: "コピー", copied: "コピーしました", updating: "更新中…", presets: ["ここには何が書いてある？", "簡潔に要約して"] },
+      ko: { ask: "출력에 대해 질문하기…", toAgent: "에이전트에 답장", copy: "복사", copied: "복사됨", updating: "업데이트 중…", presets: ["여기 뭐라고 쓰여 있어?", "간단히 요약해줘"] },
+      hi: { ask: "आउटपुट के बारे में पूछें…", toAgent: "एजेंट को जवाब", copy: "कॉपी", copied: "कॉपी हो गया", updating: "अपडेट हो रहा है…", presets: ["यहाँ क्या लिखा है?", "संक्षेप में सारांश दें"] },
+      id: { ask: "tanya tentang keluaran…", toAgent: "balas ke agen", copy: "salin", copied: "tersalin", updating: "memperbarui…", presets: ["apa yang tertulis di sini?", "ringkas singkat"] },
+      vi: { ask: "hỏi về kết quả…", toAgent: "trả lời tác nhân", copy: "sao chép", copied: "đã sao chép", updating: "đang cập nhật…", presets: ["ở đây viết gì?", "tóm tắt ngắn gọn"] },
+      bn: { ask: "আউটপুট সম্পর্কে জিজ্ঞাসা করুন…", toAgent: "এজেন্টকে উত্তর", copy: "কপি", copied: "কপি হয়েছে", updating: "আপডেট হচ্ছে…", presets: ["এখানে কী লেখা আছে?", "সংক্ষেপে সারাংশ দাও"] },
     };
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.zh; }
 
@@ -246,6 +267,7 @@
 
     function paintLang() {
       if (langSelect && langSelect.value !== explainLang) langSelect.value = explainLang;
+      paintAutoExplainControl();
     }
     async function pushLang(code) {
       try {
@@ -259,12 +281,172 @@
         console.warn("[lang] set error", err);
       }
     }
+
+    function paintThemeControl() {
+      const theme = window.SottochatTheme;
+      if (!themeCycle || !theme?.systems?.length) return;
+      const currentId = theme.current();
+      const index = Math.max(0, theme.systems.findIndex((system) => system.id === currentId));
+      const current = theme.systems[index];
+      const next = theme.systems[(index + 1) % theme.systems.length];
+      themeCycle.setAttribute("aria-label", `color system: ${current.label}. next: ${next.label}`);
+      themeCycle.title = `${current.label}. click for ${next.label}`;
+      themeCycle.querySelectorAll(".theme-dot").forEach((dot, dotIndex) => {
+        dot.style.setProperty("--theme-dot", current.swatches[dotIndex] || current.swatches[0]);
+      });
+    }
+
+    function paintAutoExplainControl() {
+      if (!autoExplainTrigger) return;
+      const action = ui().presets?.[0] || "what does this say?";
+      const enabled = autoExplainThreshold > 0;
+      const label = autoExplainThreshold >= 1000
+        ? `${(autoExplainThreshold / 1000).toFixed(1).replace(/\.0$/, "")}k+`
+        : enabled ? `${autoExplainThreshold}+` : "off";
+      autoExplainTrigger.querySelector(".auto-threshold").textContent = label;
+      autoExplainTrigger.setAttribute("aria-pressed", enabled ? "true" : "false");
+      autoExplainTrigger.setAttribute(
+        "aria-label",
+        enabled
+          ? `${action} automatically for agent replies of ${autoExplainThreshold} words or more`
+          : `${action} automatically: off`,
+      );
+      autoExplainTrigger.title = enabled
+        ? `${action} at ${autoExplainThreshold}+ words`
+        : `${action}: manual only`;
+      autoExplainMenu?.querySelectorAll("[data-auto-threshold]").forEach((option) => {
+        option.setAttribute("aria-checked", Number(option.dataset.autoThreshold) === autoExplainThreshold ? "true" : "false");
+      });
+    }
+
+    function fmtUsageTokens(value) {
+      return fmtTokens(Number(value) || 0) || "0";
+    }
+
+    function paintUsageControl(next) {
+      if (next && typeof next === "object") {
+        usageState = {
+          today: typeof next.today === "string" ? next.today : "",
+          days: Array.isArray(next.days) ? next.days : [],
+        };
+      }
+      const today = usageState.days.find((day) => day?.date === usageState.today) || {
+        totalTokens: 0,
+        chatTokens: 0,
+        observerTokens: 0,
+        requests: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      };
+      const totalLabel = fmtUsageTokens(today.totalTokens);
+      if (usageButtonTotal) usageButtonTotal.textContent = totalLabel;
+      if (usageTodayTotal) usageTodayTotal.textContent = `${totalLabel} tokens`;
+      if (usageTodayDate) usageTodayDate.textContent = usageState.today || "today";
+      if (usageBreakdown) {
+        usageBreakdown.textContent = `chat ${fmtUsageTokens(today.chatTokens)} · summaries ${fmtUsageTokens(today.observerTokens)} · ${Number(today.requests) || 0} calls`;
+      }
+      if (usageTrigger) {
+        usageTrigger.setAttribute("aria-label", `sottochat additional token usage today: ${Number(today.totalTokens) || 0}`);
+        usageTrigger.title = `${totalLabel} additional tokens today`;
+      }
+      if (!usageHistory) return;
+      if (!usageState.days.length) {
+        usageHistory.innerHTML = '<p class="usage-empty">no usage recorded yet</p>';
+        return;
+      }
+      usageHistory.innerHTML = usageState.days.map((day) => {
+        const date = day.date === usageState.today ? "today" : day.date;
+        return '<div class="usage-row">' +
+          '<span class="usage-row-date">' + escapeHtml(date) + '</span>' +
+          '<span class="usage-row-sources">chat ' + fmtUsageTokens(day.chatTokens) + ' · sum ' + fmtUsageTokens(day.observerTokens) + '</span>' +
+          '<span class="usage-row-total">' + fmtUsageTokens(day.totalTokens) + '</span>' +
+          '</div>';
+      }).join("");
+    }
+
+    function setNavPopover(trigger, panel, open) {
+      if (!trigger || !panel) return;
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      panel.hidden = !open;
+    }
+
+    function closeNavPopovers(except) {
+      if (except !== autoExplainMenu) setNavPopover(autoExplainTrigger, autoExplainMenu, false);
+      if (except !== usagePanel) setNavPopover(usageTrigger, usagePanel, false);
+    }
+
+    function toggleNavPopover(trigger, panel) {
+      const willOpen = panel?.hidden !== false;
+      closeNavPopovers(panel);
+      setNavPopover(trigger, panel, willOpen);
+    }
+
+    if (themeCycle && window.SottochatTheme?.systems?.length) {
+      paintThemeControl();
+      themeCycle.addEventListener("click", () => {
+        const theme = window.SottochatTheme;
+        const index = Math.max(0, theme.systems.findIndex((system) => system.id === theme.current()));
+        const next = theme.systems[(index + 1) % theme.systems.length];
+        theme.apply(next.id, true);
+      });
+      window.addEventListener("sottochat:color-system", paintThemeControl);
+    }
+
+    if (autoExplainTrigger && autoExplainMenu) {
+      paintAutoExplainControl();
+      autoExplainTrigger.addEventListener("click", () => toggleNavPopover(autoExplainTrigger, autoExplainMenu));
+      autoExplainMenu.querySelectorAll("[data-auto-threshold]").forEach((option) => {
+        option.addEventListener("click", () => {
+          autoExplainThreshold = readAutoExplainThreshold(option.dataset.autoThreshold);
+          try { localStorage.setItem(AUTO_EXPLAIN_KEY, String(autoExplainThreshold)); } catch {}
+          closeNavPopovers();
+          paintAutoExplainControl();
+          autoExplainTrigger.focus();
+        });
+      });
+      autoExplainMenu.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        const options = Array.from(autoExplainMenu.querySelectorAll("[data-auto-threshold]"));
+        const current = Math.max(0, options.indexOf(document.activeElement));
+        const direction = event.key === "ArrowDown" ? 1 : -1;
+        options[(current + direction + options.length) % options.length]?.focus();
+        event.preventDefault();
+      });
+      window.addEventListener("storage", (event) => {
+        if (event.key !== AUTO_EXPLAIN_KEY) return;
+        autoExplainThreshold = readAutoExplainThreshold(event.newValue);
+        paintAutoExplainControl();
+      });
+    }
+
+    if (usageTrigger && usagePanel) {
+      paintUsageControl();
+      usageTrigger.addEventListener("click", () => toggleNavPopover(usageTrigger, usagePanel));
+    }
+
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target instanceof Node && (autoExplainWrap?.contains(target) || usageWrap?.contains(target))) return;
+      closeNavPopovers();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      const autoWasOpen = autoExplainMenu?.hidden === false;
+      const usageWasOpen = usagePanel?.hidden === false;
+      closeNavPopovers();
+      if (autoWasOpen) autoExplainTrigger?.focus();
+      else if (usageWasOpen) usageTrigger?.focus();
+    });
+
     if (langSelect) {
       langSelect.value = explainLang;
       langSelect.addEventListener("change", () => {
         explainLang = langSelect.value;
         localStorage.setItem(LANG_KEY, explainLang);
         pushLang(explainLang);
+        paintAutoExplainControl();
         refresh(); // re-render placeholder / quick-replies in the new language
       });
       // only sync to the server when THIS browser has an explicit saved choice.
@@ -402,6 +584,8 @@
     // state — one entry per discovered session, keyed by server-side key
     // ("<source>:<path>"). Each carries its own events/threads/lastEventTs.
     const sessionsByKey = new Map();
+    const autoExplainSent = new Set();
+    const autoExplainInFlight = new Set();
 
     // utils
     function escapeHtml(s) {
@@ -521,8 +705,20 @@
       return turns;
     }
 
+    const WORD_SEGMENTER = typeof Intl.Segmenter === "function"
+      ? new Intl.Segmenter(undefined, { granularity: "word" })
+      : null;
     function wordCount(s) {
-      return (s || "").trim().split(/\s+/).filter(Boolean).length;
+      const text = String(s || "").trim();
+      if (!text) return 0;
+      if (WORD_SEGMENTER) {
+        let count = 0;
+        for (const part of WORD_SEGMENTER.segment(text)) {
+          if (part.isWordLike) count++;
+        }
+        return count;
+      }
+      return text.split(/\s+/).filter(Boolean).length;
     }
     function fmtCount(n) {
       if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
@@ -1740,6 +1936,7 @@
         const expandKey = sessionId + "::" + lastTurn.id + "::L";
         const expanded = expandedBodies.has(expandKey);
         const bodyCls = "conv-body" + (expanded ? " is-expanded" : "");
+        const agentWords = wordCount(lastTurn.agentText);
         parts.push(
           '<div class="conv-msg from-agent">' +
             '<span class="conv-msg-meta">agent</span>' +
@@ -1748,6 +1945,7 @@
                 renderAgentBody(lastTurn.agentText) +
               '</div>' +
               '<button class="conv-toggle hidden" data-conv-idx="0">show full</button>' +
+              '<span class="conv-word-count hidden" data-conv-idx="0">' + agentWords + ' words</span>' +
             '</div>' +
           '</div>'
         );
@@ -1777,6 +1975,7 @@
       dConversation.querySelectorAll('.conv-body').forEach((body) => {
         const idx = body.dataset.convIdx;
         const toggle = dConversation.querySelector('.conv-toggle[data-conv-idx="' + idx + '"]');
+        const words = dConversation.querySelector('.conv-word-count[data-conv-idx="' + idx + '"]');
         const expandKey = body.dataset.expandKey;
         // the fade lives on the bubble (parent) so it doesn't scroll away when we
         // pin the body to its tail.
@@ -1795,6 +1994,7 @@
               toggle.textContent = 'show full';
             });
           }
+          if (words) words.classList.remove('hidden');
           return;
         }
         const overflow = body.scrollHeight > body.clientHeight + 4;
@@ -1813,8 +2013,10 @@
               toggle.textContent = 'show less';
             });
           }
+          if (words) words.classList.remove('hidden');
         } else if (bubble) {
           bubble.classList.remove('is-truncated');
+          if (words) words.classList.add('hidden');
         }
       });
 
@@ -2649,6 +2851,41 @@
       return true;
     }
 
+    async function maybeAutoExplain(sessionKey, ev) {
+      if (autoExplainThreshold <= 0 || currentAuth.status !== "ready" || ev?.kind !== "stop") return;
+      const sess = sessionsByKey.get(sessionKey);
+      if (!sess || isInternalSession(sess)) return;
+      const turns = deriveTurns(sess.events || []);
+      const turn = turns.length ? turns[turns.length - 1] : null;
+      if (!turn?.id || !turn.agentText || wordCount(turn.agentText) < autoExplainThreshold) return;
+
+      const action = ui().presets?.[0];
+      const autoKey = `${sessionKey}::${turn.id}`;
+      if (!action || autoExplainSent.has(autoKey) || autoExplainInFlight.has(autoKey)) return;
+      autoExplainInFlight.add(autoKey);
+      try {
+        const res = await fetch("/chat/send", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            sessionKey,
+            text: action,
+            kind: "auto",
+            sourceTurnId: turn.id,
+          }),
+        });
+        if (!res.ok) {
+          console.warn("[auto-explain] send failed", res.status, await res.text());
+          return;
+        }
+        autoExplainSent.add(autoKey);
+      } catch (err) {
+        console.warn("[auto-explain] send error", err);
+      } finally {
+        autoExplainInFlight.delete(autoKey);
+      }
+    }
+
     function appendThread(sessionKey, thread) {
       const s = sessionsByKey.get(sessionKey);
       if (!s) return false;
@@ -2692,6 +2929,7 @@
           };
           if (helloAuth.status === "failed") authSetupForced = true;
           paintAuth(helloAuth);
+          paintUsageControl(msg.usage);
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
@@ -2701,7 +2939,10 @@
           upsertSession(msg.session);
           refresh();
         } else if (msg.kind === "event") {
-          if (appendEvent(msg.sessionKey, msg.event)) refresh();
+          if (appendEvent(msg.sessionKey, msg.event)) {
+            void maybeAutoExplain(msg.sessionKey, msg.event);
+            refresh();
+          }
         } else if (msg.kind === "thread:new") {
           if (appendThread(msg.sessionKey, msg.thread)) refresh();
         } else if (msg.kind === "session:summary") {
@@ -2729,6 +2970,8 @@
           if (msg.auth?.status === "failed") authSetupForced = true;
           paintAuth(msg.auth);
           renderDetail();
+        } else if (msg.kind === "usage:state") {
+          paintUsageControl(msg.usage);
         } else if (msg.kind === "chat:cleared") {
           chatThreadByKey.delete(msg.sessionKey);
           chatStatusByKey.delete(msg.sessionKey);

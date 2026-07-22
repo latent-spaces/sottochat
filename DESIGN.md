@@ -108,6 +108,12 @@ Tagline: `discuss the response, answer well`.
 
 The language selector uses the same pill vocabulary as the repo link. It chooses the language for the meta discussion and session labels, not the language of suggested replies to agents.
 
+Two compact controls sit beside it:
+
+- a three-swatch button cycles the four browser-local color systems
+- a threshold button opens an anchored menu for `off`, `350+`, `700+`, or `1.2k+`; each option briefly explains its frequency, and the selected threshold runs the first localized preset once for qualifying completed replies
+- a token button opens an anchored daily-history panel for model usage created by sottochat chat and observer calls; totals include uncached input, cache writes, cache reads, and output, while excluding the watched coding agent
+
 ### Session Card
 
 The card answers two supporting questions:
@@ -134,7 +140,7 @@ Charts are supporting evidence, collapsed by default. They should never become t
 
 ### Latest Exchange
 
-The latest exchange shows the agent tail first. Long agent output is pinned to its end and can expand with `show full`.
+The latest exchange shows the agent tail first. Long agent output is pinned to its end and can expand with `show full`; the control includes the full message word count.
 
 When the upstream agent has not replied yet, show the user's last message and a quiet typing indicator. Hide the Q&A box while waiting.
 

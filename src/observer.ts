@@ -16,6 +16,7 @@ import type { Turn } from "./turns";
 import { logInfo } from "./log";
 import { isAuthError, authErrorHint } from "./sdk-errors";
 import type { MetaEvent } from "./jsonl";
+import { tokenUsageFromSdkMessage, type TokenUsage } from "./usage-ledger";
 
 export type TurnFeed = {
   sessionKey: string;
@@ -50,6 +51,7 @@ export type ObserverOptions = {
   getLanguage?: () => string;
   /** tells the host that summaries stopped because Claude rejected auth. */
   onAuthError?: (message: string) => void;
+  onUsage?: (usage: TokenUsage) => void;
 };
 
 // observer cwd under ~/.sottochat/observer/. (older sessions still on disk under
@@ -183,6 +185,7 @@ type SdkLoopOptions = {
   /** called with raw assistant text + the batch that produced it. */
   onResponse: (text: string, batch: TurnFeed[]) => void;
   onAuthError?: (message: string) => void;
+  onUsage?: (usage: TokenUsage) => void;
 };
 
 type SdkLoopHandle = {
@@ -285,6 +288,8 @@ function startSdkLoop(opts: SdkLoopOptions): SdkLoopHandle {
       });
 
       for await (const m of result as AsyncIterable<unknown>) {
+        const usage = tokenUsageFromSdkMessage(m);
+        if (usage) opts.onUsage?.(usage);
         const msg = m as { type?: string; message?: { content?: unknown } };
         if (msg.type !== "assistant") continue;
         const content = msg.message?.content;
@@ -402,6 +407,7 @@ export function startObserver(opts: ObserverOptions): {
       `Reply with a JSON object: {"summaries": [...one per session in input order...]}. Write every summary in ${getLanguage()}. No other text.`,
     sdkSessionId: "sottochat-observer",
     onAuthError: opts.onAuthError,
+    onUsage: opts.onUsage,
     onResponse(text, batch) {
       const parsed = parseSummaryResponse(text);
       if (!parsed) {

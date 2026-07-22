@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { query, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { logInfo } from "./log";
 import { isAuthError, authErrorHint } from "./sdk-errors";
+import { tokenUsageFromSdkMessage, type TokenUsage } from "./usage-ledger";
 
 // the chat companion the user talks to. one persistent sdk subprocess per upstream
 // session — lazily spawned on the user's first send, reused for follow-ups.
@@ -18,8 +19,8 @@ export type ChatChunk = {
   role: "user" | "assistant";
   text: string;
   ts: number;
-  /** "auto" tags messages auto-sent by the server in response to an observer open=true
-   *  flag (used by the UI to badge them). default: "user". assistant chunks omit this. */
+  /** "auto" tags automatic quick actions (used by the UI to badge them).
+   *  default: "user". assistant chunks omit this. */
   kind?: "auto" | "user";
 };
 
@@ -41,6 +42,7 @@ export type ChatAgentOptions = {
   model?: string;
   onChunk?: (c: ChatChunk) => void;
   onStatus?: (s: ChatStatusUpdate) => void;
+  onUsage?: (usage: TokenUsage) => void;
 };
 
 const CHAT_ROOT = join(homedir(), ".sottochat", "chat");
@@ -216,6 +218,8 @@ ${text}`;
           });
 
           for await (const m of result as AsyncIterable<unknown>) {
+            const usage = tokenUsageFromSdkMessage(m);
+            if (usage) opts.onUsage?.(usage);
             // if the session was cleared/stopped mid-response, drop any buffered
             // message the aborted iterator still delivers — otherwise a late
             // onChunk would resurrect the just-wiped thread (broadcast after chat:cleared).

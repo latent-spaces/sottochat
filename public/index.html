@@ -388,6 +388,10 @@
       transition: border-color 200ms var(--ease-out), background 200ms var(--ease-out);
     }
     .nav-toggle:hover { border-color: var(--accent); }
+    .nav-toggle:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
     .nav-toggle .toggle-dot {
       width: 8px;
       height: 8px;
@@ -435,6 +439,161 @@
       cursor: pointer;
     }
     .lang-pill select option { color: var(--fg); }
+    .nav-compact {
+      min-height: 34px;
+      justify-content: center;
+      padding: 6px 10px;
+    }
+    .theme-dots {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .theme-dot {
+      width: 8px;
+      height: 8px;
+      border: 1px solid color-mix(in oklab, var(--fg) 16%, transparent);
+      border-radius: 50%;
+      background: var(--theme-dot, var(--border-strong));
+    }
+    .auto-threshold {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.01em;
+    }
+    .nav-menu-wrap { position: relative; }
+    .nav-menu-wrap > .nav-toggle[aria-expanded="true"] {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .nav-popover {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      z-index: 30;
+      width: 294px;
+      overflow: hidden;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-card);
+      background: var(--surface);
+      box-shadow: 0 12px 32px color-mix(in oklab, var(--fg) 12%, transparent);
+      color: var(--fg);
+    }
+    .nav-popover[hidden] { display: none; }
+    .nav-popover-head { padding: 13px 14px 10px; }
+    .nav-popover-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .nav-popover-note {
+      margin: 3px 0 0;
+      color: var(--fg-soft);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .nav-menu-options { border-top: 1px solid var(--border); }
+    .nav-menu-option {
+      width: 100%;
+      min-height: 52px;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 14px;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 0;
+      border-top: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+    .nav-menu-option:first-child { border-top: 0; }
+    .nav-menu-option:hover,
+    .nav-menu-option[aria-checked="true"] { background: var(--accent-soft); }
+    .nav-menu-option:focus-visible {
+      position: relative;
+      z-index: 1;
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .nav-menu-value {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .nav-menu-copy { min-width: 0; }
+    .nav-menu-label { display: block; font-size: 12px; font-weight: 600; }
+    .nav-menu-description {
+      display: block;
+      margin-top: 1px;
+      color: var(--fg-soft);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .nav-menu-check { color: transparent; font-family: var(--mono); font-size: 11px; }
+    .nav-menu-option[aria-checked="true"] .nav-menu-check { color: var(--accent); }
+    .usage-glyph,
+    .usage-button-total {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .usage-glyph { color: var(--fg-muted); }
+    .usage-overview {
+      padding: 0 14px 12px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .usage-overview-total {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
+    .usage-overview-date { color: var(--fg-muted); font-family: var(--mono); font-size: 10px; }
+    .usage-breakdown {
+      padding: 8px 14px;
+      border-block: 1px solid var(--border);
+      color: var(--fg-soft);
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.6;
+    }
+    .usage-history {
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .usage-row {
+      display: grid;
+      grid-template-columns: 76px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: baseline;
+      padding: 8px 14px;
+      border-top: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+    .usage-row:first-child { border-top: 0; }
+    .usage-row-date { color: var(--fg-muted); }
+    .usage-row-sources { color: var(--fg-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .usage-row-total { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .usage-empty { margin: 0; padding: 14px; color: var(--fg-muted); font-size: 11px; }
+    .usage-footnote {
+      margin: 0;
+      padding: 9px 14px 11px;
+      border-top: 1px solid var(--border);
+      color: var(--fg-muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
     @media (max-width: 560px) {
       .top-nav { padding-inline: 12px; gap: 8px; }
       .nav-wordmark { display: none; }
@@ -442,6 +601,14 @@
       .gh-pill { padding: 5px 9px; font-size: 12px; }
       .lang-pill select { padding: 5px 22px 5px 9px; font-size: 12px; }
       .lang-pill::after { right: 8px; }
+      .nav-compact { min-height: 32px; padding: 5px 8px; }
+      .nav-popover {
+        position: fixed;
+        top: 62px;
+        left: 12px;
+        right: 12px;
+        width: auto;
+      }
     }
 
     main.layout {
@@ -1368,6 +1535,14 @@
     }
     .conv-toggle:hover { color: var(--accent-hover); }
     .conv-toggle.hidden { display: none; }
+    .conv-word-count {
+      margin-left: 4px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--fg-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .conv-word-count.hidden { display: none; }
 
     .ambient-quiet {
       font-family: var(--mono);
@@ -1757,6 +1932,56 @@
           <option value="bn">বাংলা</option>
         </select>
       </label>
+      <button class="nav-toggle nav-compact" id="theme-cycle" type="button" aria-label="cycle color system">
+        <span class="theme-dots" aria-hidden="true">
+          <i class="theme-dot"></i><i class="theme-dot"></i><i class="theme-dot"></i>
+        </span>
+      </button>
+      <div class="nav-menu-wrap" id="auto-explain-wrap">
+        <button class="nav-toggle nav-compact" id="auto-explain-trigger" type="button" aria-haspopup="menu" aria-controls="auto-explain-menu" aria-expanded="false">
+          <span class="toggle-dot" aria-hidden="true"></span>
+          <span class="auto-threshold">350+</span>
+        </button>
+        <div class="nav-popover" id="auto-explain-menu" role="menu" aria-label="automatic quick action threshold" hidden>
+          <div class="nav-popover-head">
+            <p class="nav-popover-title">automatic quick action</p>
+            <p class="nav-popover-note">runs the first chip in the selected language once a completed reply reaches the chosen length</p>
+          </div>
+          <div class="nav-menu-options">
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="0">
+              <span class="nav-menu-value">off</span><span class="nav-menu-copy"><span class="nav-menu-label">manual only</span><span class="nav-menu-description">never start a discussion automatically</span></span><span class="nav-menu-check">✓</span>
+            </button>
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="350">
+              <span class="nav-menu-value">350+</span><span class="nav-menu-copy"><span class="nav-menu-label">more often</span><span class="nav-menu-description">useful for most detailed agent replies</span></span><span class="nav-menu-check">✓</span>
+            </button>
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="700">
+              <span class="nav-menu-value">700+</span><span class="nav-menu-copy"><span class="nav-menu-label">long replies</span><span class="nav-menu-description">wait for a substantial response</span></span><span class="nav-menu-check">✓</span>
+            </button>
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="1200">
+              <span class="nav-menu-value">1.2k+</span><span class="nav-menu-copy"><span class="nav-menu-label">very long replies</span><span class="nav-menu-description">reserve it for dense, extended output</span></span><span class="nav-menu-check">✓</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="nav-menu-wrap" id="usage-wrap">
+        <button class="nav-toggle nav-compact" id="usage-trigger" type="button" aria-haspopup="dialog" aria-controls="usage-panel" aria-expanded="false" title="sottochat token usage">
+          <span class="usage-glyph" aria-hidden="true">tok</span>
+          <span class="usage-button-total" id="usage-button-total">0</span>
+        </button>
+        <div class="nav-popover" id="usage-panel" role="dialog" aria-labelledby="usage-title" hidden>
+          <div class="nav-popover-head">
+            <p class="nav-popover-title" id="usage-title">additional tokens</p>
+            <p class="nav-popover-note">model usage created by sottochat chat and session summaries, not the watched agent</p>
+          </div>
+          <div class="usage-overview">
+            <span class="usage-overview-total" id="usage-today-total">0</span>
+            <span class="usage-overview-date" id="usage-today-date">today</span>
+          </div>
+          <div class="usage-breakdown" id="usage-breakdown">chat 0 · summaries 0 · 0 calls</div>
+          <div class="usage-history" id="usage-history"><p class="usage-empty">no usage recorded yet</p></div>
+          <p class="usage-footnote">total = uncached input + cache writes + cache reads + output. history keeps 90 local calendar days.</p>
+        </div>
+      </div>
       <button class="gh-pill auth-trigger" id="auth-trigger" type="button" aria-controls="auth-setup" aria-expanded="false" hidden>connect claude</button>
       <a class="gh-pill" href="/settings">settings</a>
       <a class="gh-pill" href="https://github.com/latent-spaces/sottochat" target="_blank" rel="noreferrer noopener" aria-label="GitHub repo">

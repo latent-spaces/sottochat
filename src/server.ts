@@ -22,6 +22,7 @@ import {
   type PersistedSession,
 } from "./persistence";
 import { claudeAuthState, type ClaudeAuthState } from "./auth-check";
+import { startUsageLedger, type UsageSnapshot, type UsageSource, type TokenUsage } from "./usage-ledger";
 
 const PORT = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
 const POLL_MS = readStartupSetting("META_POLL_MS", 500);
@@ -120,10 +121,15 @@ type SessionState = {
 
 const sessions = new Map<string, SessionState>();
 const sockets = new Set<Bun.ServerWebSocket<unknown>>();
+const usageLedger = startUsageLedger();
 // chat threads live alongside SessionState but are keyed off the same sessionKey.
 // kept separate so observed-data state stays focused on tailer-sourced facts.
 const chatThreads = new Map<string, ChatChunk[]>();
 const chatStatuses = new Map<string, { status: string; message?: string; ts: number }>();
+// Browser tabs can observe the same completed turn. Keep automatic quick
+// actions idempotent across tabs without persisting browser preferences here.
+const autoChatKeys = new Set<string>();
+const MAX_AUTO_CHAT_KEYS = 2_000;
 // past discussions, newest last. every clear (manual reset or the auto-clear
 // on a fresh turn) archives the live thread here instead of discarding it;
 // the UI lists them behind a per-session "history (N)" control and can
@@ -378,6 +384,12 @@ function broadcast(msg: unknown) {
   for (const ws of sockets) ws.send(data);
 }
 
+function recordSottochatUsage(source: UsageSource, usage: TokenUsage): UsageSnapshot {
+  const snapshot = usageLedger.record(source, usage);
+  broadcast({ kind: "usage:state", usage: snapshot });
+  return snapshot;
+}
+
 function maybeOpenThread(s: SessionState, turn: Turn) {
   if (s.threadByTurn.has(turn.id)) return;
   const trigger = evaluateTurn(turn);
@@ -569,6 +581,10 @@ const server = Bun.serve({
       return Response.json({ auth: await refreshClaudeAuthState() });
     }
 
+    if (url.pathname === "/api/usage" && req.method === "GET") {
+      return Response.json({ usage: usageLedger.snapshot() });
+    }
+
     if (url.pathname === "/api/settings" && req.method === "GET") {
       return Response.json(currentSettingsCatalog());
     }
@@ -700,18 +716,38 @@ const server = Bun.serve({
       const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
       const sessionKey = typeof o.sessionKey === "string" ? o.sessionKey : null;
       const text = typeof o.text === "string" ? o.text : null;
+      const kind = o.kind === "auto" ? "auto" : "user";
+      const sourceTurnId = typeof o.sourceTurnId === "string" ? o.sourceTurnId : null;
       if (!sessionKey || !text || !text.trim()) {
         return Response.json({ error: "sessionKey and text required" }, { status: 400 });
+      }
+      if (kind === "auto" && !sourceTurnId) {
+        return Response.json({ error: "sourceTurnId required for automatic sends" }, { status: 400 });
       }
       const sess = sessions.get(sessionKey);
       if (!sess) {
         return Response.json({ error: "unknown sessionKey" }, { status: 404 });
       }
+      const autoKey = kind === "auto" ? `${sessionKey}\u0000${sourceTurnId}` : null;
+      if (autoKey && autoChatKeys.has(autoKey)) {
+        return Response.json({ ok: true, deduped: true });
+      }
       // the chat-agent uses this seed on the first prompt of the subprocess and
       // ignores it on follow-ups — it carries the working dir, the session
       // summary so far, and the recent turns (latest one in full).
       const seed = buildChatSeed(sess);
-      chatHost.send(sessionKey, text, { seed, language: explainLanguageName() });
+      if (autoKey) {
+        if (autoChatKeys.size >= MAX_AUTO_CHAT_KEYS) {
+          const oldest = autoChatKeys.values().next().value;
+          if (oldest) autoChatKeys.delete(oldest);
+        }
+        autoChatKeys.add(autoKey);
+      }
+      chatHost.send(sessionKey, text, {
+        seed,
+        language: explainLanguageName(),
+        userKind: kind,
+      });
       return Response.json({ ok: true });
     }
 
@@ -873,6 +909,7 @@ const server = Bun.serve({
           sessions: recentSessions(),
           language: explainLang,
           auth: publicClaudeAuthState(),
+          usage: usageLedger.snapshot(),
           ...(publicClaudeAuthState().status !== "ready" ? { needsClaudeAuth: true } : {}),
         })
       );
@@ -898,6 +935,9 @@ console.log(
 // the chat host — a per-session claude subprocess the user talks to (see chat-agent.ts).
 const chatHost = startChatHost({
   model: CHAT_MODEL,
+  onUsage(usage) {
+    recordSottochatUsage("chat", usage);
+  },
   onChunk(c) {
     pushChatChunk(c);
     broadcast({ kind: "chat:chunk", sessionKey: c.sessionKey, chunk: c });
@@ -922,6 +962,9 @@ observer = OBSERVER_ENABLED
       summaryModel: OBSERVER_MODEL,
       batchMs: OBSERVER_BATCH_MS,
       getLanguage: () => explainLanguageName(),
+      onUsage(usage) {
+        recordSottochatUsage("observer", usage);
+      },
       onAuthError() {
         markClaudeAuthFailed();
       },
