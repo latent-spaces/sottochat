@@ -1252,6 +1252,48 @@
       try { localStorage.setItem(INTERNAL_COLLAPSED_KEY, collapsed ? "1" : "0"); } catch {}
     }
 
+    // user-hidden cards — session keys the user tucked away, per browser.
+    // hidden cards keep rendering (same DOM-stays/CSS-collapses approach as
+    // the internal section) behind a "hidden (N)" divider at the inbox bottom.
+    const HIDDEN_CARDS_KEY = "ctc-hidden-cards";
+    const HIDDEN_EXPANDED_KEY = "ctc-hidden-expanded";
+    const hiddenCardKeys = new Set((() => {
+      try {
+        const raw = JSON.parse(localStorage.getItem(HIDDEN_CARDS_KEY) || "[]");
+        return Array.isArray(raw) ? raw.filter(k => typeof k === "string") : [];
+      } catch { return []; }
+    })());
+    function saveHiddenCards() {
+      try { localStorage.setItem(HIDDEN_CARDS_KEY, JSON.stringify([...hiddenCardKeys])); } catch {}
+    }
+    function isHiddenExpanded() {
+      try { return localStorage.getItem(HIDDEN_EXPANDED_KEY) === "1"; } catch { return false; }
+    }
+    function setHiddenExpanded(expanded) {
+      try { localStorage.setItem(HIDDEN_EXPANDED_KEY, expanded ? "1" : "0"); } catch {}
+    }
+    // hide/unhide clicks — delegated: card innerHTML is rebuilt on every tick,
+    // so per-button listeners would be lost.
+    cardsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".card-hide");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const cardEl = btn.closest(".card");
+      const sess = cardEl && findSessionBySessionId(cardEl.dataset.sessionId);
+      if (!sess) return;
+      const key = keyForSnapshot(sess);
+      if (hiddenCardKeys.has(key)) {
+        hiddenCardKeys.delete(key);
+      } else {
+        hiddenCardKeys.add(key);
+        // hiding the card you're looking at → back to the overview
+        if (sess.info?.sessionId === selectedSessionId()) location.hash = "";
+      }
+      saveHiddenCards();
+      renderInbox();
+    });
+
     // stable display order: a session's slot is fixed by when it was FIRST seen
     // (newest-first-seen on top), so background activity never reshuffles the
     // list under the user. new sessions slide in at the top once, then stay put.
@@ -1374,6 +1416,11 @@
         const mascotSrc = state === "idle" ? MASCOT_IDLE : MASCOT_ACTIVE;
         html += '<img class="card-mascot" src="' + mascotSrc + '" alt="" draggable="false" />';
       }
+
+      const hiddenCard = hiddenCardKeys.has(keyForSnapshot(sess));
+      const hideLabel = hiddenCard ? "unhide card" : "hide card";
+      html += '<button class="card-hide" type="button" title="' + hideLabel +
+        '" aria-label="' + hideLabel + '">' + (hiddenCard ? "unhide" : "×") + '</button>';
       return html;
     }
 
@@ -1383,6 +1430,7 @@
       card.classList.toggle("idle", state === "idle");
       card.classList.toggle("selected", !!opts.selected);
       card.classList.toggle("internal", isInternalSession(sess));
+      card.classList.toggle("user-hidden", hiddenCardKeys.has(keyForSnapshot(sess)));
     }
 
     function cardSig(sess) {
@@ -1632,14 +1680,19 @@
       }
 
       // partition: user-driven cards on top, server-spawned sdk subprocesses
-      // (observer + chat agents) below a divider. inside each group
-      // the original lastEventTs sort is preserved.
-      const realList = list.filter(s => !isInternalSession(s));
-      const internalList = list.filter(s => isInternalSession(s));
-      const orderedList = realList.concat(internalList);
+      // below a divider, user-hidden cards at the very bottom behind their own
+      // divider. inside each group the original lastEventTs sort is preserved.
+      const hiddenList = list.filter(s => hiddenCardKeys.has(keyForSnapshot(s)));
+      const shownList = list.filter(s => !hiddenCardKeys.has(keyForSnapshot(s)));
+      const realList = shownList.filter(s => !isInternalSession(s));
+      const internalList = shownList.filter(s => isInternalSession(s));
+      const orderedList = realList.concat(internalList, hiddenList);
       const internalCount = internalList.length;
       const internalCollapsed = isInternalCollapsed();
+      const hiddenCount = hiddenList.length;
+      const hiddenExpanded = isHiddenExpanded();
       cardsEl.classList.toggle("internal-collapsed", internalCollapsed);
+      cardsEl.classList.toggle("hidden-collapsed", !hiddenExpanded);
 
       // upsert + reorder
       let anchor = null;        // last placed card; new cards insert after it
@@ -1651,6 +1704,13 @@
         separatorEl = null;
       }
       let separatorPlaced = false;
+      const HIDDEN_SEPARATOR_ID = "__hidden-separator__";
+      let hiddenSeparatorEl = document.getElementById(HIDDEN_SEPARATOR_ID);
+      if (hiddenCount === 0 && hiddenSeparatorEl) {
+        hiddenSeparatorEl.remove();
+        hiddenSeparatorEl = null;
+      }
+      let hiddenSeparatorPlaced = false;
       for (let i = 0; i < orderedList.length; i++) {
         const sess = orderedList[i];
         const id = sess.info.sessionId;
@@ -1685,6 +1745,27 @@
           if (separatorEl !== sepTarget) cardsEl.insertBefore(separatorEl, sepTarget);
           anchor = separatorEl;
           separatorPlaced = true;
+        }
+
+        // first user-hidden card → drop in the hidden divider just before it.
+        if (!hiddenSeparatorPlaced && hiddenCount > 0 && i === realList.length + internalList.length) {
+          if (!hiddenSeparatorEl) {
+            hiddenSeparatorEl = document.createElement("div");
+            hiddenSeparatorEl.id = HIDDEN_SEPARATOR_ID;
+            hiddenSeparatorEl.className = "inbox-separator";
+            hiddenSeparatorEl.addEventListener("click", () => {
+              setHiddenExpanded(!isHiddenExpanded());
+              renderInbox();
+            });
+          }
+          hiddenSeparatorEl.classList.toggle("expanded", hiddenExpanded);
+          hiddenSeparatorEl.innerHTML =
+            '<span class="inbox-separator-label">hidden (' + hiddenCount + ')</span>' +
+            '<span class="inbox-separator-chevron">&#9656;</span>';
+          const hidTarget = anchor ? anchor.nextSibling : cardsEl.firstChild;
+          if (hiddenSeparatorEl !== hidTarget) cardsEl.insertBefore(hiddenSeparatorEl, hidTarget);
+          anchor = hiddenSeparatorEl;
+          hiddenSeparatorPlaced = true;
         }
 
         // place this card right after the previous one (or at the start)
@@ -2980,6 +3061,13 @@
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
+          // hello carries the full session set — drop hidden-card keys whose
+          // sessions have aged out so the list can't grow forever.
+          let hiddenPruned = false;
+          for (const k of [...hiddenCardKeys]) {
+            if (!sessionsByKey.has(k)) { hiddenCardKeys.delete(k); hiddenPruned = true; }
+          }
+          if (hiddenPruned) saveHiddenCards();
           maybeRecoverStaleHash();
           refresh();
         } else if (msg.kind === "session:upsert") {

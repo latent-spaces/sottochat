@@ -842,7 +842,32 @@
        ctc-internal-collapsed in localStorage. kept in the DOM so the
        insertBefore reconciliation in renderInbox stays untouched; only
        display is toggled here. */
-    .cards.internal-collapsed .card.internal { display: none; }
+    .cards.internal-collapsed .card.internal:not(.user-hidden) { display: none; }
+
+    /* user-hidden cards — tucked behind the "hidden (N)" divider; same
+       DOM-stays/CSS-collapses approach as the internal section above. */
+    .cards.hidden-collapsed .card.user-hidden { display: none; }
+    .card.user-hidden { opacity: 0.55; }
+    .card-hide {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      z-index: 3;
+      border: 0;
+      background: var(--surface);
+      border-radius: 4px;
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 12px;
+      line-height: 1;
+      padding: 2px 4px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s var(--ease-out), color 0.15s var(--ease-out);
+    }
+    .card:hover .card-hide { opacity: 1; }
+    .card.user-hidden .card-hide { opacity: 1; }
+    .card-hide:hover { color: var(--accent); }
 
     /* sidebar inbox */
     .cards { display: grid; gap: 8px; }

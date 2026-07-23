@@ -1,3 +1,3 @@
 # TODO
 
-- [ ] Ability to hide cards — let the user hide individual session cards from the overview.
+- [x] Ability to hide cards — let the user hide individual session cards from the overview.
