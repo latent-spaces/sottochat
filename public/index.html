@@ -187,8 +187,19 @@
       white-space: nowrap;
       margin-left: 6px;
     }
+    .nav-version {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+      white-space: nowrap;
+    }
+    .nav-version.update {
+      color: var(--accent);
+      cursor: help;
+    }
     @media (max-width: 720px) {
       .nav-tag,
+      .nav-version,
       .nav-right > a[href*="github.com"] { display: none; }
     }
     .nav-right { display: flex; align-items: center; gap: 12px; }
@@ -1972,6 +1983,7 @@
       <img class="nav-logo" src="/assets/logo.svg" alt="" />
       <a class="nav-wordmark" href="#">sotto-chat</a>
       <span class="nav-tag">discuss the response, answer well</span>
+      <span class="nav-version" id="nav-version" hidden></span>
     </div>
     <div class="nav-right">
       <span class="reconnect-indicator" id="reconnect-indicator" hidden>reconnecting…</span>

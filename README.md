@@ -93,6 +93,7 @@ documented in [.env.example](.env.example). The main ones:
 | `META_EXPLAIN_LANG` | `zh` | Default explanation language for the Q&A thread (switchable in the UI; each browser remembers its own last-picked language) |
 | `META_INBOX_MINUTES` | `1440` | How far back the inbox looks for recent sessions (24 hours) |
 | `META_PROJECT_SLUG` | *(unset)* | Restrict discovery to a single Claude Code project slug |
+| `META_UPDATE_CHECK` | `1` | Daily npm check for a newer sottochat, shown in the banner and UI (`0` to disable) |
 
 Runtime state (chat sandboxes, persistence) lives under `~/.sottochat/`.
 Sottochat's own chat and summary token history is attributed to the exact model

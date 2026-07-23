@@ -1,7 +1,11 @@
 #!/usr/bin/env bun
 
 import packageJson from "../package.json" with { type: "json" };
-import { formatStartupMessage, terminalSupportsColor } from "./startup-message";
+import {
+  formatStartupMessage,
+  formatUpdateNotice,
+  terminalSupportsColor,
+} from "./startup-message";
 
 const HELP = `sottochat ${packageJson.version}
 
@@ -95,8 +99,16 @@ if (await sottochatRunningAt(port)) {
     alreadyRunning: true,
     color: terminalSupportsColor(),
     authHint: !(await hasClaudeCredentials()),
+    version: packageJson.version,
   }));
   openInBrowser(url);
+  // quick best-effort update check before handing off to the running server —
+  // short timeout so an offline machine isn't stuck staring at the banner.
+  const { fetchLatestVersion, isNewerVersion } = await import("./version");
+  const latest = await fetchLatestVersion(1_500);
+  if (latest && isNewerVersion(latest, packageJson.version)) {
+    console.log(formatUpdateNotice(packageJson.version, latest, terminalSupportsColor()));
+  }
   process.exit(0);
 }
 

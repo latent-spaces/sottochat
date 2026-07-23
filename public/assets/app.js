@@ -3,6 +3,7 @@
     const inboxEmpty = document.getElementById("inbox-empty");
     const ambientQuiet = document.getElementById("ambient-quiet");
     const reconnectIndicator = document.getElementById("reconnect-indicator");
+    const navVersion = document.getElementById("nav-version");
     const detailEmpty = document.getElementById("detail-empty");
     const detailContent = document.getElementById("detail-content");
     const dName = document.getElementById("d-name");
@@ -155,6 +156,20 @@
         if (authDescription) authDescription.textContent = "Session tailing already works. Choose how Claude-backed discussion should authenticate, or keep using the read-only transcript view.";
         showAuthInstructions(["claude-code", "api-key", "cloud"].includes(storedChoice) ? storedChoice : null);
       }
+    }
+
+    function paintVersion(v) {
+      if (!navVersion || !v || typeof v.current !== "string") return;
+      if (v.updateAvailable && v.latest) {
+        navVersion.textContent = "v" + v.current + " → v" + v.latest;
+        navVersion.classList.add("update");
+        navVersion.title = "update available — bun add -g sottochat";
+      } else {
+        navVersion.textContent = "v" + v.current;
+        navVersion.classList.remove("update");
+        navVersion.removeAttribute("title");
+      }
+      navVersion.hidden = false;
     }
 
     function openAuthSetup() {
@@ -2961,6 +2976,7 @@
           if (helloAuth.status === "failed") authSetupForced = true;
           paintAuth(helloAuth);
           paintUsageControl(msg.usage);
+          paintVersion(msg.version);
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
@@ -2997,6 +3013,8 @@
             chatStatusByKey.set(msg.sessionKey, { status: msg.status, message: msg.message, ts: msg.ts || Date.now() });
             refresh();
           }
+        } else if (msg.kind === "version:state") {
+          paintVersion(msg.version);
         } else if (msg.kind === "auth:state") {
           if (msg.auth?.status === "failed") authSetupForced = true;
           paintAuth(msg.auth);

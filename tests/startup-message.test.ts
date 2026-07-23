@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatStartupMessage } from "../src/startup-message";
+import { formatStartupMessage, formatUpdateNotice } from "../src/startup-message";
 
 describe("startup message", () => {
   test("makes the browser URL the focal point without ANSI in plain output", () => {
@@ -34,6 +34,20 @@ describe("startup message", () => {
     const message = formatStartupMessage("http://localhost:3737/");
 
     expect(message).not.toContain("Claude authentication");
+  });
+
+  test("shows the running version in the title when provided", () => {
+    const message = formatStartupMessage("http://localhost:3737/", { version: "1.2.3" });
+
+    expect(message).toContain("S O T T O - C H A T   v1.2.3");
+  });
+
+  test("formats an update notice naming both versions and the upgrade command", () => {
+    const notice = formatUpdateNotice("0.1.5", "0.1.6");
+
+    expect(notice).toContain("v0.1.6 available");
+    expect(notice).toContain("running v0.1.5");
+    expect(notice).toContain("bun add -g sottochat");
   });
 
   test("does not show a stop hint for an existing server", () => {

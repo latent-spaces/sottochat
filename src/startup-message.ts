@@ -8,7 +8,12 @@ const ANSI = {
 
 export function formatStartupMessage(
   url: string,
-  options: { alreadyRunning?: boolean; color?: boolean; authHint?: boolean } = {}
+  options: {
+    alreadyRunning?: boolean;
+    color?: boolean;
+    authHint?: boolean;
+    version?: string;
+  } = {}
 ): string {
   const color = options.color ?? false;
   const hook = "Discuss the response. Answer well.";
@@ -21,9 +26,12 @@ export function formatStartupMessage(
   const edge = color ? `${ANSI.cyan}#${ANSI.reset}` : "#";
   const line = (content = "") => `${edge}${content.padEnd(width - 2)}${edge}`;
   const title = "S O T T O - C H A T";
-  const titleLine = line(`   ${title}`).replace(
-    title,
-    color ? `${ANSI.bold}${title}${ANSI.reset}` : title
+  const titleText = options.version ? `${title}   v${options.version}` : title;
+  const titleLine = line(`   ${titleText}`).replace(
+    titleText,
+    color
+      ? `${ANSI.bold}${title}${ANSI.reset}${options.version ? `   ${ANSI.dim}v${options.version}${ANSI.reset}` : ""}`
+      : titleText
   );
   const urlPrefix = "   OPEN  >>>  ";
   const urlPadding = " ".repeat(width - 2 - urlPrefix.length - url.length);
@@ -59,6 +67,18 @@ export function formatStartupMessage(
   lines.push(displayBorder);
 
   return `\n${lines.join("\n")}\n`;
+}
+
+// One dim line, printed outside the box: the update check is network-bound
+// and must never delay the banner, so callers print this when (and if) the
+// registry answers.
+export function formatUpdateNotice(
+  current: string,
+  latest: string,
+  color = false
+): string {
+  const text = `  ↑ sottochat v${latest} available (running v${current}) — bun add -g sottochat`;
+  return color ? `${ANSI.dim}${text}${ANSI.reset}` : text;
 }
 
 export function terminalSupportsColor(): boolean {

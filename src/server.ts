@@ -23,6 +23,7 @@ import {
 } from "./persistence";
 import { claudeAuthState, type ClaudeAuthState } from "./auth-check";
 import { startUsageLedger, type UsageSnapshot, type UsageSource, type TokenUsage } from "./usage-ledger";
+import { CURRENT_VERSION, fetchLatestVersion, versionState } from "./version";
 
 const PORT = readStartupSetting("META_PORT", 3737, Bun.env, ["PORT"]);
 const POLL_MS = readStartupSetting("META_POLL_MS", 500);
@@ -547,6 +548,10 @@ async function refreshClaudeAuthState(): Promise<PublicClaudeAuthState> {
   return publicClaudeAuthState();
 }
 
+// latest published npm version, learned asynchronously — null until the first
+// registry answer (or forever, when offline / checks disabled).
+let latestKnownVersion: string | null = null;
+
 function markClaudeAuthFailed(): void {
   if (claudeAuthFailed) return;
   claudeAuthFailed = true;
@@ -574,7 +579,11 @@ const server = Bun.serve({
     }
 
     if (url.pathname === "/state" && req.method === "GET") {
-      return Response.json({ sessions: recentSessions(), auth: publicClaudeAuthState() });
+      return Response.json({
+        sessions: recentSessions(),
+        auth: publicClaudeAuthState(),
+        version: versionState(latestKnownVersion),
+      });
     }
 
     if (url.pathname === "/api/auth/status" && req.method === "GET") {
@@ -910,6 +919,7 @@ const server = Bun.serve({
           language: explainLang,
           auth: publicClaudeAuthState(),
           usage: usageLedger.snapshot(),
+          version: versionState(latestKnownVersion),
           ...(publicClaudeAuthState().status !== "ready" ? { needsClaudeAuth: true } : {}),
         })
       );
@@ -923,14 +933,36 @@ const server = Bun.serve({
   },
 });
 
-const { formatStartupMessage, terminalSupportsColor } = await import("./startup-message");
+const { formatStartupMessage, formatUpdateNotice, terminalSupportsColor } = await import(
+  "./startup-message"
+);
 detectedClaudeAuth = await claudeAuthState();
 console.log(
   formatStartupMessage(`http://localhost:${server.port}/`, {
     color: terminalSupportsColor(),
     authHint: publicClaudeAuthState().status !== "ready",
+    version: CURRENT_VERSION,
   })
 );
+
+// npm update check: once now, then daily — the owner's instance runs for weeks.
+// META_UPDATE_CHECK=0 opts out of the registry call entirely.
+if (readStartupSetting("META_UPDATE_CHECK", true)) {
+  let noticePrinted = false;
+  const checkForUpdate = async () => {
+    const latest = await fetchLatestVersion();
+    if (!latest || latest === latestKnownVersion) return;
+    latestKnownVersion = latest;
+    const state = versionState(latestKnownVersion);
+    broadcast({ kind: "version:state", version: state });
+    if (state.updateAvailable && !noticePrinted) {
+      noticePrinted = true;
+      console.log(formatUpdateNotice(state.current, latest, terminalSupportsColor()));
+    }
+  };
+  void checkForUpdate();
+  setInterval(() => void checkForUpdate(), 24 * 60 * 60 * 1000);
+}
 
 // the chat host — a per-session claude subprocess the user talks to (see chat-agent.ts).
 const chatHost = startChatHost({
