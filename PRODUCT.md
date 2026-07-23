@@ -55,6 +55,8 @@ The product reads transcripts only. It does not pause the agent, write into the 
 - Manual reset of a session's Q&A state; cleared discussions are archived per session (last 10) and can be viewed or restored from a history control.
 - Chat threads, summaries, and chat settings persist across server restarts (`~/.sottochat/state.json`).
 - Process-driven discovery drives inbox visibility: a session shows while its agent process is alive, plus a 30-minute grace window after its last event. `/diag/discovery` remains for inspection.
+- Version awareness: the running version shows in the startup banner and nav; a daily npm check surfaces available updates in both (`META_UPDATE_CHECK=0` opts out).
+- Per-card hide: any session card can be tucked behind a collapsed "hidden (N)" divider at the inbox bottom and restored from there; browser-local.
 
 ## Non-Goals
 
