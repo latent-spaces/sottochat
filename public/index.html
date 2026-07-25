@@ -1764,6 +1764,50 @@
     .ctx-turns-btn:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-soft); }
     .ctx-turns-btn:disabled { opacity: 0.4; cursor: default; }
     .ctx-turns-val { min-width: 14px; text-align: center; color: var(--fg); font-variant-numeric: tabular-nums; }
+    /* long-output approval strip — a send the server gated because the seed
+       carries a long latest output. approve resends with approveLong; cancel
+       just dismisses. sits between the quick-replies and the textarea. */
+    .chat-long-warn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+      padding: 6px 10px;
+      border: 1px solid var(--warning);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--fg);
+    }
+    .long-warn-actions { display: inline-flex; gap: 6px; }
+    .long-approve, .long-cancel {
+      display: inline-flex;
+      align-items: center;
+      height: 24px;
+      padding: 0 10px;
+      border-radius: var(--r-pill);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out), color 0.15s var(--ease-out);
+    }
+    .long-approve {
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
+    .long-approve:hover { background: var(--accent); color: var(--surface); }
+    .long-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+    .long-cancel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+    }
+    .long-cancel:hover { border-color: var(--border-strong); color: var(--fg); }
     .chat-input-row {
       display: flex;
       gap: 10px;

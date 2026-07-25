@@ -50,6 +50,11 @@ const SUMMARY_DIGEST_TURNS = 5;
 const CHAT_CONTEXT_TURNS_MIN = 1;
 const CHAT_CONTEXT_TURNS_MAX = 10;
 const CHAT_CONTEXT_TURNS_DEFAULT = 1;
+// the chat seed includes the latest agent output whole (never truncated). a
+// seed longer than this needs an explicit user go-ahead before a fresh chat
+// subprocess consumes it — /chat/send answers needsApproval instead of
+// sending. live threads ignore the seed, so follow-up sends are never gated.
+const CHAT_SEED_WARN_CHARS = 16_000;
 // the user-facing explanation language. everything the app says TO the user —
 // the assistant's answers and the observer's glance-insight — is written in this
 // language. the suggested reply back to the coding agent stays in the agent's
@@ -425,8 +430,9 @@ function assistantTextOf(turn: Turn): string {
 // build the seed block for the chat-agent: a one-shot context envelope fed once
 // into the chat subprocess so the model has the real latest exchange to answer
 // about, without a session fork. the chat-agent ignores `seed` on follow-ups.
-// the most recent turn is included generously (so "what does it say at the end"
-// works); earlier turns are brief context.
+// the most recent turn is included whole — relaying "what does this say" needs
+// the full text, and truncation is replaced by the CHAT_SEED_WARN_CHARS
+// approval gate at /chat/send. earlier turns are brief context.
 function buildChatSeed(s: SessionState): string {
   const lines: string[] = [];
   lines.push(`The user is watching the coding-agent session "${s.info.slug}".`);
@@ -453,7 +459,7 @@ function buildChatSeed(s: SessionState): string {
     lines.push("---");
     const up = clip(latest.userPromptText ?? "", 1000);
     if (up) lines.push(`[the user's request that opened this turn]: ${up}`);
-    lines.push(clip(assistantTextOf(latest), 8000) || "(no assistant text in the latest turn)");
+    lines.push(assistantTextOf(latest) || "(no assistant text in the latest turn)");
     lines.push("---");
   }
   return lines.join("\n");
@@ -727,6 +733,11 @@ const server = Bun.serve({
       const text = typeof o.text === "string" ? o.text : null;
       const kind = o.kind === "auto" ? "auto" : "user";
       const sourceTurnId = typeof o.sourceTurnId === "string" ? o.sourceTurnId : null;
+      const approveLong = o.approveLong === true;
+      // the char count the approval strip showed — binds the consent to what
+      // the user actually saw, so a seed that grew meaningfully since then
+      // re-gates instead of riding the old approval.
+      const approvedChars = typeof o.approvedChars === "number" ? o.approvedChars : null;
       if (!sessionKey || !text || !text.trim()) {
         return Response.json({ error: "sessionKey and text required" }, { status: 400 });
       }
@@ -745,6 +756,22 @@ const server = Bun.serve({
       // ignores it on follow-ups — it carries the working dir, the session
       // summary so far, and the recent turns (latest one in full).
       const seed = buildChatSeed(sess);
+      // the seed is consumed only when a subprocess (re)spawn will read it
+      // (follow-ups on a live conversation ignore it). the latest output goes
+      // in whole — no truncation — so a long one needs the user's go-ahead
+      // first: answer needsApproval and let the client resend with approveLong
+      // once confirmed. an approval whose seed has since grown >25% past the
+      // count the user saw re-gates with the fresh number. sits before the
+      // autoKey bookkeeping so an ungated retry isn't seen as a duplicate.
+      const approvalStale =
+        approveLong && approvedChars !== null && seed.length > approvedChars * 1.25;
+      if (
+        (!approveLong || approvalStale) &&
+        seed.length > CHAT_SEED_WARN_CHARS &&
+        chatHost.awaitingSeed(sessionKey)
+      ) {
+        return Response.json({ ok: true, needsApproval: true, chars: seed.length });
+      }
       if (autoKey) {
         if (autoChatKeys.size >= MAX_AUTO_CHAT_KEYS) {
           const oldest = autoChatKeys.values().next().value;

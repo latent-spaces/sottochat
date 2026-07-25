@@ -56,7 +56,9 @@ Language:
 - Suggested replies to the coding agent: the agent's own language, usually English
 
 Rules:
-- Keep answers plain and brief.
+- Match the answer to the question. When asked what the output says ("what's written here"), relay the latest agent output faithfully in ${answerLanguage}: cover everything of substance, restructured for readability (short paragraphs, bullets) — a rendition of the content, not a compressed summary.
+- Summarize only when asked to summarize.
+- For everything else, keep answers plain and brief.
 - Use the supplied session context, especially the latest exchange.
 - When asked what to send, write, or reply, prepare a targeted message for the original session. Include exactly one fenced block tagged \`to-agent\`.
 - Otherwise do not include a \`to-agent\` block.
@@ -96,11 +98,18 @@ export type ChatSendOptions = {
 
 type AgentHandle = {
   push: (text: string, seed?: string, language?: string) => void;
+  /** true while the next push would carry the intro + seed (initial spawn, or
+   *  a crash-respawn that reset the conversation). */
+  fresh: () => boolean;
   stop: () => void;
 };
 
 export function startChatHost(opts: ChatAgentOptions): {
   send: (sessionKey: string, text: string, sendOpts?: ChatSendOptions) => void;
+  /** true when the session's next send would consume `seed` — no live handle,
+   *  or a handle whose conversation was reset by a crash-respawn. callers use
+   *  this to gate long seeds behind user approval. */
+  awaitingSeed: (sessionKey: string) => boolean;
   stop: (sessionKey?: string) => void;
 } {
   const model = opts.model ?? "claude-sonnet-5";
@@ -283,7 +292,7 @@ ${text}`;
 
     opts.onStatus?.({ sessionKey, status: "spawned" });
     logInfo(`[chat] spawned for ${sessionKey.slice(0, 32)} (cwd ${cwd})`);
-    return { push, stop };
+    return { push, fresh: () => firstPrompt, stop };
   }
 
   function ensureAgent(sessionKey: string): AgentHandle {
@@ -296,6 +305,10 @@ ${text}`;
   }
 
   return {
+    awaitingSeed(sessionKey) {
+      const h = agents.get(sessionKey);
+      return !h || h.fresh();
+    },
     send(sessionKey, text, sendOpts) {
       const trimmed = (text || "").trim();
       if (!trimmed) return;

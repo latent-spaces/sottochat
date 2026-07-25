@@ -59,24 +59,29 @@
     // stays english; only the ask box, quick-replies, and the copy card follow
     // the chosen language. the assistant answers in the language regardless.
     const UI_STRINGS = {
-      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", updating: "מתעדכן…", presets: ["מה כתוב פה", "תסכם בקצרה"] },
-      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", updating: "updating…", presets: ["what does this say?", "summarize briefly"] },
-      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", updating: "جارٍ التحديث…", presets: ["ماذا يقول هنا؟", "لخّص باختصار"] },
-      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", updating: "actualizando…", presets: ["¿qué dice aquí?", "resume brevemente"] },
-      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", updating: "mise à jour…", presets: ["qu'est-ce qui est écrit ici ?", "résume brièvement"] },
-      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", updating: "обновляется…", presets: ["что здесь написано?", "подытожь кратко"] },
-      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", updating: "wird aktualisiert…", presets: ["was steht hier?", "kurz zusammenfassen"] },
-      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", updating: "更新中…", presets: ["这里写了什么？", "简短总结"] },
-      pt: { ask: "pergunte sobre a saída…", toAgent: "responder ao agente", copy: "copiar", copied: "copiado", updating: "atualizando…", presets: ["o que diz aqui?", "resuma brevemente"] },
-      it: { ask: "chiedi sull'output…", toAgent: "rispondi all'agente", copy: "copia", copied: "copiato", updating: "aggiornamento…", presets: ["cosa c'è scritto qui?", "riassumi in breve"] },
-      ja: { ask: "出力について質問…", toAgent: "エージェントへの返信", copy: "コピー", copied: "コピーしました", updating: "更新中…", presets: ["ここには何が書いてある？", "簡潔に要約して"] },
-      ko: { ask: "출력에 대해 질문하기…", toAgent: "에이전트에 답장", copy: "복사", copied: "복사됨", updating: "업데이트 중…", presets: ["여기 뭐라고 쓰여 있어?", "간단히 요약해줘"] },
-      hi: { ask: "आउटपुट के बारे में पूछें…", toAgent: "एजेंट को जवाब", copy: "कॉपी", copied: "कॉपी हो गया", updating: "अपडेट हो रहा है…", presets: ["यहाँ क्या लिखा है?", "संक्षेप में सारांश दें"] },
-      id: { ask: "tanya tentang keluaran…", toAgent: "balas ke agen", copy: "salin", copied: "tersalin", updating: "memperbarui…", presets: ["apa yang tertulis di sini?", "ringkas singkat"] },
-      vi: { ask: "hỏi về kết quả…", toAgent: "trả lời tác nhân", copy: "sao chép", copied: "đã sao chép", updating: "đang cập nhật…", presets: ["ở đây viết gì?", "tóm tắt ngắn gọn"] },
-      bn: { ask: "আউটপুট সম্পর্কে জিজ্ঞাসা করুন…", toAgent: "এজেন্টকে উত্তর", copy: "কপি", copied: "কপি হয়েছে", updating: "আপডেট হচ্ছে…", presets: ["এখানে কী লেখা আছে?", "সংক্ষেপে সারাংশ দাও"] },
+      he: { ask: "שאל משהו על הפלט…", toAgent: "תשובה לסוכן", copy: "העתק", copied: "הועתק", updating: "מתעדכן…", presets: ["מה כתוב פה", "תסכם בקצרה"], longWarn: "הפלט ארוך (כ־{n} תווים) — להמשיך?", longGo: "המשך", longCancel: "ביטול" },
+      en: { ask: "ask about the output…", toAgent: "reply to agent", copy: "copy", copied: "copied", updating: "updating…", presets: ["what does this say?", "summarize briefly"], longWarn: "the output is long (~{n} chars) — process it?", longGo: "process", longCancel: "cancel" },
+      ar: { ask: "اسأل عن المخرجات…", toAgent: "رد إلى الوكيل", copy: "نسخ", copied: "تم النسخ", updating: "جارٍ التحديث…", presets: ["ماذا يقول هنا؟", "لخّص باختصار"], longWarn: "المخرجات طويلة (~{n} حرف) — هل نتابع؟", longGo: "متابعة", longCancel: "إلغاء" },
+      es: { ask: "pregunta sobre la salida…", toAgent: "responder al agente", copy: "copiar", copied: "copiado", updating: "actualizando…", presets: ["¿qué dice aquí?", "resume brevemente"], longWarn: "la salida es larga (~{n} caracteres) — ¿procesarla?", longGo: "procesar", longCancel: "cancelar" },
+      fr: { ask: "posez une question sur la sortie…", toAgent: "répondre à l'agent", copy: "copier", copied: "copié", updating: "mise à jour…", presets: ["qu'est-ce qui est écrit ici ?", "résume brièvement"], longWarn: "la sortie est longue (~{n} caractères) — la traiter ?", longGo: "traiter", longCancel: "annuler" },
+      ru: { ask: "спросите о выводе…", toAgent: "ответ агенту", copy: "копировать", copied: "скопировано", updating: "обновляется…", presets: ["что здесь написано?", "подытожь кратко"], longWarn: "вывод длинный (~{n} символов) — обработать?", longGo: "обработать", longCancel: "отмена" },
+      de: { ask: "frag zur ausgabe…", toAgent: "an den agenten antworten", copy: "kopieren", copied: "kopiert", updating: "wird aktualisiert…", presets: ["was steht hier?", "kurz zusammenfassen"], longWarn: "die ausgabe ist lang (~{n} zeichen) — verarbeiten?", longGo: "verarbeiten", longCancel: "abbrechen" },
+      zh: { ask: "询问输出内容…", toAgent: "回复给智能体", copy: "复制", copied: "已复制", updating: "更新中…", presets: ["这里写了什么？", "简短总结"], longWarn: "输出较长（约{n}字符）— 继续处理？", longGo: "处理", longCancel: "取消" },
+      pt: { ask: "pergunte sobre a saída…", toAgent: "responder ao agente", copy: "copiar", copied: "copiado", updating: "atualizando…", presets: ["o que diz aqui?", "resuma brevemente"], longWarn: "a saída é longa (~{n} caracteres) — processar?", longGo: "processar", longCancel: "cancelar" },
+      it: { ask: "chiedi sull'output…", toAgent: "rispondi all'agente", copy: "copia", copied: "copiato", updating: "aggiornamento…", presets: ["cosa c'è scritto qui?", "riassumi in breve"], longWarn: "l'output è lungo (~{n} caratteri) — elaborarlo?", longGo: "elabora", longCancel: "annulla" },
+      ja: { ask: "出力について質問…", toAgent: "エージェントへの返信", copy: "コピー", copied: "コピーしました", updating: "更新中…", presets: ["ここには何が書いてある？", "簡潔に要約して"], longWarn: "出力が長いです（約{n}文字）— 処理しますか？", longGo: "処理する", longCancel: "キャンセル" },
+      ko: { ask: "출력에 대해 질문하기…", toAgent: "에이전트에 답장", copy: "복사", copied: "복사됨", updating: "업데이트 중…", presets: ["여기 뭐라고 쓰여 있어?", "간단히 요약해줘"], longWarn: "출력이 깁니다 (~{n}자) — 처리할까요?", longGo: "처리", longCancel: "취소" },
+      hi: { ask: "आउटपुट के बारे में पूछें…", toAgent: "एजेंट को जवाब", copy: "कॉपी", copied: "कॉपी हो गया", updating: "अपडेट हो रहा है…", presets: ["यहाँ क्या लिखा है?", "संक्षेप में सारांश दें"], longWarn: "आउटपुट लंबा है (~{n} अक्षर) — प्रोसेस करें?", longGo: "प्रोसेस करें", longCancel: "रद्द करें" },
+      id: { ask: "tanya tentang keluaran…", toAgent: "balas ke agen", copy: "salin", copied: "tersalin", updating: "memperbarui…", presets: ["apa yang tertulis di sini?", "ringkas singkat"], longWarn: "keluarannya panjang (~{n} karakter) — proses?", longGo: "proses", longCancel: "batal" },
+      vi: { ask: "hỏi về kết quả…", toAgent: "trả lời tác nhân", copy: "sao chép", copied: "đã sao chép", updating: "đang cập nhật…", presets: ["ở đây viết gì?", "tóm tắt ngắn gọn"], longWarn: "kết quả khá dài (~{n} ký tự) — xử lý?", longGo: "xử lý", longCancel: "hủy" },
+      bn: { ask: "আউটপুট সম্পর্কে জিজ্ঞাসা করুন…", toAgent: "এজেন্টকে উত্তর", copy: "কপি", copied: "কপি হয়েছে", updating: "আপডেট হচ্ছে…", presets: ["এখানে কী লেখা আছে?", "সংক্ষেপে সারাংশ দাও"], longWarn: "আউটপুট দীর্ঘ (~{n} অক্ষর) — প্রক্রিয়া করব?", longGo: "প্রক্রিয়া করুন", longCancel: "বাতিল" },
     };
     function ui() { return UI_STRINGS[explainLang] || UI_STRINGS.zh; }
+    // per-key fallback to english so a pack missing a newer key degrades
+    // readably instead of rendering an empty control.
+    function uiStr(key) { return ui()[key] || UI_STRINGS.en[key] || ""; }
+    // compact char count for the long-output warning ("34k" / "812").
+    function fmtWarnChars(chars) { return chars >= 1000 ? Math.round(chars / 1000) + "k" : String(chars); }
 
     // Claude auth is optional. The server reports only whether a supported
     // method is configured; the browser stores only the harmless setup path
@@ -276,6 +281,7 @@
           chatStatusByKey.delete(sessionKey);
           expandedThreads.delete(sessionKey);
           chatDrafts.delete(sessionKey);
+          chatPendingLong.delete(sessionKey);
           refresh();
         } else {
           console.warn('[chat] reset failed', res.status);
@@ -1995,6 +2001,11 @@
     }
 
     const chatDrafts = new Map();
+    // sends the server answered with needsApproval (the seed carries a long
+    // agent output and a fresh subprocess would consume it) — sessionKey →
+    // {text, chars, kind, sourceTurnId}. rendered as an approve/cancel strip
+    // in the chat input; approve resends with approveLong: true.
+    const chatPendingLong = new Map();
     // chat thread state — sessionKey → array of {role, text, ts}.
     // populated by ws "chat:chunk" messages (the server echoes user sends and streams assistant replies).
     const chatThreadByKey = new Map();
@@ -2633,8 +2644,22 @@
           stepperHtml +
         '</div>';
 
+      // a send the server gated behind needsApproval (long seed, fresh
+      // subprocess) renders as an approve/cancel strip until resolved.
+      const pendingLong = chatPendingLong.get(sessionKey);
+      const warnHtml = pendingLong
+        ? '<div class="chat-long-warn" role="alert">' +
+            '<span dir="auto">' + escapeHtml(uiStr('longWarn').replace('{n}', fmtWarnChars(pendingLong.chars))) + '</span>' +
+            '<span class="long-warn-actions">' +
+              '<button type="button" class="long-approve">' + escapeHtml(uiStr('longGo')) + '</button>' +
+              '<button type="button" class="long-cancel">' + escapeHtml(uiStr('longCancel')) + '</button>' +
+            '</span>' +
+          '</div>'
+        : '';
+
       dChatInput.innerHTML =
         quickHtml +
+        warnHtml +
         '<div class="chat-input-row">' +
           '<textarea rows="2" dir="auto" placeholder="' + escapeHtml(ui().ask) + '">' + escapeHtml(initial) + '</textarea>' +
           '<button class="send-btn" title="send" aria-label="send">' +
@@ -2660,36 +2685,72 @@
 
       // shared send path. caller passes the text directly; for the textarea
       // path, we read .value here. caller can also pass a control to disable
-      // while the request is in flight (avoids double-click).
-      async function sendChatText(text, ctrl) {
+      // while the request is in flight (avoids double-click). `extra` carries
+      // the approval-resend fields ({approveLong, kind, sourceTurnId}).
+      async function sendChatText(text, ctrl, extra) {
         const trimmed = (text || "").trim();
         if (!trimmed) return;
         if (ctrl) ctrl.disabled = true;
         pills.forEach(p => { p.disabled = true; });
+        const unlock = () => {
+          if (ctrl) ctrl.disabled = false;
+          pills.forEach(p => { p.disabled = false; });
+        };
         try {
+          const payload = { sessionKey, text: trimmed };
+          if (extra?.approveLong) {
+            payload.approveLong = true;
+            // echo the char count the strip showed — the server re-gates if
+            // the seed has grown meaningfully past what the user approved.
+            if (typeof extra.approvedChars === 'number') payload.approvedChars = extra.approvedChars;
+          }
+          if (extra?.kind === 'auto' && extra.sourceTurnId) {
+            payload.kind = 'auto';
+            payload.sourceTurnId = extra.sourceTurnId;
+          }
           const res = await fetch('/chat/send', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ sessionKey, text: trimmed }),
+            body: JSON.stringify(payload),
           });
           if (!res.ok) {
             const body = await res.text();
             console.warn('[chat] send failed', res.status, body);
-            if (ctrl) ctrl.disabled = false;
-            pills.forEach(p => { p.disabled = false; });
+            unlock();
+            return;
+          }
+          const body = await res.json().catch(() => null);
+          if (body && body.needsApproval) {
+            // long seed, fresh subprocess — nothing was sent. park the text
+            // behind an approve/cancel strip (the draft stays in the box).
+            // a re-gated approve resend keeps its auto identity so approving
+            // again still dedups server-side against the source turn.
+            chatPendingLong.set(sessionKey, {
+              text: trimmed,
+              chars: body.chars,
+              kind: extra?.kind === 'auto' ? 'auto' : 'user',
+              sourceTurnId: extra?.kind === 'auto' ? extra.sourceTurnId : null,
+            });
+            unlock();
+            // repaint only if this session's detail is still the one on
+            // screen — the shared input pane may show another session by now.
+            if (sess.info?.sessionId === selectedSessionId()) renderChatInput(sess);
             return;
           }
           // server broadcasts chat:chunk back — clear the textarea draft so the
           // next ask starts clean. also re-collapse any previously expanded
           // history for this session so the new user/agent pair is the only
-          // visible exchange.
-          chatDrafts.delete(sessionKey);
+          // visible exchange. approving a parked auto action leaves the draft
+          // alone: the box may hold unrelated typing the user hasn't sent.
+          chatPendingLong.delete(sessionKey);
+          if (extra?.kind !== 'auto') {
+            chatDrafts.delete(sessionKey);
+            if (ta) ta.value = '';
+          }
           expandedThreads.delete(sessionKey);
-          if (ta) ta.value = '';
         } catch (err) {
           console.warn('[chat] send error', err);
-          if (ctrl) ctrl.disabled = false;
-          pills.forEach(p => { p.disabled = false; });
+          unlock();
         }
       }
 
@@ -2712,6 +2773,25 @@
       pills.forEach(p => {
         p.addEventListener('click', () => sendChatText(p.dataset.quick || '', p));
       });
+      const warnEl = dChatInput.querySelector('.chat-long-warn');
+      if (warnEl) {
+        warnEl.querySelector('.long-approve')?.addEventListener('click', (e) => {
+          const p = chatPendingLong.get(sessionKey);
+          if (!p) return;
+          // the entry survives until the resend succeeds (sendChatText clears
+          // it) — a network failure keeps the strip usable for a retry.
+          sendChatText(p.text, e.currentTarget, {
+            approveLong: true,
+            approvedChars: p.chars,
+            kind: p.kind,
+            sourceTurnId: p.sourceTurnId,
+          });
+        });
+        warnEl.querySelector('.long-cancel')?.addEventListener('click', () => {
+          chatPendingLong.delete(sessionKey);
+          if (sess.info?.sessionId === selectedSessionId()) renderChatInput(sess);
+        });
+      }
       Array.from(dChatInput.querySelectorAll('.ctx-turns-btn')).forEach(b => {
         b.addEventListener('click', () => {
           const step = Number(b.dataset.step) || 0;
@@ -3005,6 +3085,18 @@
           console.warn("[auto-explain] send failed", res.status, await res.text());
           return;
         }
+        const body = await res.json().catch(() => null);
+        if (body && body.needsApproval) {
+          // long output — the server didn't process it. park the action behind
+          // the approve/cancel strip (painted by the next detail refresh) and
+          // mark the turn handled so we don't re-nag on it.
+          chatPendingLong.set(sessionKey, {
+            text: action,
+            chars: body.chars,
+            kind: "auto",
+            sourceTurnId: turn.id,
+          });
+        }
         autoExplainSent.add(autoKey);
       } catch (err) {
         console.warn("[auto-explain] send error", err);
@@ -3113,6 +3205,7 @@
           chatThreadByKey.delete(msg.sessionKey);
           chatStatusByKey.delete(msg.sessionKey);
           expandedThreads.delete(msg.sessionKey);
+          chatPendingLong.delete(msg.sessionKey);
           refresh();
         } else if (msg.kind === "chat:archived" || msg.kind === "chat:restored") {
           if (Array.isArray(msg.archives)) {
