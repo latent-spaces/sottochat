@@ -22,6 +22,10 @@
     const autoExplainWrap = document.getElementById("auto-explain-wrap");
     const autoExplainTrigger = document.getElementById("auto-explain-trigger");
     const autoExplainMenu = document.getElementById("auto-explain-menu");
+    const autoOverrideCount = document.getElementById("auto-override-count");
+    const autoOverrideFoot = document.getElementById("auto-override-foot");
+    const autoOverrideNote = document.getElementById("auto-override-note");
+    const autoOverrideReset = document.getElementById("auto-override-reset");
     const usageWrap = document.getElementById("usage-wrap");
     const usageTrigger = document.getElementById("usage-trigger");
     const usagePanel = document.getElementById("usage-panel");
@@ -41,18 +45,69 @@
     const authCheckResult = document.getElementById("auth-check-result");
     const LANG_KEY = "cutCakeLang";
     const AUTH_CHOICE_KEY = "sottochatAuthChoice";
-    const AUTO_EXPLAIN_KEY = "sottochatAutoExplainLong";
-    const AUTO_EXPLAIN_THRESHOLDS = new Set([0, 275, 700, 1200]);
+    const AUTO_EXPLAIN_KEY = "sottochatAutoExplainLong"; // legacy: 0 = off, else the word bar
+    const AUTO_EXPLAIN_DEFAULT_KEY = "sottochatAutoExplainDefault";
+    const AUTO_EXPLAIN_WORDS_KEY = "sottochatAutoExplainWords";
+    const AUTO_EXPLAIN_CARDS_KEY = "sottochatAutoExplainCards";
+    const AUTO_EXPLAIN_WORD_BARS = [275, 700, 1200];
+    const AUTO_EXPLAIN_DEFAULT_WORDS = 275;
     // the explanation language. localStorage is the source of truth for this
     // browser; the choice is pushed to the server (which threads it into the
     // assistant + observer prompts) and mirrored to other clients over ws.
     let explainLang = localStorage.getItem(LANG_KEY) || "zh";
-    function readAutoExplainThreshold(value) {
+    // "does it fire at all" and "how long a reply has to be" are two separate
+    // settings: switching the default off no longer wipes the word bar, so one
+    // card switched on by hand still has an unambiguous bar to fire at. the old
+    // single-value key (0 = off) is read once to carry existing browsers over.
+    function readAutoExplainWords(value) {
       if (value === "1" || value === "350") return 275; // migrate earlier defaults
       const parsed = Number(value);
-      return AUTO_EXPLAIN_THRESHOLDS.has(parsed) ? parsed : 0;
+      return AUTO_EXPLAIN_WORD_BARS.includes(parsed) ? parsed : 0;
     }
-    let autoExplainThreshold = readAutoExplainThreshold(localStorage.getItem(AUTO_EXPLAIN_KEY));
+    let autoExplainWords = readAutoExplainWords(localStorage.getItem(AUTO_EXPLAIN_WORDS_KEY))
+      || readAutoExplainWords(localStorage.getItem(AUTO_EXPLAIN_KEY))
+      || AUTO_EXPLAIN_DEFAULT_WORDS;
+    let autoExplainDefaultOn = (() => {
+      const saved = localStorage.getItem(AUTO_EXPLAIN_DEFAULT_KEY);
+      if (saved === "on" || saved === "off") return saved === "on";
+      return readAutoExplainWords(localStorage.getItem(AUTO_EXPLAIN_KEY)) > 0;
+    })();
+    function saveAutoExplainDefaults() {
+      try {
+        localStorage.setItem(AUTO_EXPLAIN_DEFAULT_KEY, autoExplainDefaultOn ? "on" : "off");
+        localStorage.setItem(AUTO_EXPLAIN_WORDS_KEY, String(autoExplainWords));
+      } catch {}
+    }
+    function autoWordsLabel(words) {
+      return words >= 1000
+        ? `${(words / 1000).toFixed(1).replace(/\.0$/, "")}k+`
+        : `${words}+`;
+    }
+    // per-card switches, keyed by session key, per browser. `true` = this card
+    // fires even while the default is off, `false` = this card never fires
+    // whatever the default says. a card only carries an entry while it actually
+    // deviates, so flipping it back to the default drops the entry and the card
+    // follows the default again.
+    const autoExplainCards = new Map((() => {
+      try {
+        const raw = JSON.parse(localStorage.getItem(AUTO_EXPLAIN_CARDS_KEY) || "{}");
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+        return Object.entries(raw).filter(([, on]) => typeof on === "boolean");
+      } catch { return []; }
+    })());
+    function saveAutoExplainCards() {
+      try {
+        localStorage.setItem(AUTO_EXPLAIN_CARDS_KEY, JSON.stringify(Object.fromEntries(autoExplainCards)));
+      } catch {}
+    }
+    function autoExplainOnFor(sessionKey) {
+      const own = autoExplainCards.get(sessionKey);
+      return own === undefined ? autoExplainDefaultOn : own;
+    }
+    // word bar this card fires at, or 0 when it never does.
+    function autoExplainWordsFor(sessionKey) {
+      return autoExplainOnFor(sessionKey) ? autoExplainWords : 0;
+    }
     let usageState = { today: "", days: [] };
 
     // localized UI strings for the conversational surface. chrome elsewhere
@@ -325,23 +380,46 @@
     function paintAutoExplainControl() {
       if (!autoExplainTrigger) return;
       const action = ui().presets?.[0] || "what does this say?";
-      const enabled = autoExplainThreshold > 0;
-      const label = autoExplainThreshold >= 1000
-        ? `${(autoExplainThreshold / 1000).toFixed(1).replace(/\.0$/, "")}k+`
-        : enabled ? `${autoExplainThreshold}+` : "off";
-      autoExplainTrigger.querySelector(".auto-threshold").textContent = label;
-      autoExplainTrigger.dataset.enabled = enabled ? "true" : "false";
+      const bar = autoWordsLabel(autoExplainWords);
+      // the trigger states the default in words, not a bare number: "auto off"
+      // vs "auto 700+" — a number alone read as the whole app's state.
+      autoExplainTrigger.querySelector(".auto-threshold").textContent =
+        autoExplainDefaultOn ? `auto ${bar}` : "auto off";
+      autoExplainTrigger.dataset.enabled = autoExplainDefaultOn ? "true" : "false";
+      // cards that set their own switch — counted on the trigger so a default
+      // reading "auto off" never hides the cards that still fire.
+      const overrides = autoExplainCards.size;
+      const overrideNote = overrides === 0
+        ? ""
+        : overrides === 1
+          ? "1 card has its own switch"
+          : `${overrides} cards have their own switch`;
+      const overrideFootNote = overrides === 1
+        ? "1 card has its own switch and ignores this default"
+        : `${overrides} cards have their own switch and ignore this default`;
+      const summary = autoExplainDefaultOn
+        ? `default: "${action}" automatically at ${bar} words`
+        : "default: manual only — no card fires on its own";
+      autoExplainTrigger.title = overrideNote ? `${summary} · ${overrideNote}` : summary;
       autoExplainTrigger.setAttribute(
         "aria-label",
-        enabled
-          ? `${action} automatically for agent replies of ${autoExplainThreshold} words or more. open threshold menu`
-          : `${action} automatically: off. open threshold menu`,
+        `${summary}${overrideNote ? ` · ${overrideNote}` : ""}. open automatic quick action settings`,
       );
-      autoExplainTrigger.title = enabled
-        ? `${action} at ${autoExplainThreshold}+ words`
-        : `${action}: manual only`;
-      autoExplainMenu?.querySelectorAll("[data-auto-threshold]").forEach((option) => {
-        option.setAttribute("aria-checked", Number(option.dataset.autoThreshold) === autoExplainThreshold ? "true" : "false");
+      if (autoOverrideCount) {
+        autoOverrideCount.textContent = overrides ? String(overrides) : "";
+        autoOverrideCount.hidden = overrides === 0;
+        autoOverrideCount.title = overrideNote;
+      }
+      if (autoOverrideFoot) {
+        autoOverrideFoot.hidden = overrides === 0;
+        if (autoOverrideNote) autoOverrideNote.textContent = overrides ? overrideFootNote : "";
+      }
+      autoExplainMenu?.querySelectorAll("[data-auto-default]").forEach((option) => {
+        const on = option.dataset.autoDefault === "on";
+        option.setAttribute("aria-checked", on === autoExplainDefaultOn ? "true" : "false");
+      });
+      autoExplainMenu?.querySelectorAll("[data-auto-words]").forEach((option) => {
+        option.setAttribute("aria-checked", Number(option.dataset.autoWords) === autoExplainWords ? "true" : "false");
       });
     }
 
@@ -446,29 +524,53 @@
         event.stopPropagation();
         toggleNavPopover(autoExplainTrigger, autoExplainMenu);
       });
-      autoExplainMenu.querySelectorAll("[data-auto-threshold]").forEach((option) => {
+      // the popover holds two decisions: the on/off default, and the word bar
+      // that both the default and every hand-set card fire at. picking a bar
+      // never turns anything on, and switching the default off keeps the bar.
+      autoExplainMenu.querySelectorAll("[data-auto-default]").forEach((option) => {
         option.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          autoExplainThreshold = readAutoExplainThreshold(option.dataset.autoThreshold);
-          try { localStorage.setItem(AUTO_EXPLAIN_KEY, String(autoExplainThreshold)); } catch {}
-          closeNavPopovers();
+          autoExplainDefaultOn = option.dataset.autoDefault === "on";
+          saveAutoExplainDefaults();
+          // both groups stay on screen after a pick — they're one settings
+          // panel now, and closing it would hide the effect of the other half.
           paintAutoExplainControl();
-          autoExplainTrigger.focus();
+          renderInbox();
         });
+      });
+      autoExplainMenu.querySelectorAll("[data-auto-words]").forEach((option) => {
+        option.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          autoExplainWords = readAutoExplainWords(option.dataset.autoWords) || AUTO_EXPLAIN_DEFAULT_WORDS;
+          saveAutoExplainDefaults();
+          paintAutoExplainControl();
+          renderInbox();
+        });
+      });
+      autoOverrideReset?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        autoExplainCards.clear();
+        saveAutoExplainCards();
+        paintAutoExplainControl();
+        renderInbox();
       });
       autoExplainMenu.addEventListener("keydown", (event) => {
         if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-        const options = Array.from(autoExplainMenu.querySelectorAll("[data-auto-threshold]"));
+        const options = Array.from(autoExplainMenu.querySelectorAll("[data-auto-default], [data-auto-words]"));
         const current = Math.max(0, options.indexOf(document.activeElement));
         const direction = event.key === "ArrowDown" ? 1 : -1;
         options[(current + direction + options.length) % options.length]?.focus();
         event.preventDefault();
       });
       window.addEventListener("storage", (event) => {
-        if (event.key !== AUTO_EXPLAIN_KEY) return;
-        autoExplainThreshold = readAutoExplainThreshold(event.newValue);
+        if (event.key !== AUTO_EXPLAIN_DEFAULT_KEY && event.key !== AUTO_EXPLAIN_WORDS_KEY) return;
+        if (event.key === AUTO_EXPLAIN_DEFAULT_KEY) autoExplainDefaultOn = event.newValue === "on";
+        else autoExplainWords = readAutoExplainWords(event.newValue) || AUTO_EXPLAIN_DEFAULT_WORDS;
         paintAutoExplainControl();
+        renderInbox();
       });
     }
 
@@ -1300,6 +1402,26 @@
       renderInbox();
     });
 
+    // per-card auto toggle — same delegation reason as hide above.
+    cardsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".card-auto");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const cardEl = btn.closest(".card");
+      const sess = cardEl && findSessionBySessionId(cardEl.dataset.sessionId);
+      if (!sess) return;
+      const key = keyForSnapshot(sess);
+      const next = !autoExplainOnFor(key);
+      // landing back on what the default says → drop the entry so this card
+      // tracks the default again instead of freezing today's answer.
+      if (next === autoExplainDefaultOn) autoExplainCards.delete(key);
+      else autoExplainCards.set(key, next);
+      saveAutoExplainCards();
+      paintAutoExplainControl();
+      renderInbox();
+    });
+
     // stable display order: a session's slot is fixed by when it was FIRST seen
     // (newest-first-seen on top), so background activity never reshuffles the
     // list under the user. new sessions slide in at the top once, then stay put.
@@ -1423,10 +1545,30 @@
         html += '<img class="card-mascot" src="' + mascotSrc + '" alt="" draggable="false" />';
       }
 
-      const hiddenCard = hiddenCardKeys.has(keyForSnapshot(sess));
+      const sessionKey = keyForSnapshot(sess);
+      const hiddenCard = hiddenCardKeys.has(sessionKey);
       const hideLabel = hiddenCard ? "unhide card" : "hide card";
-      html += '<button class="card-hide" type="button" title="' + hideLabel +
+      let toolsHtml = '';
+      // the automatic quick action never runs for our own sdk subprocesses, so
+      // don't offer a switch that would do nothing on those cards.
+      if (!isInternalSession(sess)) {
+        const autoOn = autoExplainOnFor(sessionKey);
+        const own = autoExplainCards.has(sessionKey);
+        const source = own ? 'set on this card' : 'following the default';
+        const autoLabel = (autoOn
+          ? 'automatic discussion on for this card, firing at ' + autoWordsLabel(autoExplainWords) + ' words'
+          : 'automatic discussion off for this card')
+          + ' (' + source + '). click to turn it ' + (autoOn ? 'off' : 'on');
+        toolsHtml +=
+          '<button class="card-auto" type="button" data-on="' + (autoOn ? 'true' : 'false') +
+          '" data-override="' + (own ? 'true' : 'false') +
+          '" aria-pressed="' + (autoOn ? 'true' : 'false') +
+          '" title="' + escapeHtml(autoLabel) + '" aria-label="' + escapeHtml(autoLabel) + '">' +
+          (autoOn ? 'auto on' : 'auto off') + '</button>';
+      }
+      toolsHtml += '<button class="card-hide" type="button" title="' + hideLabel +
         '" aria-label="' + hideLabel + '">' + (hiddenCard ? "unhide" : "×") + '</button>';
+      html += '<div class="card-tools">' + toolsHtml + '</div>';
       return html;
     }
 
@@ -1437,6 +1579,9 @@
       card.classList.toggle("selected", !!opts.selected);
       card.classList.toggle("internal", isInternalSession(sess));
       card.classList.toggle("user-hidden", hiddenCardKeys.has(keyForSnapshot(sess)));
+      // an always-on auto pill would sit on top of the model tag — reserve the
+      // room in the head row for the cards that actually show one.
+      card.classList.toggle("auto-set", !isInternalSession(sess) && autoExplainCards.has(keyForSnapshot(sess)));
     }
 
     function cardSig(sess) {
@@ -3059,12 +3204,15 @@
     }
 
     async function maybeAutoExplain(sessionKey, ev) {
-      if (autoExplainThreshold <= 0 || currentAuth.status !== "ready" || ev?.kind !== "stop") return;
+      if (currentAuth.status !== "ready" || ev?.kind !== "stop") return;
       const sess = sessionsByKey.get(sessionKey);
       if (!sess || isInternalSession(sess)) return;
+      // nav threshold unless this card set its own switch (see autoExplainCards)
+      const bar = autoExplainWordsFor(sessionKey);
+      if (bar <= 0) return;
       const turns = deriveTurns(sess.events || []);
       const turn = turns.length ? turns[turns.length - 1] : null;
-      if (!turn?.id || !turn.agentText || wordCount(turn.agentText) < autoExplainThreshold) return;
+      if (!turn?.id || !turn.agentText || wordCount(turn.agentText) < bar) return;
 
       const action = ui().presets?.[0];
       const autoKey = `${sessionKey}::${turn.id}`;
@@ -3153,13 +3301,19 @@
           sessionsByKey.clear();
           const list = Array.isArray(msg.sessions) ? msg.sessions : [];
           for (const snap of list) upsertSession(snap);
-          // hello carries the full session set — drop hidden-card keys whose
-          // sessions have aged out so the list can't grow forever.
+          // hello carries the full session set — drop hidden-card keys and
+          // per-card auto overrides whose sessions have aged out so neither
+          // list can grow forever.
           let hiddenPruned = false;
           for (const k of [...hiddenCardKeys]) {
             if (!sessionsByKey.has(k)) { hiddenCardKeys.delete(k); hiddenPruned = true; }
           }
           if (hiddenPruned) saveHiddenCards();
+          let autoPruned = false;
+          for (const k of [...autoExplainCards.keys()]) {
+            if (!sessionsByKey.has(k)) { autoExplainCards.delete(k); autoPruned = true; }
+          }
+          if (autoPruned) { saveAutoExplainCards(); paintAutoExplainControl(); }
           maybeRecoverStaleHash();
           refresh();
         } else if (msg.kind === "session:upsert") {

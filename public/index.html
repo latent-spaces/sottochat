@@ -477,6 +477,18 @@
       border-color: var(--accent);
       background: var(--accent-soft);
     }
+    /* cards that set their own switch — counted on the trigger so a default
+       reading "auto off" never hides the cards that still fire. */
+    .auto-override-count {
+      font-family: var(--mono);
+      font-size: 9px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 999px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+    }
     .nav-menu-caret {
       color: var(--fg-muted);
       font-family: var(--mono);
@@ -559,6 +571,41 @@
     }
     .nav-menu-check { color: transparent; font-family: var(--mono); font-size: 11px; }
     .nav-menu-option[aria-checked="true"] .nav-menu-check { color: var(--accent); }
+    /* the popover holds two decisions — label each group so "off" and "700+"
+       can't read as one list of mutually exclusive choices. */
+    .nav-menu-group {
+      margin: 0;
+      padding: 9px 14px 5px;
+      border-top: 1px solid var(--border);
+      color: var(--fg-muted);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .nav-menu-group + .nav-menu-options { border-top: 0; }
+    .nav-menu-foot {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 9px 14px 10px;
+      border-top: 1px solid var(--border);
+      background: var(--accent-soft);
+    }
+    .nav-menu-foot[hidden] { display: none; }
+    .nav-menu-foot-note { color: var(--fg-soft); font-size: 11px; line-height: 1.35; }
+    .nav-menu-foot-action {
+      flex: none;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--fg);
+      font: inherit;
+      font-size: 10px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    .nav-menu-foot-action:hover { border-color: var(--accent); color: var(--accent); }
     .usage-glyph,
     .usage-button-total {
       font-family: var(--mono);
@@ -848,26 +895,54 @@
        DOM-stays/CSS-collapses approach as the internal section above. */
     .cards.hidden-collapsed .card.user-hidden { display: none; }
     .card.user-hidden { opacity: 0.55; }
-    .card-hide {
+    /* per-card affordances, top-right: the auto switch then hide. */
+    .card-tools {
       position: absolute;
       top: 6px;
       right: 8px;
       z-index: 3;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .card-hide,
+    .card-auto {
       border: 0;
       background: var(--surface);
       border-radius: 4px;
       color: var(--fg-muted);
       font: inherit;
-      font-size: 12px;
       line-height: 1;
-      padding: 2px 4px;
       cursor: pointer;
       opacity: 0;
       transition: opacity 0.15s var(--ease-out), color 0.15s var(--ease-out);
     }
-    .card:hover .card-hide { opacity: 1; }
+    .card-hide { font-size: 12px; padding: 2px 4px; }
+    /* spelled out, not a glyph: the pill states where this card stands and
+       clicking it flips exactly that. */
+    .card-auto {
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      padding: 3px 6px;
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+    }
+    .card-auto[data-on="true"] {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .card:hover .card-hide,
+    .card:hover .card-auto { opacity: 1; }
     .card.user-hidden .card-hide { opacity: 1; }
-    .card-hide:hover { color: var(--accent); }
+    .card-hide:hover,
+    .card-auto:hover { color: var(--accent); border-color: var(--accent); }
+    /* a card carrying its own switch stays legible without a hover — deviating
+       from the default is the whole point of having set it. */
+    .card-auto[data-override="true"] { opacity: 1; }
+    /* room for the always-on pill only; the hide button appears on hover and
+       may graze the meta tags there, as it always has. */
+    .card.auto-set .card-head { padding-right: 76px; }
 
     /* sidebar inbox */
     .cards { display: grid; gap: 8px; }
@@ -2083,27 +2158,39 @@
       </button>
       <div class="nav-menu-wrap" id="auto-explain-wrap">
         <button class="nav-toggle nav-compact auto-explain-trigger" id="auto-explain-trigger" type="button" aria-haspopup="menu" aria-controls="auto-explain-menu" aria-expanded="false">
-          <span class="auto-threshold">off</span>
+          <span class="auto-threshold">auto off</span>
+          <span class="auto-override-count" id="auto-override-count" hidden></span>
           <span class="nav-menu-caret" aria-hidden="true">▾</span>
         </button>
-        <div class="nav-popover" id="auto-explain-menu" role="menu" aria-label="automatic quick action threshold" hidden>
+        <div class="nav-popover" id="auto-explain-menu" role="menu" aria-label="automatic quick action" hidden>
           <div class="nav-popover-head">
             <p class="nav-popover-title">automatic quick action</p>
-            <p class="nav-popover-note">runs the first chip in the selected language once a completed reply reaches the chosen length</p>
+            <p class="nav-popover-note">runs the first chip in the selected language on a finished agent reply. these two settings are the default for every card — a card's own "auto on / auto off" switch always wins over them</p>
           </div>
+          <p class="nav-menu-group">default for every card</p>
           <div class="nav-menu-options">
-            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="0">
-              <span class="nav-menu-value">off</span><span class="nav-menu-copy"><span class="nav-menu-label">manual only</span><span class="nav-menu-description">never start a discussion automatically</span></span><span class="nav-menu-check">✓</span>
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-default="on">
+              <span class="nav-menu-value">on</span><span class="nav-menu-copy"><span class="nav-menu-label">discuss automatically</span><span class="nav-menu-description">every card fires once a reply is long enough</span></span><span class="nav-menu-check">✓</span>
             </button>
-            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="275">
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-default="off">
+              <span class="nav-menu-value">off</span><span class="nav-menu-copy"><span class="nav-menu-label">manual only</span><span class="nav-menu-description">nothing fires unless a card is switched on itself</span></span><span class="nav-menu-check">✓</span>
+            </button>
+          </div>
+          <p class="nav-menu-group">reply length that fires it</p>
+          <div class="nav-menu-options">
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-words="275">
               <span class="nav-menu-value">275+</span><span class="nav-menu-copy"><span class="nav-menu-label">more often</span><span class="nav-menu-description">useful for most detailed agent replies</span></span><span class="nav-menu-check">✓</span>
             </button>
-            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="700">
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-words="700">
               <span class="nav-menu-value">700+</span><span class="nav-menu-copy"><span class="nav-menu-label">long replies</span><span class="nav-menu-description">wait for a substantial response</span></span><span class="nav-menu-check">✓</span>
             </button>
-            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-threshold="1200">
+            <button class="nav-menu-option" type="button" role="menuitemradio" aria-checked="false" data-auto-words="1200">
               <span class="nav-menu-value">1.2k+</span><span class="nav-menu-copy"><span class="nav-menu-label">very long replies</span><span class="nav-menu-description">reserve it for dense, extended output</span></span><span class="nav-menu-check">✓</span>
             </button>
+          </div>
+          <div class="nav-menu-foot" id="auto-override-foot" hidden>
+            <span class="nav-menu-foot-note" id="auto-override-note"></span>
+            <button class="nav-menu-foot-action" type="button" id="auto-override-reset">follow the default everywhere</button>
           </div>
         </div>
       </div>
