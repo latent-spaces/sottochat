@@ -60,13 +60,16 @@ The product reads transcripts only. It does not pause the agent, write into the 
 - Process-driven discovery drives inbox visibility: a session shows while its agent process is alive, plus a 30-minute grace window after its last event. `/diag/discovery` remains for inspection.
 - Version awareness: the running version shows in the startup banner and nav; a daily npm check surfaces available updates in both (`META_UPDATE_CHECK=0` opts out).
 - Per-card hide: any session card can be tucked behind a collapsed "hidden (N)" divider at the inbox bottom and restored from there; browser-local.
+- Per-card pin: any session card can be held at the top of the rail under a "pinned (N)" divider, in the order it was pinned, so a new session appearing never pushes it out from under you. The counterpart to hide; browser-local. Hide wins when a card is both.
+- Paste-to-find: paste a chunk of agent output into the box above the inbox and the rail narrows to the session it came from, each survivor showing the slice of transcript it matched. A single hit opens that session directly. Matching tolerates what the terminal does to text on the way to the clipboard: hard wrapping mid-sentence, gutter indentation and glyphs, and markdown rendered away. Searches the open sessions' recent turns only.
+- Pop-out composer: the ask box can be lifted out of the detail pane into a panel dragged by its bar and sized from its corner, for writing a real question instead of squinting at two rows. Position and size persist per browser; the narrow layout falls back to the docked composer.
 
 ## Non-Goals
 
 - Not a notification product. No attention bait, unread dots, tab flashes, or fake urgency.
 - Not an agent control plane. No stop, approve, edit, or execute controls for upstream agents.
 - Not a team dashboard. Localhost, single-user, no auth.
-- Not a memory product. Chat threads and summaries survive restarts, but there is no deep history, search, or cross-session recall.
+- Not a memory product. Chat threads and summaries survive restarts, but there is no deep history and no recall over sessions that have left the inbox. Paste-to-find reaches only what is already in memory for the open sessions; it does not search the transcript archive on disk.
 - Not a video or narration product in this branch. Older notes mention scriptifier, TTS, and MP4 export, but this checkout does not contain those server modules.
 
 ## Product Principles
