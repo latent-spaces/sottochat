@@ -965,8 +965,7 @@
       display: flex;
       align-items: center;
       gap: 4px;
-      transition: top 0.15s var(--ease-out), right 0.15s var(--ease-out),
-                  transform 0.15s var(--ease-out);
+      transition: transform 0.15s var(--ease-out);
     }
     /* one pill treatment for all three. spelled out rather than glyphs where
        there's a word for it: the pill states where this card stands and
@@ -1008,16 +1007,16 @@
     .card-hide:hover,
     .card-pin:hover,
     .card-auto:hover { color: var(--accent); border-color: var(--accent); }
-    /* hovering the card lifts the whole cluster out of its corner and into the
-       middle of the card, at 1.5x. these are 10px chips crammed into a strip —
-       tiny to read and tinier to hit — and the centre is where the cursor
-       already is. one transform on the ROW, not per button: the chips and the
-       spacing between them scale together, so nothing overlaps and nothing has
-       to be re-tuned. the shadow lifts them off the summary text underneath. */
+    /* hovering grows the cluster in place. these are 10px chips — tiny to read
+       and tinier to hit — but the card itself is the primary target, so they
+       grow FROM the corner rather than toward the middle: everything below the
+       head row stays a clean click straight through to the session. one
+       transform on the ROW, not per button, so the chips and the spacing
+       between them scale together and nothing has to be re-tuned. the shadow
+       lifts them off the token/model tags they overlap. */
     .card:hover .card-tools {
-      top: 50%;
-      right: 50%;
-      transform: translate(50%, -50%) scale(1.5);
+      transform-origin: top right;
+      transform: scale(1.25);
     }
     .card:hover .card-hide,
     .card:hover .card-pin,
@@ -1027,11 +1026,12 @@
     /* a card carrying its own switch stays legible without a hover — deviating
        from the default is the whole point of having set it. */
     .card-auto[data-override="true"] { opacity: 1; }
-    /* room for the always-on controls only; on hover the cluster leaves the
-       corner entirely, so nothing needs reserving for that state. measured
-       against the resting row: the pin pill starts 70px from the card's right
-       edge, the auto pill 132px (invisible siblings still hold their slots),
-       which is why auto-set reserves the same either way. */
+    /* room for the always-on controls only; on hover the cluster grows over the
+       token/model tags as a layer, which is a decision, not a reserve — pushing
+       the head text around under the cursor would be worse. measured against
+       the resting row: the pin pill starts 70px from the card's right edge, the
+       auto pill 132px (invisible siblings still hold their slots), which is why
+       auto-set reserves the same either way. */
     .card.auto-set .card-head { padding-right: 140px; }
     .card.pinned .card-head { padding-right: 78px; }
     .card.pinned.auto-set .card-head { padding-right: 140px; }
@@ -1062,24 +1062,10 @@
                   background 200ms var(--ease-out),
                   opacity 400ms var(--ease-out);
     }
+    /* the border is the whole hover treatment. the card is something you READ
+       while deciding whether to open it, so nothing dims it and nothing lands
+       on top of it — the controls stay up in their corner. */
     .card:hover { border-color: var(--accent); opacity: 1; }
-    /* hover scrim — dims the card so the control cluster that lands in the
-       middle reads as a layer on top of it, not as words tangled with the
-       summary underneath. sits above the card content and below .card-tools
-       (z 3), and never eats the click: the whole card stays a link. */
-    .card::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 2;
-      background: rgba(0, 0, 0, 0.34);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.15s var(--ease-out);
-    }
-    .card:hover::after { opacity: 1; }
-    /* the collapsed rail is a strip of colour dots — no controls, no scrim. */
-    .sidebar.collapsed .card::after { display: none; }
     .card.live { border-color: var(--accent); }
     .card.idle { opacity: 0.6; }
     /* update flash — fires when a card's data changes mid-session */
