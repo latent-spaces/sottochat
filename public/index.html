@@ -797,9 +797,63 @@
     }
     .sidebar-toggle:hover { color: var(--accent); background: var(--chip-tint); }
 
+    /* paste-to-find — drop a chunk of agent output in here and the inbox
+       narrows to the session it came from. matches against the open sessions'
+       recent turns only. */
+    .inbox-find {
+      position: relative;
+      margin: 0 0 8px;
+    }
+    .inbox-find-input {
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      font-size: 12px;
+      line-height: 1.4;
+      padding: 7px 26px 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-input);
+      background: var(--surface);
+      color: var(--fg);
+      transition: border-color 160ms var(--ease-out), background 160ms var(--ease-out);
+    }
+    .inbox-find-input::placeholder { color: var(--fg-muted); }
+    .inbox-find-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: var(--bg);
+    }
+    .inbox-find-input::-webkit-search-cancel-button { display: none; }
+    .inbox-find-clear {
+      position: absolute;
+      top: 50%;
+      inset-inline-end: 6px;
+      transform: translateY(-50%);
+      border: 0;
+      background: transparent;
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 13px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .inbox-find-clear:hover { color: var(--accent); background: var(--chip-tint); }
+    .inbox-find-note {
+      margin: 0 0 10px;
+      padding: 0 2px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      color: var(--fg-muted);
+    }
+
     .sidebar.collapsed { flex-basis: 52px; padding-right: 10px; }
     .sidebar.collapsed .section-label,
     .sidebar.collapsed .ambient-quiet,
+    .sidebar.collapsed .inbox-find,
+    .sidebar.collapsed .inbox-find-note,
     .sidebar.collapsed .inbox-separator-label,
     .sidebar.collapsed .inbox-separator-chevron,
     .sidebar.collapsed .empty-inbox { display: none; }
@@ -884,6 +938,10 @@
       transition: transform 0.15s var(--ease-out);
     }
     .inbox-separator.expanded .inbox-separator-chevron { transform: rotate(90deg); }
+    /* the pinned divider is a label for the group below it, not a control —
+       pinned cards never collapse, so it takes no pointer affordance. */
+    .inbox-separator.static { cursor: default; margin-top: 0; }
+    .inbox-separator.static:hover { color: var(--fg-muted); }
 
     /* internal cards are collapsed (hidden) by default — see
        ctc-internal-collapsed in localStorage. kept in the DOM so the
@@ -904,45 +962,76 @@
       display: flex;
       align-items: center;
       gap: 4px;
+      transition: top 0.15s var(--ease-out), right 0.15s var(--ease-out),
+                  transform 0.15s var(--ease-out);
     }
+    /* one pill treatment for all three. spelled out rather than glyphs where
+       there's a word for it: the pill states where this card stands and
+       clicking it flips exactly that. */
     .card-hide,
+    .card-pin,
     .card-auto {
-      border: 0;
       background: var(--surface);
-      border-radius: 4px;
       color: var(--fg-muted);
       font: inherit;
-      line-height: 1;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.15s var(--ease-out), color 0.15s var(--ease-out);
-    }
-    .card-hide { font-size: 12px; padding: 2px 4px; }
-    /* spelled out, not a glyph: the pill states where this card stands and
-       clicking it flips exactly that. */
-    .card-auto {
       font-size: 10px;
       letter-spacing: 0.03em;
-      padding: 3px 6px;
+      line-height: 1;
+      padding: 3px 8px;
       border: 1px solid var(--border-strong);
       border-radius: 999px;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s var(--ease-out), color 0.15s var(--ease-out),
+                  border-color 0.15s var(--ease-out), background 0.15s var(--ease-out),
+                  box-shadow 0.15s var(--ease-out);
     }
-    .card-auto[data-on="true"] {
+    .card-hide { font-size: 11px; padding: 3px 7px; }
+    /* the state each one is currently in, in accent. */
+    .card-auto[data-on="true"],
+    .card-pin[data-on="true"],
+    .card.user-hidden .card-hide {
       color: var(--accent);
       border-color: var(--accent);
       background: var(--accent-soft);
     }
     .card:hover .card-hide,
+    .card:hover .card-pin,
     .card:hover .card-auto { opacity: 1; }
     .card.user-hidden .card-hide { opacity: 1; }
+    /* a pinned card keeps its control legible without a hover — the label is
+       also how you tell the card is pinned once the divider scrolls away. */
+    .card.pinned .card-pin { opacity: 1; }
     .card-hide:hover,
+    .card-pin:hover,
     .card-auto:hover { color: var(--accent); border-color: var(--accent); }
+    /* hovering the card lifts the whole cluster out of its corner and into the
+       middle of the card, at 1.5x. these are 10px chips crammed into a strip —
+       tiny to read and tinier to hit — and the centre is where the cursor
+       already is. one transform on the ROW, not per button: the chips and the
+       spacing between them scale together, so nothing overlaps and nothing has
+       to be re-tuned. the shadow lifts them off the summary text underneath. */
+    .card:hover .card-tools {
+      top: 50%;
+      right: 50%;
+      transform: translate(50%, -50%) scale(1.5);
+    }
+    .card:hover .card-hide,
+    .card:hover .card-pin,
+    .card:hover .card-auto {
+      box-shadow: 0 2px 10px -3px rgba(0, 0, 0, 0.35);
+    }
     /* a card carrying its own switch stays legible without a hover — deviating
        from the default is the whole point of having set it. */
     .card-auto[data-override="true"] { opacity: 1; }
-    /* room for the always-on pill only; the hide button appears on hover and
-       may graze the meta tags there, as it always has. */
-    .card.auto-set .card-head { padding-right: 76px; }
+    /* room for the always-on controls only; on hover the cluster leaves the
+       corner entirely, so nothing needs reserving for that state. measured
+       against the resting row: the pin pill starts 70px from the card's right
+       edge, the auto pill 132px (invisible siblings still hold their slots),
+       which is why auto-set reserves the same either way. */
+    .card.auto-set .card-head { padding-right: 140px; }
+    .card.pinned .card-head { padding-right: 78px; }
+    .card.pinned.auto-set .card-head { padding-right: 140px; }
 
     /* sidebar inbox */
     .cards { display: grid; gap: 8px; }
@@ -971,6 +1060,23 @@
                   opacity 400ms var(--ease-out);
     }
     .card:hover { border-color: var(--accent); opacity: 1; }
+    /* hover scrim — dims the card so the control cluster that lands in the
+       middle reads as a layer on top of it, not as words tangled with the
+       summary underneath. sits above the card content and below .card-tools
+       (z 3), and never eats the click: the whole card stays a link. */
+    .card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background: rgba(0, 0, 0, 0.34);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s var(--ease-out);
+    }
+    .card:hover::after { opacity: 1; }
+    /* the collapsed rail is a strip of colour dots — no controls, no scrim. */
+    .sidebar.collapsed .card::after { display: none; }
     .card.live { border-color: var(--accent); }
     .card.idle { opacity: 0.6; }
     /* update flash — fires when a card's data changes mid-session */
@@ -1055,6 +1161,20 @@
        until the observer re-feeds it in the newly selected language. */
     .card-insight.stale { opacity: 0.55; }
     .card-insight-dots { vertical-align: middle; padding: 0; margin-inline-start: 2px; }
+    /* the slice of transcript a paste matched — shown only while a find is
+       active, so the card says why it survived the filter. */
+    .card-match {
+      margin: 4px 0 6px;
+      padding: 6px 8px;
+      border-inline-start: 2px solid var(--accent);
+      background: var(--chip-tint);
+      border-radius: 0 6px 6px 0;
+      font-family: var(--mono);
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--fg-soft);
+      overflow-wrap: anywhere;
+    }
     .card-meta {
       display: flex;
       gap: 8px;
@@ -1726,12 +1846,102 @@
       margin: 0;
     }
 
-    /* chat input — single row below the conversation tail */
+    /* chat input — single row below the conversation tail.
+       the CONTAINER is what resizes, not the textarea inside it. two reasons:
+       a resizable box inside a resizable box fights over the same drag, and
+       renderChatInput rewrites this element's innerHTML every refresh tick, so
+       a height dragged onto the textarea was being thrown away every 5s. the
+       container survives those rebuilds, so it owns the sizing and the height
+       persists (ctc-chat-float.dockedHeight). */
     .chat-input {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r-panel);
       padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      resize: vertical;
+      overflow: auto;
+      min-height: 96px;
+    }
+
+    /* popped out: the same element, lifted into a fixed panel the user drags by
+       its bar and sizes from the corner. sits above page content (z 1) and
+       below the nav popovers (z 30). geometry comes from inline styles written
+       by paintChatFloat / the drag handler. */
+    .chat-input.floating {
+      position: fixed;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 14px 14px;
+      resize: both;
+      overflow: auto;
+      min-width: 320px;
+      min-height: 200px;
+      border-color: var(--accent-soft);
+      box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.35);
+      /* the whole panel is the drag handle — anything that isn't a control can
+         be grabbed, so the cursor and the no-select rule belong here, not on
+         the bar. the controls opt back out below. */
+      cursor: move;
+      touch-action: none;
+      user-select: none;
+    }
+    .chat-input.floating button { cursor: pointer; }
+    .chat-input.floating textarea {
+      cursor: auto;
+      user-select: text;
+      touch-action: auto;
+    }
+    .chat-float-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0 -14px 2px;
+      padding: 9px 14px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-float-grip {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--fg-muted);
+    }
+    .chat-float-toggle {
+      flex: 0 0 auto;
+      border: 1px solid var(--border-strong);
+      border-radius: var(--r-pill);
+      background: var(--surface);
+      color: var(--fg-muted);
+      font: inherit;
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      line-height: 1;
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: color 0.15s var(--ease-out), border-color 0.15s var(--ease-out);
+    }
+    .chat-float-toggle:hover { color: var(--accent); border-color: var(--accent); }
+    /* the panel's whole point is a bigger writing surface, so the textarea
+       takes every pixel the user gives the panel. */
+    .chat-input.floating .chat-input-row textarea { height: 100%; }
+    /* the narrow layout already stacks everything — a fixed overlay there is in
+       the way, so drop back to the docked composer. */
+    @media (max-width: 880px) {
+      .chat-input.floating {
+        position: static;
+        resize: none;
+        width: auto !important;
+        height: auto !important;
+        box-shadow: none;
+        padding: 14px 16px;
+      }
+      .chat-input.floating .chat-float-bar { display: none; }
+      .chat-input.floating .chat-input-row textarea { height: auto; }
     }
     .chat-auth-disabled {
       min-height: 52px;
@@ -1887,6 +2097,8 @@
       display: flex;
       gap: 10px;
       align-items: stretch;
+      flex: 1 1 auto;
+      min-height: 0;
     }
     .chat-input-row textarea {
       flex: 1;
@@ -1896,7 +2108,7 @@
       padding: 10px 12px;
       border: 1px solid var(--border-strong);
       border-radius: var(--r-input);
-      resize: vertical;
+      resize: none;
       min-height: 44px;
       background: var(--bg);
       color: var(--fg);
@@ -2286,6 +2498,13 @@
         <h2 class="section-label">sessions</h2>
         <button class="sidebar-toggle" id="sidebar-toggle" type="button" aria-label="collapse sessions" aria-expanded="true">◀</button>
       </div>
+      <div class="inbox-find">
+        <input id="inbox-find-input" class="inbox-find-input" type="search" dir="auto"
+               placeholder="paste agent output to find its session"
+               spellcheck="false" autocomplete="off" aria-label="find a session by pasted agent output" />
+        <button class="inbox-find-clear" id="inbox-find-clear" type="button" hidden aria-label="clear search">×</button>
+      </div>
+      <p class="inbox-find-note" id="inbox-find-note" hidden></p>
       <p class="ambient-quiet" id="ambient-quiet" hidden>quiet</p>
       <div class="cards" id="cards">
         <div class="empty-inbox" id="inbox-empty">no active session detected — start claude code in a project</div>

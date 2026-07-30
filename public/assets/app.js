@@ -1402,6 +1402,37 @@
       renderInbox();
     });
 
+    // pinned cards — the mirror of hidden: a fixed group held at the TOP of the
+    // rail so the sessions you care about stop drifting when a new one appears.
+    // stored as an array, not a set: pin order is the display order.
+    const PINNED_CARDS_KEY = "ctc-pinned-cards";
+    const pinnedCardKeys = (() => {
+      try {
+        const raw = JSON.parse(localStorage.getItem(PINNED_CARDS_KEY) || "[]");
+        return Array.isArray(raw) ? raw.filter(k => typeof k === "string") : [];
+      } catch { return []; }
+    })();
+    function savePinnedCards() {
+      try { localStorage.setItem(PINNED_CARDS_KEY, JSON.stringify(pinnedCardKeys)); } catch {}
+    }
+    function isPinned(key) { return pinnedCardKeys.indexOf(key) >= 0; }
+    // same delegation reason as hide above.
+    cardsEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".card-pin");
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const cardEl = btn.closest(".card");
+      const sess = cardEl && findSessionBySessionId(cardEl.dataset.sessionId);
+      if (!sess) return;
+      const key = keyForSnapshot(sess);
+      const at = pinnedCardKeys.indexOf(key);
+      if (at >= 0) pinnedCardKeys.splice(at, 1);
+      else pinnedCardKeys.push(key);
+      savePinnedCards();
+      renderInbox();
+    });
+
     // per-card auto toggle — same delegation reason as hide above.
     cardsEl.addEventListener("click", (e) => {
       const btn = e.target.closest(".card-auto");
@@ -1420,6 +1451,86 @@
       saveAutoExplainCards();
       paintAutoExplainControl();
       renderInbox();
+    });
+
+    // paste-to-find — paste a chunk of agent output, get the session it came
+    // from. the server does the matching against the open sessions' recent
+    // turns; here we just hold the result and let renderInbox filter on it.
+    // null = no search running (the whole inbox shows).
+    const findInput = document.getElementById("inbox-find-input");
+    const findClear = document.getElementById("inbox-find-clear");
+    const findNote = document.getElementById("inbox-find-note");
+    let findMatches = null;
+    let findSeq = 0;
+    let findTimer = null;
+
+    function paintFindNote(text) {
+      if (!findNote) return;
+      findNote.textContent = text || "";
+      findNote.hidden = !text;
+    }
+    function clearFind(alsoInput) {
+      clearTimeout(findTimer);
+      findSeq++;                                   // orphan any in-flight response
+      findMatches = null;
+      if (alsoInput && findInput) findInput.value = "";
+      if (findClear) findClear.hidden = true;
+      paintFindNote("");
+      renderInbox();
+    }
+    async function runFind(text) {
+      const seq = ++findSeq;
+      try {
+        const res = await fetch("/find", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (seq !== findSeq) return;               // a newer keystroke won
+        if (!res.ok) {
+          findMatches = null;
+          paintFindNote("paste a longer chunk");
+          renderInbox();
+          return;
+        }
+        const data = await res.json();
+        if (seq !== findSeq) return;
+        const list = Array.isArray(data?.matches) ? data.matches : [];
+        findMatches = new Map(list.map(m => [m.sessionKey, m]));
+        paintFindNote(
+          list.length === 0
+            ? "no match in the open sessions"
+            : list.length === 1 ? "1 match" : list.length + " matches"
+        );
+        renderInbox();
+        // an unambiguous answer is the whole point — go straight there.
+        if (list.length === 1 && list[0].sessionId) {
+          location.hash = "#session/" + encodeURIComponent(list[0].sessionId);
+        }
+      } catch {
+        if (seq !== findSeq) return;
+        findMatches = null;
+        paintFindNote("find failed");
+        renderInbox();
+      }
+    }
+    if (findInput) {
+      findInput.addEventListener("input", () => {
+        const text = findInput.value;
+        if (findClear) findClear.hidden = !text;
+        clearTimeout(findTimer);
+        if (!text.trim()) { clearFind(false); return; }
+        paintFindNote("searching…");
+        findTimer = setTimeout(() => runFind(text), 180);
+      });
+      findInput.addEventListener("keydown", e => {
+        e.stopPropagation();
+        if (e.key === "Escape") { e.preventDefault(); clearFind(true); }
+      });
+    }
+    if (findClear) findClear.addEventListener("click", () => {
+      clearFind(true);
+      if (findInput) findInput.focus();
     });
 
     // stable display order: a session's slot is fixed by when it was FIRST seen
@@ -1528,6 +1639,13 @@
         ? '<input class="name-edit-input" dir="auto" value="' + escapeHtml(editingNameDraft) + '" />'
         : '<h3 class="card-name">' + escapeHtml(sessionName(sess)) + '</h3>';
 
+      // while a find is active, show the slice of transcript this card matched
+      // so the filtered inbox says why each survivor is here.
+      const hit = findMatches && findMatches.get(keyForSnapshot(sess));
+      const matchHtml = hit && hit.excerpt
+        ? '<p class="card-match" dir="auto">' + escapeHtml(hit.excerpt) + '</p>'
+        : '';
+
       let html =
         '<div class="card-head">' +
           titleHtml +
@@ -1538,6 +1656,7 @@
           '</div>' +
         '</div>' +
         summaryHtml +
+        matchHtml +
         '<p class="card-foot">' + footHtml + '</p>';
 
       if (opts.selected) {
@@ -1566,6 +1685,16 @@
           '" title="' + escapeHtml(autoLabel) + '" aria-label="' + escapeHtml(autoLabel) + '">' +
           (autoOn ? 'auto on' : 'auto off') + '</button>';
       }
+      // pin sits before hide: one holds the card at the top of the rail, the
+      // other tucks it at the bottom.
+      const pinnedCard = isPinned(sessionKey);
+      const pinLabel = pinnedCard
+        ? "unpin this card from the top of the list"
+        : "pin this card to the top of the list";
+      toolsHtml += '<button class="card-pin" type="button" data-on="' + (pinnedCard ? 'true' : 'false') +
+        '" aria-pressed="' + (pinnedCard ? 'true' : 'false') +
+        '" title="' + pinLabel + '" aria-label="' + pinLabel + '">' +
+        (pinnedCard ? "unpin" : "pin") + '</button>';
       toolsHtml += '<button class="card-hide" type="button" title="' + hideLabel +
         '" aria-label="' + hideLabel + '">' + (hiddenCard ? "unhide" : "×") + '</button>';
       html += '<div class="card-tools">' + toolsHtml + '</div>';
@@ -1579,6 +1708,7 @@
       card.classList.toggle("selected", !!opts.selected);
       card.classList.toggle("internal", isInternalSession(sess));
       card.classList.toggle("user-hidden", hiddenCardKeys.has(keyForSnapshot(sess)));
+      card.classList.toggle("pinned", isPinned(keyForSnapshot(sess)));
       // an always-on auto pill would sit on top of the model tag — reserve the
       // room in the head row for the cards that actually show one.
       card.classList.toggle("auto-set", !isInternalSession(sess) && autoExplainCards.has(keyForSnapshot(sess)));
@@ -1762,12 +1892,29 @@
     }
 
     function renderInbox() {
-      const list = sortedSessions();
+      let list = sortedSessions();
       const sel = selectedSessionId();
+      const finding = !!findMatches;
+
+      // a find is an explicit request: narrow to the hits, best first, and let
+      // the grouping below step aside so a match inside a hidden or internal
+      // card still surfaces.
+      if (finding) {
+        list = list
+          .filter(s => findMatches.has(keyForSnapshot(s)))
+          .sort((a, b) => {
+            const ma = findMatches.get(keyForSnapshot(a));
+            const mb = findMatches.get(keyForSnapshot(b));
+            return (mb.score - ma.score) || ((b.lastEventTs || 0) - (a.lastEventTs || 0));
+          });
+      }
 
       if (list.length === 0) {
         clearAllCards();
         cardsEl.appendChild(inboxEmpty);
+        inboxEmpty.textContent = finding
+          ? "no match in the open sessions"
+          : "no active session detected — start claude code in a project";
         inboxEmpty.hidden = false;
         ambientQuiet.hidden = true;
         return;
@@ -1775,7 +1922,9 @@
       if (inboxEmpty.parentNode === cardsEl) inboxEmpty.remove();
       inboxEmpty.hidden = true;
 
-      if (shouldQuiet(list, sel)) {
+      // never collapse to the ambient line mid-search — the user just asked a
+      // direct question and expects to see the answer.
+      if (!finding && shouldQuiet(list, sel)) {
         clearAllCards();
         // list is now in stable (first-seen) order, so list[0] isn't necessarily
         // the most-recently-active — take the max activity across the list.
@@ -1830,20 +1979,37 @@
         }
       }
 
-      // partition: user-driven cards on top, server-spawned sdk subprocesses
-      // below a divider, user-hidden cards at the very bottom behind their own
-      // divider. inside each group the original lastEventTs sort is preserved.
-      const hiddenList = list.filter(s => hiddenCardKeys.has(keyForSnapshot(s)));
-      const shownList = list.filter(s => !hiddenCardKeys.has(keyForSnapshot(s)));
-      const realList = shownList.filter(s => !isInternalSession(s));
-      const internalList = shownList.filter(s => isInternalSession(s));
-      const orderedList = realList.concat(internalList, hiddenList);
+      // partition: pinned cards held at the top, then user-driven cards,
+      // server-spawned sdk subprocesses below a divider, user-hidden cards at
+      // the very bottom behind their own divider. inside each group the
+      // original lastEventTs sort is preserved (pinned keeps pin order).
+      // during a find every group steps aside — the hit list IS the answer,
+      // already in relevance order, and a hit inside a hidden or internal card
+      // must still surface.
+      const pinnedList = finding ? [] : list
+        .filter(s => {
+          const k = keyForSnapshot(s);
+          return isPinned(k) && !hiddenCardKeys.has(k);
+        })
+        .sort((a, b) =>
+          pinnedCardKeys.indexOf(keyForSnapshot(a)) - pinnedCardKeys.indexOf(keyForSnapshot(b)));
+      const pinnedSet = new Set(pinnedList.map(s => keyForSnapshot(s)));
+      const restList = finding ? list : list.filter(s => !pinnedSet.has(keyForSnapshot(s)));
+      const hiddenList = finding ? [] : restList.filter(s => hiddenCardKeys.has(keyForSnapshot(s)));
+      const shownList = finding ? restList : restList.filter(s => !hiddenCardKeys.has(keyForSnapshot(s)));
+      const realList = finding ? shownList : shownList.filter(s => !isInternalSession(s));
+      const internalList = finding ? [] : shownList.filter(s => isInternalSession(s));
+      const orderedList = pinnedList.concat(realList, internalList, hiddenList);
+      const pinnedCount = pinnedList.length;
       const internalCount = internalList.length;
       const internalCollapsed = isInternalCollapsed();
       const hiddenCount = hiddenList.length;
       const hiddenExpanded = isHiddenExpanded();
-      cardsEl.classList.toggle("internal-collapsed", internalCollapsed);
-      cardsEl.classList.toggle("hidden-collapsed", !hiddenExpanded);
+      // the collapse classes are what actually hide the internal and hidden
+      // groups (display:none). they must stand down during a find, or a card
+      // the search just surfaced would be filtered in and then styled away.
+      cardsEl.classList.toggle("internal-collapsed", !finding && internalCollapsed);
+      cardsEl.classList.toggle("hidden-collapsed", !finding && !hiddenExpanded);
 
       // upsert + reorder
       let anchor = null;        // last placed card; new cards insert after it
@@ -1862,6 +2028,15 @@
         hiddenSeparatorEl = null;
       }
       let hiddenSeparatorPlaced = false;
+      // the pinned divider is a label, not a control — pinned cards are always
+      // visible, so unlike the other two it never collapses.
+      const PINNED_SEPARATOR_ID = "__pinned-separator__";
+      let pinnedSeparatorEl = document.getElementById(PINNED_SEPARATOR_ID);
+      if (pinnedCount === 0 && pinnedSeparatorEl) {
+        pinnedSeparatorEl.remove();
+        pinnedSeparatorEl = null;
+      }
+      let pinnedSeparatorPlaced = false;
       for (let i = 0; i < orderedList.length; i++) {
         const sess = orderedList[i];
         const id = sess.info.sessionId;
@@ -1876,8 +2051,23 @@
           updateCard(card, sess, opts);
         }
 
+        // first pinned card → drop in the pinned divider just before it.
+        if (!pinnedSeparatorPlaced && pinnedCount > 0 && i === 0) {
+          if (!pinnedSeparatorEl) {
+            pinnedSeparatorEl = document.createElement("div");
+            pinnedSeparatorEl.id = PINNED_SEPARATOR_ID;
+            pinnedSeparatorEl.className = "inbox-separator static";
+          }
+          pinnedSeparatorEl.innerHTML =
+            '<span class="inbox-separator-label">pinned (' + pinnedCount + ')</span>';
+          const pinTarget = cardsEl.firstChild;
+          if (pinnedSeparatorEl !== pinTarget) cardsEl.insertBefore(pinnedSeparatorEl, pinTarget);
+          anchor = pinnedSeparatorEl;
+          pinnedSeparatorPlaced = true;
+        }
+
         // first internal card → drop in the separator just before it.
-        if (!separatorPlaced && internalCount > 0 && i === realList.length) {
+        if (!separatorPlaced && internalCount > 0 && i === pinnedCount + realList.length) {
           if (!separatorEl) {
             separatorEl = document.createElement("div");
             separatorEl.id = SEPARATOR_ID;
@@ -1899,7 +2089,7 @@
         }
 
         // first user-hidden card → drop in the hidden divider just before it.
-        if (!hiddenSeparatorPlaced && hiddenCount > 0 && i === realList.length + internalList.length) {
+        if (!hiddenSeparatorPlaced && hiddenCount > 0 && i === pinnedCount + realList.length + internalList.length) {
           if (!hiddenSeparatorEl) {
             hiddenSeparatorEl = document.createElement("div");
             hiddenSeparatorEl.id = HIDDEN_SEPARATOR_ID;
@@ -2736,6 +2926,243 @@
       });
     });
 
+    // ---- floating composer ----
+    // the ask box is a two-row textarea at the bottom of the detail pane, which
+    // is a cramped place to write a real question. popping it out turns the
+    // panel into a fixed, draggable, resizable surface the user parks wherever
+    // they want. crucially it is #d-chat-input ITSELF that floats, not a new
+    // wrapper: renderChatInput rewrites this element's innerHTML on every
+    // refresh tick, so anything inside would be destroyed every 5 seconds, but
+    // the container and its inline geometry survive untouched. everything in
+    // the panel is therefore wired by delegation on dChatInput.
+    const CHAT_FLOAT_KEY = "ctc-chat-float";
+    const CHAT_FLOAT_MIN_W = 320;
+    const CHAT_FLOAT_MIN_H = 200;
+    const chatFloat = (() => {
+      // `placed` outlives `on`: dock it, reload, pop it out again and it comes
+      // back where you left it rather than jumping to the default corner.
+      // dockedHeight is the height dragged onto the DOCKED composer, kept apart
+      // from the floating panel's own height so the two never overwrite each
+      // other. null means "size to content", the untouched default.
+      const fallback = { on: false, placed: false, left: 0, top: 0, width: 460, height: 320, dockedHeight: null };
+      try {
+        const raw = JSON.parse(localStorage.getItem(CHAT_FLOAT_KEY) || "null");
+        if (!raw || typeof raw !== "object") return fallback;
+        return {
+          on: !!raw.on,
+          placed: !!raw.placed || !!raw.on,
+          left: Number.isFinite(raw.left) ? raw.left : fallback.left,
+          top: Number.isFinite(raw.top) ? raw.top : fallback.top,
+          width: Number.isFinite(raw.width) ? raw.width : fallback.width,
+          height: Number.isFinite(raw.height) ? raw.height : fallback.height,
+          dockedHeight: Number.isFinite(raw.dockedHeight) ? raw.dockedHeight : null,
+        };
+      } catch { return fallback; }
+    })();
+    let chatFloatApplied = false;         // geometry written to the element?
+
+    function saveChatFloat() {
+      try { localStorage.setItem(CHAT_FLOAT_KEY, JSON.stringify(chatFloat)); } catch {}
+    }
+    // the narrow layout stacks the sidebar above the detail pane; a fixed panel
+    // over that is more in the way than useful, so it falls back to docked.
+    function chatFloatSuppressed() {
+      return window.matchMedia("(max-width: 880px)").matches;
+    }
+    // what the panel is actually doing right now, which is what the controls
+    // must reflect — `chatFloat.on` alone would leave a drag bar on a panel the
+    // narrow layout has already forced back into the flow.
+    function chatFloatActive() {
+      return chatFloat.on && !chatFloatSuppressed();
+    }
+    // the panel lives inside main.layout, which sets z-index: 1 — that caps its
+    // stacking no matter how high we push it, so it can never draw over the
+    // sticky nav. rather than let it slide under and look broken, the top clamp
+    // stops at the nav's bottom edge: it floats over every bit of page content,
+    // and stays whole wherever it lands.
+    function chatFloatTopLimit() {
+      const nav = document.querySelector(".top-nav");
+      if (!nav) return 0;
+      const r = nav.getBoundingClientRect();
+      return getComputedStyle(nav).position === "sticky" || r.top <= 0 ? Math.max(0, r.bottom) : 0;
+    }
+    const CHAT_FLOAT_KEEP_VISIBLE = 120;
+    function clampChatFloat() {
+      chatFloat.width = Math.max(CHAT_FLOAT_MIN_W, Math.min(chatFloat.width, window.innerWidth - 16));
+      chatFloat.height = Math.max(CHAT_FLOAT_MIN_H, Math.min(chatFloat.height, window.innerHeight - 16));
+      // keep a graspable strip of the panel on screen no matter how the window
+      // was resized since it was parked.
+      const minLeft = CHAT_FLOAT_KEEP_VISIBLE - chatFloat.width;
+      const maxLeft = window.innerWidth - CHAT_FLOAT_KEEP_VISIBLE;
+      const minTop = chatFloatTopLimit();
+      const maxTop = window.innerHeight - 60;
+      chatFloat.left = Math.max(minLeft, Math.min(chatFloat.left, maxLeft));
+      chatFloat.top = Math.max(minTop, Math.min(chatFloat.top, maxTop));
+    }
+    function applyChatFloatGeometry() {
+      dChatInput.style.left = chatFloat.left + "px";
+      dChatInput.style.top = chatFloat.top + "px";
+      dChatInput.style.width = chatFloat.width + "px";
+      dChatInput.style.height = chatFloat.height + "px";
+    }
+    function paintChatFloat() {
+      if (!dChatInput) return;
+      const on = chatFloat.on && !chatFloatSuppressed();
+      // first undock ever: open the panel exactly where the docked composer
+      // already sits, nudged 5px down-left so it reads as lifting off the page
+      // rather than teleporting to a corner. the rect has to be read BEFORE
+      // .floating makes the element fixed and collapses it out of the flow.
+      if (on && !chatFloat.placed && !dChatInput.classList.contains("floating")) {
+        const box = dChatInput.getBoundingClientRect();
+        if (box.width > 0 && box.height > 0) {
+          chatFloat.left = Math.round(box.left) - 5;
+          chatFloat.top = Math.round(box.top) + 5;
+          chatFloat.width = Math.round(box.width);
+          chatFloat.height = Math.max(CHAT_FLOAT_MIN_H, Math.round(box.height));
+        } else {
+          // panel was hidden when they hit undock — fall back to a corner.
+          chatFloat.left = window.innerWidth - chatFloat.width - 24;
+          chatFloat.top = window.innerHeight - chatFloat.height - 24;
+        }
+        chatFloat.placed = true;
+        saveChatFloat();
+      }
+      dChatInput.classList.toggle("floating", on);
+      if (on) {
+        if (!chatFloatApplied) {
+          clampChatFloat();
+          applyChatFloatGeometry();
+          chatFloatApplied = true;
+        }
+      } else {
+        if (chatFloatApplied) {
+          for (const p of ["left", "top", "width"]) dChatInput.style.removeProperty(p);
+          chatFloatApplied = false;
+        }
+        // docked: reapply the height the user dragged, which the every-tick
+        // innerHTML rebuild would otherwise have nothing to restore from.
+        if (chatFloat.dockedHeight) dChatInput.style.height = chatFloat.dockedHeight + "px";
+        else dChatInput.style.removeProperty("height");
+      }
+    }
+    function setChatFloat(on) {
+      chatFloat.on = on;
+      saveChatFloat();
+      // don't touch chatFloatApplied here — paintChatFloat keys its cleanup off
+      // it, and clearing it early would leave the panel's inline width/height
+      // stuck on the docked composer.
+      paintChatFloat();
+      // the drag bar and the toggle's label live in the composer's innerHTML,
+      // which only rebuilds on the refresh tick — redraw now so the panel isn't
+      // undraggable and mislabelled for the next five seconds.
+      renderDetail();
+    }
+
+    // undock / dock — one delegated listener, since the buttons are rebuilt
+    // with the rest of the composer on every tick.
+    if (dChatInput) {
+      dChatInput.addEventListener("click", (e) => {
+        const btn = e.target.closest(".chat-float-toggle");
+        if (!btn) return;
+        e.preventDefault();
+        setChatFloat(!chatFloat.on);
+      });
+
+      // drag from anywhere in the panel that isn't something you'd click or
+      // type into — the header strip is the obvious grip, but the chip row's
+      // whitespace and the padding around the textarea work just as well.
+      const DRAG_EXEMPT = "button, textarea, input, select, a, [contenteditable]";
+      // bottom-right corner belongs to the native `resize: both` grip. it isn't
+      // an element we can exempt by selector, so keep the drag off it by area.
+      const RESIZE_GRIP = 20;
+      dChatInput.addEventListener("pointerdown", (e) => {
+        if (!dChatInput.classList.contains("floating")) return;
+        if (e.button !== 0) return;
+        if (e.target.closest(DRAG_EXEMPT)) return;
+        const box = dChatInput.getBoundingClientRect();
+        if (e.clientX > box.right - RESIZE_GRIP && e.clientY > box.bottom - RESIZE_GRIP) return;
+        e.preventDefault();
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const originLeft = chatFloat.left;
+        const originTop = chatFloat.top;
+        // capture keeps the pointer glued to the panel when it outruns the
+        // cursor, but it can throw on a pointer the browser no longer tracks —
+        // the window listeners below are what actually make the drag work.
+        try { dChatInput.setPointerCapture(e.pointerId); } catch {}
+        const move = (ev) => {
+          chatFloat.left = originLeft + (ev.clientX - startX);
+          chatFloat.top = originTop + (ev.clientY - startY);
+          clampChatFloat();
+          applyChatFloatGeometry();
+        };
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", up);
+          saveChatFloat();
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", up);
+      });
+
+      // sizing is native CSS `resize: both`; this just persists the result.
+      if (typeof ResizeObserver !== "undefined") {
+        new ResizeObserver(() => {
+          // crossing the narrow breakpoint lays the panel out docked (the media
+          // query overrides width/height) a beat before our resize handler drops
+          // the .floating class. without this guard that transient docked size
+          // gets persisted as the user's chosen panel size.
+          if (chatFloatSuppressed()) return;
+          const r = dChatInput.getBoundingClientRect();
+          if (dChatInput.classList.contains("floating")) {
+            if (Math.abs(r.width - chatFloat.width) < 1 && Math.abs(r.height - chatFloat.height) < 1) return;
+            chatFloat.width = Math.round(r.width);
+            chatFloat.height = Math.round(r.height);
+            saveChatFloat();
+            return;
+          }
+          // docked. only an inline height counts as a deliberate drag — the
+          // native resize grip writes one, whereas the composer simply growing
+          // with its own content (a warn strip appearing, chips wrapping)
+          // leaves it empty. without that test we'd latch onto content height.
+          if (!dChatInput.style.height) return;
+          const h = Math.round(r.height);
+          if (h === chatFloat.dockedHeight) return;
+          chatFloat.dockedHeight = h;
+          saveChatFloat();
+        }).observe(dChatInput);
+      }
+    }
+
+    // shrinking the window can strand a parked panel off-screen, and crossing
+    // the narrow breakpoint changes which controls belong in the composer.
+    let chatFloatWasActive = chatFloatActive();
+    window.addEventListener("resize", () => {
+      const active = chatFloatActive();
+      paintChatFloat();
+      if (active && chatFloatApplied) {
+        const before = chatFloat.left + "," + chatFloat.top + "," + chatFloat.width + "," + chatFloat.height;
+        clampChatFloat();
+        if (before !== chatFloat.left + "," + chatFloat.top + "," + chatFloat.width + "," + chatFloat.height) {
+          applyChatFloatGeometry();
+          saveChatFloat();
+        }
+      }
+      if (chatFloatWasActive !== active) {
+        chatFloatWasActive = active;
+        renderDetail();
+      }
+    });
+
+    function chatFloatBarHtml() {
+      return '<div class="chat-float-bar">' +
+        '<span class="chat-float-grip">ask</span>' +
+        '<button type="button" class="chat-float-toggle" title="dock the composer back into the pane">dock</button>' +
+      '</div>';
+    }
+
     function renderChatInput(sess) {
       const sessionKey = sess.key || (sess.info ? sess.info.source + ":" + sess.info.path : "");
       if (currentAuth.status !== "ready") {
@@ -2746,12 +3173,16 @@
           : readOnly
             ? "read-only mode. Connect Claude when you want to discuss this session."
             : "Connect Claude to discuss this session. Transcript viewing already works.";
+        // keep the bar here too — otherwise a popped-out panel that loses auth
+        // strands the user with no way to dock it again.
         dChatInput.innerHTML =
+          (chatFloatActive() ? chatFloatBarHtml() : '') +
           '<div class="chat-auth-disabled" role="status">' +
             '<span>' + copy + '</span>' +
             '<button class="chat-auth-action" type="button">' + (failed ? "repair auth" : "connect claude") + '</button>' +
           '</div>';
         dChatInput.querySelector(".chat-auth-action")?.addEventListener("click", openAuthSetup);
+        paintChatFloat();
         return;
       }
       // the ask box starts empty (or restores the user's in-progress draft) —
@@ -2783,10 +3214,19 @@
           '<span class="ctx-turns-val">' + ctxTurns + '</span>' +
           '<button type="button" class="ctx-turns-btn" data-step="1" aria-label="more turns"' + (ctxTurns >= CHAT_CTX_MAX ? ' disabled' : '') + '>+</button>' +
         '</div>';
+      // docked, the undock control rides in the chip row next to the stepper;
+      // floating, it moves into the panel's bar as "dock". one control either
+      // way, always in the place that reads naturally.
+      // no control at all on the narrow layout — there's nowhere useful to
+      // float to, so offering it would be a dead button.
+      const popOutHtml = chatFloat.on || chatFloatSuppressed()
+        ? ''
+        : '<button type="button" class="chat-float-toggle" title="undock the composer into a panel you can move and resize">undock</button>';
       const quickHtml =
         '<div class="chat-quickreplies">' +
           '<div class="qr-presets">' + presetChips + '</div>' +
           stepperHtml +
+          popOutHtml +
         '</div>';
 
       // a send the server gated behind needsApproval (long seed, fresh
@@ -2803,6 +3243,7 @@
         : '';
 
       dChatInput.innerHTML =
+        (chatFloatActive() ? chatFloatBarHtml() : '') +
         quickHtml +
         warnHtml +
         '<div class="chat-input-row">' +
@@ -2814,6 +3255,8 @@
             '</svg>' +
           '</button>' +
         '</div>';
+
+      paintChatFloat();
 
       const ta = dChatInput.querySelector('textarea');
       const btn = dChatInput.querySelector('.send-btn');

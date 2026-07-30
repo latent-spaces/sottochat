@@ -22,6 +22,7 @@ import {
   type PersistedSession,
 } from "./persistence";
 import { claudeAuthState, type ClaudeAuthState } from "./auth-check";
+import { normalizeNeedle, searchHaystack } from "./find-session";
 import { startUsageLedger, type UsageSnapshot, type UsageSource, type TokenUsage } from "./usage-ledger";
 import { CURRENT_VERSION, fetchLatestVersion, versionState } from "./version";
 
@@ -329,6 +330,47 @@ function snapshot(s: SessionState) {
 
 function isInWindow(s: SessionState): boolean {
   return s.lastEventTs > 0 && Date.now() - s.lastEventTs <= RECENT_MS;
+}
+
+// sottochat's own sdk subprocesses (chat + observer) are themselves cc sessions
+// on disk, so the tailer picks them up and the inbox files them under the
+// "internal · sdk subprocesses" divider. they also echo back whatever the user
+// pastes into the chat, which means a paste-to-find that searched them would
+// reliably match sottochat talking to itself. mirrors isInternalSession in
+// public/assets/app.js — keep the two in step.
+function isInternalSlug(slug: string): boolean {
+  return (
+    slug.includes("--sottochat") ||
+    slug.includes("--cut-the-cake") ||
+    slug.includes("--chunk-to-chat")
+  );
+}
+
+// searchable text for paste-to-find. built from the in-memory turn buffer
+// (capped at 50 turns in onEvent), newest-first until the budget runs out, then
+// reversed back to reading order — a paste comes from the recent tail, so
+// dropping the head of a very long session costs nothing and bounds the scan.
+const FIND_HAYSTACK_CHARS = 400_000;
+function sessionHaystack(s: SessionState): string {
+  const parts: string[] = [];
+  let budget = FIND_HAYSTACK_CHARS;
+  outer: for (let i = s.turns.turns.length - 1; i >= 0; i--) {
+    const turn = s.turns.turns[i]!;
+    for (let j = turn.events.length - 1; j >= 0; j--) {
+      const ev = turn.events[j]!;
+      const text =
+        ev.kind === "user_message" || ev.kind === "assistant_text"
+          ? ev.text
+          : ev.kind === "tool_use" || ev.kind === "tool_result"
+            ? ev.summary
+            : "";
+      if (!text) continue;
+      parts.push(text);
+      budget -= text.length;
+      if (budget <= 0) break outer;
+    }
+  }
+  return parts.reverse().join("\n");
 }
 
 // sessionIds the registry saw attached to a live PID on its latest tick.
@@ -644,6 +686,47 @@ const server = Bun.serve({
         inWindow: isInWindow(s),
       }));
       return Response.json({ sessions: list, recentMs: RECENT_MS });
+    }
+
+    // paste-to-find: given a chunk of agent output the user copied off a
+    // terminal, say which open session it came from. searches only what's
+    // already in memory (the recent-turn buffer of visible sessions) — no disk
+    // scan, no sessions that have aged out of the inbox.
+    if (url.pathname === "/find" && req.method === "POST") {
+      const body = (await req.json().catch(() => null)) as unknown;
+      const text = typeof (body as { text?: unknown })?.text === "string"
+        ? ((body as { text: string }).text)
+        : "";
+      const needle = normalizeNeedle(text);
+      if (!needle) {
+        return Response.json({ error: "text too short to search on" }, { status: 400 });
+      }
+
+      const matches: {
+        sessionKey: string;
+        sessionId: string;
+        score: number;
+        kind: string;
+        excerpt: string;
+        lastEventTs: number;
+      }[] = [];
+      let scanned = 0;
+      for (const s of sessions.values()) {
+        if (!isVisible(s) || isInternalSlug(s.info.slug)) continue;
+        scanned += 1;
+        const hit = searchHaystack(needle, sessionHaystack(s));
+        if (!hit) continue;
+        matches.push({
+          sessionKey: keyFor(s.info),
+          sessionId: s.info.sessionId,
+          score: hit.score,
+          kind: hit.kind,
+          excerpt: hit.excerpt,
+          lastEventTs: s.lastEventTs,
+        });
+      }
+      matches.sort((a, b) => b.score - a.score || b.lastEventTs - a.lastEventTs);
+      return Response.json({ matches, scanned });
     }
 
     // shadow-mode diagnostic: what abtop-style PID-driven discovery sees this
