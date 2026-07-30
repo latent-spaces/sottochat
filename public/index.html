@@ -128,9 +128,12 @@
       top: calc(-1 * var(--cake-size, 30px) * 0.4);
       transform: rotate(var(--cake-tilt, 0deg));
     }
+    /* the composer clips its children (overflow: auto is what gives it a resize
+       grip), so this one mounts on the composer's parent and gets pushed back
+       over the composer's top-right corner by measured offsets. */
     .cake-perch.input-top-right {
-      right: 14px;
-      top: calc(-1 * var(--cake-size, 36px) * 0.6);
+      right: calc(var(--perch-right, 0px) + 14px);
+      top: calc(var(--perch-top, 0px) - var(--cake-size, 36px) * 0.6);
       transform: rotate(var(--cake-tilt, 0deg));
     }
     .cake-perch.legend-corner {
@@ -1854,6 +1857,10 @@
        container survives those rebuilds, so it owns the sizing and the height
        persists (ctc-chat-float.dockedHeight). */
     .chat-input {
+      /* stated here so nothing else has to reach for it: placeCakePerch turns
+         a static perch host relative inline, and that inline style would beat
+         .chat-input.floating's `fixed` and strand the undocked panel. */
+      position: relative;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r-panel);

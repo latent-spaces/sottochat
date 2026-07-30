@@ -928,8 +928,13 @@
       // floating off the title wrapper. The h2 itself clips for ellipsis, so
       // mounting there would cut off the mascot outside the text box.
       { selectorAll: "#detail-content .session-title-wrap",  size: 30, anchor: "head-right" },
-      // top-right of the chat-input panel.
-      { selectorAll: "#detail-content .chat-input",          size: 36, anchor: "input-top-right" },
+      // top-right of the chat-input panel. the composer clips (overflow: auto
+      // is what powers its resize grip), so the mascot mounts on the parent and
+      // is placed over the composer's corner. undocked it's a fixed panel the
+      // user drags — a mascot pinned to the flow would be left behind, so the
+      // perch sits this one out until the composer is docked again.
+      { selectorAll: "#detail-content .chat-input",          size: 36, anchor: "input-top-right",
+        hostParent: true, valid: (el) => !el.classList.contains("floating") },
     ];
     // last placed perch, recorded so we can short-circuit refresh re-mounts
     // when the same session+target combo is still valid (avoids replay flicker).
@@ -966,7 +971,7 @@
           if (cfg.valid && !cfg.valid(el)) continue;
           // skip hidden / display:none elements (e.g. charts-band collapsed)
           if (el.offsetParent === null) continue;
-          candidates.push({ el, size: cfg.size, anchor: cfg.anchor });
+          candidates.push({ el, size: cfg.size, anchor: cfg.anchor, hostParent: !!cfg.hostParent });
         }
       }
       if (!candidates.length) return;
@@ -975,8 +980,12 @@
       const tiltH = cakeHash(sessionId + ":tilt:" + salt);
       const pick = candidates[pickH % candidates.length];
       const tilt = (tiltH % 31) - 15; // -15..+15 deg
+      // most perches hang off the target itself; a hostParent target clips its
+      // children, so the mascot mounts on the parent instead and is nudged back
+      // over the target by the measured gap between the two.
+      const host = pick.hostParent && pick.el.parentElement ? pick.el.parentElement : pick.el;
       // ensure the host is a positioned ancestor so absolute children anchor here.
-      if (getComputedStyle(pick.el).position === "static") pick.el.style.position = "relative";
+      if (getComputedStyle(host).position === "static") host.style.position = "relative";
       // icon stays on its session-stable hash (no salt) — same mascot, just
       // jumping between perches when it wanders.
       const iconIdx = cakeHash(sessionId + ":icon") % CAKE_PERCH_ICONS.length;
@@ -985,8 +994,16 @@
       cake.id = "cake-perch";
       cake.className = "cake-perch " + pick.anchor;
       cake.style.cssText = "--cake-size: " + pick.size + "px; --cake-tilt: " + tilt + "deg;";
+      if (host !== pick.el) {
+        // both rects are viewport-relative, so the deltas hold regardless of
+        // scroll; the anchor class adds its own inset on top of them.
+        const er = pick.el.getBoundingClientRect();
+        const hr = host.getBoundingClientRect();
+        cake.style.setProperty("--perch-top", (er.top - hr.top) + "px");
+        cake.style.setProperty("--perch-right", (hr.right - er.right) + "px");
+      }
       cake.innerHTML = '<img src="' + iconSrc + '" alt="" draggable="false" />';
-      pick.el.appendChild(cake);
+      host.appendChild(cake);
       lastCakePerchKey = sessionId + "|" + pick.anchor;
       // mascot appears silently — no entrance animation, just shows up in place.
       // (the prior fade-out on session change still runs so the old cake clears
@@ -3019,6 +3036,12 @@
           chatFloat.top = Math.round(box.top) + 5;
           chatFloat.width = Math.round(box.width);
           chatFloat.height = Math.max(CHAT_FLOAT_MIN_H, Math.round(box.height));
+          // the composer they clicked can be sitting at the bottom of a long
+          // pane, and a panel that opens half off the screen reads as broken.
+          // clampChatFloat below only guarantees a graspable strip, so pull the
+          // whole panel into view here — this is the one placement we author.
+          chatFloat.left = Math.min(chatFloat.left, window.innerWidth - chatFloat.width - 8);
+          chatFloat.top = Math.min(chatFloat.top, window.innerHeight - chatFloat.height - 8);
         } else {
           // panel was hidden when they hit undock — fall back to a corner.
           chatFloat.left = window.innerWidth - chatFloat.width - 24;
