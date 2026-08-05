@@ -21,6 +21,69 @@ describe("ingestEvent", () => {
     expect(stop.closed?.closed).toBe(true);
   });
 
+  // the regression that shipped in 0.1.9: turn closing hung off
+  // stop_hook_summary, which cc only writes when the user has Stop hooks
+  // configured. a hook-less install therefore never closed a turn — no
+  // observer summary, no chat seed, no thread. drive the seam end to end.
+  test("a session with no Stop hooks closes its turn on turn_duration", () => {
+    const records = [
+      { type: "user", uuid: "u1", timestamp: "2026-08-05T10:00:00.000Z", message: { role: "user", content: "ship it" } },
+      {
+        type: "assistant",
+        uuid: "a1",
+        timestamp: "2026-08-05T10:00:04.000Z",
+        message: { role: "assistant", model: "claude-opus-5", content: [{ type: "text", text: "shipped" }], usage: { input_tokens: 5, output_tokens: 20 } },
+      },
+      // note: no stop_hook_summary anywhere in this transcript.
+      { type: "system", subtype: "turn_duration", uuid: "s1", timestamp: "2026-08-05T10:00:05.000Z", durationMs: 5000 },
+    ];
+
+    const state = createTurnsState();
+    const closedTurns: Turn[] = [];
+    for (const rec of records) {
+      for (const e of parseRecord(rec)) {
+        const r = ingestEvent(state, e);
+        if (r.closed) closedTurns.push(r.closed);
+      }
+    }
+
+    expect(closedTurns).toHaveLength(1);
+    expect(closedTurns[0]!.id).toBe("u1");
+    expect(closedTurns[0]!.userPromptText).toBe("ship it");
+    expect(closedTurns[0]!.outputTokens).toBe(20);
+  });
+
+  test("stop_hook_summary followed by turn_duration closes the turn exactly once", () => {
+    const state = createTurnsState();
+    ingestEvent(state, ev({ kind: "user_message", uuid: "u1", text: "go" }));
+    const first = ingestEvent(state, ev({ kind: "stop", uuid: "hook" }));
+    const second = ingestEvent(state, ev({ kind: "stop", uuid: "dur" }));
+    expect(first.closed?.id).toBe("u1");
+    expect(second.closed).toBeUndefined();
+  });
+
+  test("slash-command noise between turns does not split a turn", () => {
+    const records = [
+      { type: "user", uuid: "u1", timestamp: "2026-08-05T10:00:00.000Z", message: { role: "user", content: "do the thing" } },
+      // user runs /model mid-turn: three records that are not prompts.
+      { type: "user", uuid: "u2", timestamp: "2026-08-05T10:00:01.000Z", message: { role: "user", content: "<command-name>/model</command-name>" } },
+      { type: "user", uuid: "u3", timestamp: "2026-08-05T10:00:02.000Z", message: { role: "user", content: "<local-command-stdout>Set model to Opus 5</local-command-stdout>" } },
+      { type: "user", uuid: "u4", timestamp: "2026-08-05T10:00:03.000Z", isMeta: true, message: { role: "user", content: [{ type: "text", text: "- Branch: main" }] } },
+      { type: "system", subtype: "turn_duration", uuid: "s1", timestamp: "2026-08-05T10:00:09.000Z" },
+    ];
+    const state = createTurnsState();
+    const closedTurns: Turn[] = [];
+    for (const rec of records) {
+      for (const e of parseRecord(rec)) {
+        const r = ingestEvent(state, e);
+        if (r.closed) closedTurns.push(r.closed);
+      }
+    }
+    expect(state.turns).toHaveLength(1);
+    expect(closedTurns).toHaveLength(1);
+    expect(closedTurns[0]!.userPromptText).toBe("do the thing");
+  });
+
   test("new user_message while a turn is open closes the prior turn", () => {
     const state = createTurnsState();
     ingestEvent(state, ev({ kind: "user_message", uuid: "u1", text: "first" }));

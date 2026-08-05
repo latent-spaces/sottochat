@@ -1625,9 +1625,12 @@
       // until the observer re-feeds it (see /settings/language on the server) —
       // show it dimmed with an "updating…" tag instead of pretending it's current.
       const stale = !!(sess.summary && sess.summaryLang && sess.summaryLang !== explainLang);
-      const summaryHtml = sess.summary
+      // until the observer has written a summary, fall back to cc's own session
+      // title (ai-title / custom-title) so a fresh card isn't blank.
+      const insight = sess.summary || sess.aiTitle || "";
+      const summaryHtml = insight
         ? '<p class="card-insight' + (stale ? ' stale' : '') + '" dir="auto">' +
-            escapeHtml(sess.summary) +
+            escapeHtml(insight) +
             (stale
               ? ' <span class="typing-dots card-insight-dots" aria-label="' + escapeHtml(ui().updating) + '"><span></span><span></span><span></span></span>'
               : '') +
@@ -1739,6 +1742,7 @@
         sess.lastEventTs || 0,
         sess.summaryTs || 0,
         sess.summary || "",
+        sess.aiTitle || "",
         explainLang,
       ].join("\u0001");
     }
@@ -3639,6 +3643,7 @@
         summary: snap.summary || "",
         summaryTs: snap.summaryTs || 0,
         summaryLang: snap.summaryLang || "",
+        aiTitle: snap.aiTitle || "",
         displayName: snap.displayName || null,
         chatContextTurns: clampCtxTurns(snap.chatContextTurns),
       });
@@ -3798,6 +3803,12 @@
             s.summary = msg.summary;
             s.summaryTs = msg.summaryTs || Date.now();
             s.summaryLang = msg.summaryLang || s.summaryLang;
+            refresh();
+          }
+        } else if (msg.kind === "session:aiTitle") {
+          const s = sessionsByKey.get(msg.sessionKey);
+          if (s && typeof msg.aiTitle === "string") {
+            s.aiTitle = msg.aiTitle;
             refresh();
           }
         } else if (msg.kind === "chat:chunk") {

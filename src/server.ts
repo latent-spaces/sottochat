@@ -120,6 +120,8 @@ type SessionState = {
   summaryTs?: number;          // when the summary last changed (drives the card update pulse)
   summaryLang?: string;        // explain-language code the summary was generated in — lets the
                                // card show a "stale/updating" tag while a newer language re-feed is in flight
+  aiTitle?: string;            // cc's own session title (ai-title / custom-title records) —
+                               // stands in for the card's summary line until the observer writes one
   closedTurnCount: number;     // total closed turns — the summary regenerates every 4th
   recentClosedTurns: Turn[];   // ring buffer (RECENT_CLOSED_TURNS) — feeds the summary + chat seed
   chatContextTurns: number;    // how many recent turns the chat seed includes (user-tunable, 1..10)
@@ -320,6 +322,7 @@ function snapshot(s: SessionState) {
     ...(s.summary ? { summary: s.summary } : {}),
     ...(s.summaryTs ? { summaryTs: s.summaryTs } : {}),
     ...(s.summaryLang ? { summaryLang: s.summaryLang } : {}),
+    ...(s.aiTitle ? { aiTitle: s.aiTitle } : {}),
     ...(s.customName ? { customName: s.customName } : {}),
     ...(displayName ? { displayName } : {}),
     ...(chat && chat.length ? { chatThread: chat } : {}),
@@ -1192,6 +1195,18 @@ startTailer({
       info.slug.includes("cut-the-cake-chat");
     const s = getOrCreate(info);
     const key = keyFor(s.info);
+
+    // cc's own session title is session metadata, not turn content — record it
+    // and stop, so it never lands in the event buffer or opens/extends a turn.
+    if (ev.kind === "session_title") {
+      if (s.aiTitle === ev.title) return;
+      s.aiTitle = ev.title;
+      if (visibleKeys.has(key)) {
+        broadcast({ kind: "session:aiTitle", sessionKey: key, aiTitle: ev.title });
+      }
+      return;
+    }
+
     s.events.push(ev);
     if (s.events.length > MAX_EVENTS_PER_SESSION) {
       s.events.splice(0, s.events.length - MAX_EVENTS_PER_SESSION);

@@ -6,5 +6,13 @@
 {"type":"mode","mode":"default"}
 {"type":"file-history-snapshot","uuid":"fh-1","snapshot":{}}
 {"type":"attachment","uuid":"at-1"}
-{"type":"ai-title","title":"fix login"}
-{"type":"system","subtype":"turn_duration","uuid":"s-2","timestamp":"2026-07-10T10:00:13.500Z","durationMs":13500}
+{"type":"pr-link","uuid":"pr-1","url":"https://github.com/x/y/pull/1"}
+{"type":"system","subtype":"turn_duration","uuid":"s-2","timestamp":"2026-07-10T10:00:13.500Z","durationMs":13500,"messageCount":4}
+{"type":"ai-title","aiTitle":"Fix the login token check","sessionId":"sess-1"}
+{"type":"custom-title","customTitle":"login-hardening","sessionId":"sess-1"}
+{"type":"user","uuid":"u-3","timestamp":"2026-07-10T10:01:00.000Z","message":{"role":"user","content":"<command-name>/model</command-name>\n            <command-message>model</command-message>"}}
+{"type":"user","uuid":"u-4","timestamp":"2026-07-10T10:01:01.000Z","message":{"role":"user","content":"<local-command-stdout>Set model to Opus 5</local-command-stdout>"}}
+{"type":"user","uuid":"u-5","timestamp":"2026-07-10T10:01:02.000Z","message":{"role":"user","content":"<local-command-caveat>Caveat: the messages below were generated while running local commands.</local-command-caveat>"}}
+{"type":"user","uuid":"u-6","timestamp":"2026-07-10T10:01:03.000Z","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"- Branch: main\n- Working tree: clean"}]}}
+{"type":"user","uuid":"u-7","timestamp":"2026-07-10T10:01:04.000Z","message":{"role":"user","content":[{"type":"text","text":"<system-reminder>\nbackground context\n</system-reminder>"}]}}
+{"type":"user","uuid":"u-8","timestamp":"2026-07-10T10:01:05.000Z","message":{"role":"user","content":[{"type":"text","text":"now ship it\n<system-reminder>\nbackground context\n</system-reminder>"}]}}

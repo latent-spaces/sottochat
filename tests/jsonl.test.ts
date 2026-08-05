@@ -58,10 +58,82 @@ describe("parseRecord", () => {
   });
 
   test("noise record types are skipped", () => {
-    // mode, file-history-snapshot, attachment, ai-title, system/turn_duration
-    for (const line of fixtureLines.slice(5)) {
+    // mode, file-history-snapshot, attachment, pr-link
+    for (const line of [...fixtureLines.slice(5, 8), fixtureLines[8]!]) {
       expect(parseLine(line)).toEqual([]);
     }
+  });
+
+  // cc 2.1.217+ emits turn_duration on every cli turn. stop_hook_summary only
+  // exists when the user has Stop hooks configured, so without this a hook-less
+  // install never closes a turn.
+  test("system turn_duration → stop", () => {
+    const evs = parseLine(fixtureLines[9]!);
+    expect(evs).toEqual([{ kind: "stop", uuid: "s-2", ts: Date.parse("2026-07-10T10:00:13.500Z") }]);
+  });
+
+  describe("session titles", () => {
+    test("ai-title → session_title (no uuid/timestamp on the record)", () => {
+      const evs = parseLine(fixtureLines[10]!);
+      expect(evs).toHaveLength(1);
+      expect(evs[0]).toMatchObject({ kind: "session_title", title: "Fix the login token check" });
+    });
+
+    test("custom-title → session_title", () => {
+      const evs = parseLine(fixtureLines[11]!);
+      expect(evs[0]).toMatchObject({ kind: "session_title", title: "login-hardening" });
+    });
+
+    test("blank titles are dropped", () => {
+      expect(parseRecord({ type: "ai-title", aiTitle: "   ", sessionId: "s" })).toEqual([]);
+      expect(parseRecord({ type: "custom-title", sessionId: "s" })).toEqual([]);
+    });
+  });
+
+  describe("synthetic user records", () => {
+    test("slash-command echo, its stdout, and the caveat are not prompts", () => {
+      for (const line of fixtureLines.slice(12, 15)) {
+        expect(parseLine(line)).toEqual([]);
+      }
+    });
+
+    test("isMeta records (injected git context) are not prompts", () => {
+      expect(parseLine(fixtureLines[15]!)).toEqual([]);
+    });
+
+    test("a body that is only a system-reminder is not a prompt", () => {
+      expect(parseLine(fixtureLines[16]!)).toEqual([]);
+    });
+
+    test("a real prompt survives, with the system-reminder stripped", () => {
+      const evs = parseLine(fixtureLines[17]!);
+      expect(evs).toHaveLength(1);
+      expect(evs[0]).toMatchObject({ kind: "user_message", text: "now ship it" });
+    });
+
+    test("tool_result blocks still parse on an isMeta record", () => {
+      const evs = parseRecord({
+        type: "user",
+        uuid: "u-x",
+        isMeta: true,
+        message: {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "toolu_9", content: "ok" }],
+        },
+      });
+      expect(evs).toHaveLength(1);
+      expect(evs[0]).toMatchObject({ kind: "tool_result", toolUseId: "toolu_9" });
+    });
+
+    test("a prompt merely mentioning a tag is kept", () => {
+      const evs = parseRecord({
+        type: "user",
+        uuid: "u-y",
+        message: { role: "user", content: "why does <command-name> show up in the jsonl?" },
+      });
+      expect(evs).toHaveLength(1);
+      expect(evs[0]).toMatchObject({ kind: "user_message" });
+    });
   });
 
   test("records without a uuid are skipped", () => {
